@@ -189,6 +189,40 @@
     },
     changeEmail(email) { return C.invoke('profile', { action: 'change_email', email }); },
 
+    /* ---------------- Carta online ---------------- */
+    /** Dirección pública de la sucursal (carta.html?l=slug). null la quita. */
+    async setSlug(branchId, slug) {
+      const { error } = await sb.from('branches').update({ slug: slug || null }).eq('id', branchId);
+      if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'Esa dirección ya la usa otro local, probá con otra' : /slug_chk|check/i.test(error.message) ? 'Usá solo letras minúsculas, números y guiones (3 a 40)' : error.message);
+    },
+    /** Sube una foto del menú (producto, logo o portada) y devuelve la URL pública */
+    async uploadMenuImage(blob, name) {
+      const { orgId, branchId } = PZ.store.ctx;
+      const path = `${orgId}/${branchId}/${String(name).replace(/[^a-z0-9-]/gi, '')}-${Date.now()}.jpg`;
+      const { error } = await sb.storage.from('menu').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw new Error(error.message);
+      return sb.storage.from('menu').getPublicUrl(path).data.publicUrl;
+    },
+    /** Pedidos web: los que esperan confirmación y los de las últimas horas */
+    async webOrders(branchId) {
+      const since = new Date(Date.now() - 12 * 36e5).toISOString();
+      const { data, error } = await sb.from('online_orders').select('*').eq('branch_id', branchId)
+        .or(`status.eq.nuevo,created_at.gte."${since}"`).order('created_at', { ascending: false }).limit(100);
+      if (error) throw error;
+      return data || [];
+    },
+    /** Aceptar o rechazar. Solo cambia si nadie lo atendió antes (devuelve null si ya estaba atendido). */
+    async handleWebOrder(id, patch) {
+      const { data, error } = await sb.from('online_orders').update(patch).eq('id', id).eq('status', 'nuevo').select().maybeSingle();
+      if (error) throw new Error(error.message);
+      return data;
+    },
+
+    /* ---------------- Mercado Pago ---------------- */
+    mp(action, body = {}) {
+      return C.invoke('mp', { action, org_id: PZ.store.ctx.orgId, branch_id: PZ.store.ctx.branchId, ...body });
+    },
+
     /* ---------------- Ventas ---------------- */
     /** Anula en el servidor (solo dueño o encargado). client = sesión del encargado que autorizó. */
     async voidOrder(orgId, id, reason, client) {
@@ -332,6 +366,7 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `branch_id=eq.${branchId}` }, (p) => onEvent('orders', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'branches', filter: `org_id=eq.${orgId}` }, (p) => onEvent('branches', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` }, (p) => onEvent('members', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'online_orders', filter: `branch_id=eq.${branchId}` }, (p) => PZ.web && PZ.web.onRemote(p))
         .subscribe((status) => { C.realtime = status; PZ.store && PZ.store.emitStatus(); });
     },
     unsubscribe() {
@@ -351,6 +386,10 @@
     C.reportError(msg, { stack: r.stack, context: 'promesa sin manejar' });
   });
 
-  window.addEventListener('online', () => { C.online = true; PZ.store && PZ.store.onOnline(); });
+  window.addEventListener('online', () => {
+    C.online = true;
+    if (PZ.store) PZ.store.onOnline();
+    if (PZ.web && PZ.store && PZ.store.ctx.branchId) PZ.web.load();
+  });
   window.addEventListener('offline', () => { C.online = false; PZ.store && PZ.store.emitStatus(); });
 })(window.PZ);

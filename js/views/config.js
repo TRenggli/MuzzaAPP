@@ -12,6 +12,8 @@
   ];
 
   function render(el) {
+    // otra pantalla puede pedir abrir una pestaña (ej: "Editar zonas" desde la carta online)
+    if (PZ.configTab && SECTIONS[PZ.configTab]) { tab = PZ.configTab; PZ.configTab = null; }
     el.innerHTML = `<div class="tabs-nav">${TABS.map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="tab-body"></div>`;
     el.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { tab = b.dataset.t; render(el); });
     SECTIONS[tab](el.querySelector('.tab-body'), el);
@@ -137,8 +139,13 @@
           </div>
           <label class="field mt"><span>…o link de pago</span><input data-k="payments.qrLink" placeholder="https://link.mercadopago.com.ar/..."></label>
         </div>
-      </div>`;
+      </div>
+      ${PZ.mp && PZ.mp.enabled() ? `<div class="card mt mp-card">${mpCard()}</div>` : ''}`;
       bind(b, () => render(el));
+      if (PZ.mp && PZ.mp.enabled()) {
+        bindMp(b, el);
+        if (!PZ.mp.state.loaded && !mpTried && navigator.onLine) { mpTried = true; PZ.mp.load().then(() => { if (tab === 'cobros') render(el); }); }
+      }
       b.querySelector('[data-a=qr]').onchange = async (e) => {
         const f = e.target.files[0];
         if (!f) return;
@@ -225,6 +232,89 @@
       on('menu', async () => { await S.seedIfEmpty({ example: true }); PZ.toast('Menú cargado'); render(el); });
     },
   };
+
+  /* ---------------- Mercado Pago (QR con monto) ---------------- */
+  let mpTried = false;
+  const PROVINCIAS = ['Buenos Aires', 'Capital Federal', 'Catamarca', 'Chaco', 'Chubut', 'Córdoba', 'Corrientes', 'Entre Ríos', 'Formosa', 'Jujuy', 'La Pampa', 'La Rioja', 'Mendoza', 'Misiones', 'Neuquén', 'Río Negro', 'Salta', 'San Juan', 'San Luis', 'Santa Cruz', 'Santa Fe', 'Santiago del Estero', 'Tierra del Fuego', 'Tucumán'];
+
+  function mpCard() {
+    const s = PZ.mp.state;
+    const title = '<h3>📱 Mercado Pago · QR con el monto</h3>';
+    if (!s.loaded) return `${title}<p class="muted">${navigator.onLine ? 'Consultando…' : 'Sin conexión: se revisa al volver internet.'}</p>`;
+    if (!s.connected) {
+      return `${title}
+        <p style="margin-top:0">Al cobrar con QR se genera un código con el <b>monto exacto</b> y el pago <b>se registra solo</b> cuando se acredita (sin revisar la app).</p>
+        ${PZ.auth.isOwner() ? `<ol class="small" style="padding-left:18px">
+            <li>Entrá a <a href="https://www.mercadopago.com.ar/developers/panel/app" target="_blank" rel="noopener">Mercado Pago Developers → Tus integraciones</a> con la cuenta del local.</li>
+            <li>Creá una aplicación para <b>pagos presenciales con código QR</b>.</li>
+            <li>En <b>Credenciales de producción</b> copiá el <b>Access Token</b> (empieza con APP_USR-).</li>
+            <li>Pegalo acá. Queda guardado en el servidor: nadie del equipo lo puede ver.</li>
+          </ol>
+          <label class="field"><span>Access Token de producción</span><input class="mp-token" type="password" autocomplete="off" spellcheck="false" placeholder="APP_USR-…"></label>
+          <button class="btn primary" data-a="mpconnect">Conectar Mercado Pago</button>`
+        : '<p class="muted small">Pedile al dueño que conecte la cuenta de Mercado Pago del negocio.</p>'}`;
+    }
+    const who = `<p style="margin-top:0">✅ Conectado a la cuenta <b>${U.esc(s.nickname || 'de Mercado Pago')}</b>.</p>`;
+    const disc = s.canManage ? '<button class="btn ghost sm mt" data-a="mpoff">Desconectar la cuenta</button>' : '';
+    if (!s.branchReady) {
+      if (!s.canSetup) return `${title}${who}<p class="muted small">Falta activarlo en esta sucursal: pedíselo al encargado o al dueño.</p>`;
+      const b = S.data.settings.business;
+      const m = /^(.*?)\s+(\d{1,6})\b/.exec(b.address || '');
+      return `${title}${who}
+        <p class="small">Falta un paso: registrar esta sucursal en Mercado Pago (se hace una sola vez). La ubicación tiene que ser la real del local.</p>
+        <div class="grid-2">
+          <label class="field"><span>Calle</span><input name="mp-street" value="${U.esc(m ? m[1] : b.address || '')}"></label>
+          <label class="field"><span>Número</span><input name="mp-num" inputmode="numeric" value="${U.esc(m ? m[2] : '')}"></label>
+          <label class="field"><span>Ciudad / localidad</span><input name="mp-city" value="${U.esc(b.city || '')}"></label>
+          <label class="field"><span>Provincia</span><select name="mp-state">${PROVINCIAS.map((p) => `<option>${p}</option>`).join('')}</select></label>
+          <label class="field"><span>Latitud</span><input name="mp-lat" inputmode="decimal" placeholder="-34.6037"></label>
+          <label class="field"><span>Longitud</span><input name="mp-lng" inputmode="decimal" placeholder="-58.3816"></label>
+        </div>
+        <div class="row-flex" style="gap:8px">
+          <button class="btn ghost sm" data-a="mpgeo">📍 Usar la ubicación de este equipo (estando en el local)</button>
+          <a class="btn ghost sm" href="https://www.google.com/maps" target="_blank" rel="noopener">🗺️ Buscar en Google Maps</a>
+        </div>
+        <p class="small muted">En Google Maps: mantené apretado sobre el local y copiá los dos números (latitud, longitud).</p>
+        <button class="btn primary mt" data-a="mpsetup">Activar en esta sucursal</button>${disc}`;
+    }
+    return `${title}${who}
+      <div class="alert-row" style="background:color-mix(in srgb,#00b1ea 14%,var(--card))">📱 Listo: al cobrar elegí <b>QR</b> y se genera el código con el monto. El cobro se registra solo al acreditarse.</div>
+      <p class="small muted">Las comisiones son las de tu cuenta de Mercado Pago. Para probar, hacé una venta chica y pagala con tu celular.</p>${disc}`;
+  }
+
+  function bindMp(b, el) {
+    const on = (a, fn) => { const x = b.querySelector(`[data-a=${a}]`); if (x) x.onclick = fn; };
+    const busy = async (btn, fn) => {
+      btn.disabled = true;
+      try { await fn(); } catch (e) { PZ.toast(e.message, 'err', 6000); } finally { btn.disabled = false; render(el); }
+    };
+    on('mpconnect', (e) => busy(e.currentTarget, async () => {
+      const tk = b.querySelector('.mp-token').value.trim();
+      if (!tk) throw new Error('Pegá el Access Token');
+      await PZ.mp.connect(tk);
+      S.log('mercado pago', 'Cuenta conectada');
+      PZ.toast('Mercado Pago conectado');
+    }));
+    on('mpoff', async (e) => {
+      if (!(await PZ.confirm('¿Desconectar Mercado Pago? El QR con monto deja de funcionar en todas las sucursales.', { danger: true, ok: 'Desconectar' }))) return;
+      busy(e.target, async () => { await PZ.mp.disconnect(); S.log('mercado pago', 'Cuenta desconectada'); });
+    });
+    on('mpgeo', () => {
+      if (!navigator.geolocation) return PZ.toast('Este equipo no permite ver la ubicación', 'warn');
+      navigator.geolocation.getCurrentPosition(
+        (p) => { b.querySelector('[name=mp-lat]').value = p.coords.latitude.toFixed(6); b.querySelector('[name=mp-lng]').value = p.coords.longitude.toFixed(6); PZ.toast('Ubicación cargada'); },
+        () => PZ.toast('No se pudo obtener la ubicación. Cargala desde Google Maps.', 'warn', 5000),
+        { enableHighAccuracy: true, timeout: 15000 },
+      );
+    });
+    on('mpsetup', (e) => busy(e.currentTarget, async () => {
+      const v = (n) => b.querySelector(`[name=${n}]`).value.trim();
+      const num = (n) => Number(v(n).replace(',', '.'));
+      await PZ.mp.setup({ street_name: v('mp-street'), street_number: v('mp-num'), city_name: v('mp-city'), state_name: v('mp-state'), latitude: num('mp-lat'), longitude: num('mp-lng') });
+      S.log('mercado pago', `Sucursal activada en Mercado Pago`);
+      PZ.toast('¡Listo! Ya podés cobrar con QR con monto');
+    }));
+  }
 
   PZ.views.config = { title: 'Configuración', render };
 })(window.PZ);

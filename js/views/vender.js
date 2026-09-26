@@ -406,7 +406,10 @@
       let split = false;
       let partials = [];
       let resolved = false;
+      let mpManual = false;   // usar el QR fijo en vez del QR de Mercado Pago con monto
+      let mpPaid = null;      // cobro acreditado por Mercado Pago
       const base = order.total;
+      const useMp = () => method === 'qr' && !mpManual && PZ.mp && PZ.mp.ready();
 
       const adjustFor = (m) => {
         if (split) return { cashDiscount: 0, surcharge: 0 };
@@ -499,13 +502,21 @@
             : `<div class="alert-row">⚠️ Cargá el alias/CBU en Configuración → Cobros.</div>`;
           detail.innerHTML += `<label class="field mt"><span>Nº de operación / comprobante (opcional)</span><input class="ref" placeholder="Últimos dígitos o nombre de quien transfiere"></label>
             <label class="check"><input type="checkbox" class="verified"> Verifiqué que la transferencia llegó</label>`;
+        } else if (method === 'qr' && useMp()) {
+          // QR de Mercado Pago con el monto: se acredita solo
+          detail.innerHTML = `<div class="alert-row" style="background:color-mix(in srgb,#00b1ea 14%,var(--card))">📱 Se genera un QR de Mercado Pago con el monto exacto. Cuando el cliente paga, el cobro se registra solo.</div>
+            <button class="btn ghost sm" data-a="mpman">Usar el QR fijo o registrar a mano</button>`;
+          detail.querySelector('[data-a=mpman]').onclick = () => { mpManual = true; draw(); };
         } else if (method === 'qr') {
           const img = P.qrImage ? `<img src="${P.qrImage}" alt="QR de pago">` : P.qrLink ? U.qrSvg(P.qrLink, 6, 1) : '';
           detail.innerHTML = img
             ? `<div class="qr-pay"><div class="qr-frame">${img}</div><div><b>Escaneá para pagar ${U.money(d)}</b><div class="small muted">Mostrale la pantalla al cliente</div></div></div>`
-            : `<div class="alert-row">⚠️ Subí la imagen de tu QR de Mercado Pago (o un link de pago) en Configuración → Cobros.</div>`;
+            : `<div class="alert-row">⚠️ Subí la imagen de tu QR de Mercado Pago (o un link de pago) en Configuración → Cobros${PZ.mp && PZ.mp.enabled() ? ', o conectá Mercado Pago para generar el QR con el monto' : ''}.</div>`;
           detail.innerHTML += `<label class="field mt"><span>Nº de operación (opcional)</span><input class="ref"></label>
-            <label class="check"><input type="checkbox" class="verified"> Verifiqué el pago en la app</label>`;
+            <label class="check"><input type="checkbox" class="verified"> Verifiqué el pago en la app</label>
+            ${PZ.mp && PZ.mp.ready() ? '<button class="btn ghost sm" data-a="mpauto">📱 Volver al QR de Mercado Pago con monto</button>' : ''}`;
+          const back = detail.querySelector('[data-a=mpauto]');
+          if (back) back.onclick = () => { mpManual = false; draw(); };
         } else if (method === 'tarjeta') {
           // Posnet de cualquier marca: se cobra en el posnet y acá se registra
           detail.innerHTML = `<p class="small muted" style="margin-top:0">Pasá la tarjeta en tu posnet por <b>${U.money(d)}</b> y después confirmá acá: el comprobante sale igual.</p>
@@ -518,21 +529,39 @@
         });
 
         const ok = E.querySelector('[data-a=ok]');
-        ok.textContent = split && d > 0 ? `Agregar pago` : `✅ Confirmar ${U.money(split ? base : totalFor(method))}`;
+        ok.classList.toggle('mp-go', useMp());
+        ok.textContent = useMp() ? `📱 Generar QR · ${U.money(split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value) || d) : d)}`
+          : split && d > 0 ? `Agregar pago` : `✅ Confirmar ${U.money(split ? base : totalFor(method))}`;
+      }
+
+      /** Cobra la parte con QR de Mercado Pago y, si se acredita, confirma solo */
+      async function chargeMp() {
+        const d = due();
+        const amt = split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value)) : d;
+        if (!amt) return;
+        const desc = `${order.number ? 'Pedido #' + order.number + ' · ' : ''}${st.business.name || 'Pizzería'}`;
+        const res = await PZ.mp.charge(amt, desc);
+        if (!res) return;
+        mpPaid = { ...res, amount: amt };
+        E.querySelector('[data-a=ok]').click();
       }
 
       E.querySelectorAll('.pay-m').forEach((b) => b.onclick = () => { method = b.dataset.m; draw(); });
       E.querySelector('.split-t').onchange = (e) => { split = e.target.checked; partials = []; draw(); };
       E.querySelector('[data-a=x]').onclick = () => m.close();
       E.querySelector('[data-a=ok]').onclick = () => {
-        const ref = (detail.querySelector('.ref') || {}).value || '';
+        const mpNow = mpPaid;
+        mpPaid = null;
+        if (!mpNow && useMp()) return chargeMp();
+        const ref = mpNow ? `MP ${mpNow.payment || mpNow.order}` : (detail.querySelector('.ref') || {}).value || '';
+        const mpInfo = mpNow ? { mp: { order: mpNow.order, payment: mpNow.payment } } : {};
         const verified = detail.querySelector('.verified');
-        if (verified && !verified.checked && (method === 'transferencia' || method === 'qr')) {
+        if (!mpNow && verified && !verified.checked && (method === 'transferencia' || method === 'qr')) {
           if (!confirm('No marcaste que verificaste el pago. ¿Confirmar igual?')) return;
         }
         const d = due();
         if (split && d > 0) {
-          const part = Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value));
+          const part = mpNow ? mpNow.amount : Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value));
           if (!part) return;
           let tendered = part;
           if (method === 'efectivo') {
@@ -540,7 +569,7 @@
             if (tv && tv < part) return PZ.toast('El efectivo entregado no alcanza', 'warn');
             tendered = tv || part;
           }
-          partials.push({ method, amount: part, tendered, change: tendered - part, ref: ref.trim(), ...(method === 'tarjeta' ? { cardType } : {}) });
+          partials.push({ method, amount: part, tendered, change: tendered - part, ref: ref.trim(), ...(method === 'tarjeta' ? { cardType } : {}), ...mpInfo });
           if (due() > 0) return draw();
         }
         let payments;
@@ -552,7 +581,7 @@
             if (tv && tv < d) return PZ.toast(`Faltan ${U.money(d - tv)}`, 'warn');
             tendered = tv || d;
           }
-          payments = [{ method, amount: d, tendered, change: tendered - d, ref: ref.trim(), ...(method === 'tarjeta' ? { cardType } : {}) }];
+          payments = [{ method, amount: d, tendered, change: tendered - d, ref: ref.trim(), ...(method === 'tarjeta' ? { cardType } : {}), ...mpInfo }];
         }
         resolved = true;
         const out = {

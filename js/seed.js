@@ -46,6 +46,7 @@
           { id: 'z3', name: 'Zona 3 · más lejos', fee: 3500 },
         ],
         drivers: [],
+        online: PZ.carta.defaults(),
       };
     },
 

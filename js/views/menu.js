@@ -54,7 +54,13 @@
           <label class="field"><span>Categoría</span><select name="cat">${S.data.categories.map((c) => `<option value="${c.id}" ${c.id === draft.categoryId ? 'selected' : ''}>${c.icon} ${U.esc(c.name)}</option>`).join('')}</select></label>
         </div>
         <label class="field"><span>Descripción</span><input name="desc" value="${U.esc(draft.desc || '')}"></label>
-        <label class="field" style="max-width:200px"><span>Color (para pizzas)</span><input name="color" type="color" value="${draft.color || '#ffd166'}" style="height:44px;padding:4px"></label>
+        <div class="grid-2">
+          <label class="field"><span>Color (para pizzas)</span><input name="color" type="color" value="${draft.color || '#ffd166'}" style="height:44px;padding:4px"></label>
+          ${PZ.auth.feature('carta') ? `<div class="field"><span>Carta online</span>
+            <div class="img-slot"><div class="thumb photo-prev">${draft.photo ? `<img src="${U.esc(draft.photo)}" alt="">` : '📷'}</div>
+              <label class="btn ghost sm">Foto<input type="file" accept="image/*" name="photo" hidden></label>
+              <label class="check" style="margin:0"><input type="checkbox" name="online" ${draft.online !== false ? 'checked' : ''}> Se ve en la carta</label></div></div>` : ''}
+        </div>
         <div class="opt-section">Tamaños y precios</div>
         <div class="vars"></div>
         <button class="btn sm ghost" data-a="addv">➕ Agregar tamaño</button>
@@ -90,6 +96,17 @@
       E.querySelectorAll('[data-rr]').forEach((b) => b.onclick = () => { draft.recipe.splice(Number(b.dataset.rr), 1); drawRec(); });
     };
     drawVars(); drawRec();
+    const photoIn = E.querySelector('[name=photo]');
+    if (photoIn) photoIn.onchange = async () => {
+      const f = photoIn.files[0];
+      if (!f) return;
+      if (!navigator.onLine) return PZ.toast('Para subir fotos hace falta internet', 'warn');
+      try {
+        PZ.toast('Subiendo foto…', 'info', 1500);
+        draft.photo = await PZ.cloud.uploadMenuImage(await U.imageBlob(f, 900, 0.82), 'p-' + draft.id);
+        E.querySelector('.photo-prev').innerHTML = `<img src="${U.esc(draft.photo)}" alt="">`;
+      } catch (e) { PZ.toast('No se pudo subir: ' + e.message, 'err', 5000); }
+    };
     E.querySelector('[data-a=addv]').onclick = () => { draft.variants.push({ id: U.uid('v'), name: '', price: 0, factor: 1 }); drawVars(); };
     E.querySelector('[data-a=addr]').onclick = () => { if (!ings.length) return PZ.toast('Primero cargá ingredientes en Stock', 'warn'); draft.recipe.push({ ingredientId: ings[0].id, qty: 0 }); drawRec(); };
     E.querySelector('[data-a=x]').onclick = () => m.close();
@@ -104,6 +121,8 @@
       draft.desc = E.querySelector('[name=desc]').value.trim();
       draft.categoryId = E.querySelector('[name=cat]').value;
       draft.color = E.querySelector('[name=color]').value;
+      const onl = E.querySelector('[name=online]');
+      if (onl) draft.online = onl.checked;
       draft.variants = draft.variants.filter((v) => v.name.trim() || draft.variants.length === 1);
       draft.recipe = draft.recipe.filter((r) => r.qty > 0);
       if (!draft.name) return PZ.toast('Falta el nombre', 'warn');

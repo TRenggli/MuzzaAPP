@@ -494,10 +494,20 @@
       return o;
     },
 
+    /** Costo de mercadería de una línea que viene armada (pedido web) */
+    itemCost(it) {
+      const p = S.product(it.productId);
+      const v = p && (p.variants.find((x) => x.id === it.variantId) || p.variants[0]);
+      if (!it.half) return S.recipeCost(p, v);
+      const p2 = S.product(it.half.productId);
+      const v2 = p2 && (p2.variants.find((x) => x.id === it.variantId) || p2.variants[0]);
+      return Math.round((S.recipeCost(p, v) + S.recipeCost(p2, v2)) / 2);
+    },
+
     createOrder(draft, { paid = false, payments = [], adjust = {} } = {}) {
       const now = Date.now();
       const o = {
-        id: U.uid('o-'),
+        id: draft.id || U.uid('o-'),
         number: S.nextNumber('order'),
         ticketNumber: null,
         createdAt: now,
@@ -524,6 +534,7 @@
         notes: draft.notes || '',
         eta: draft.eta || '',
         voided: false,
+        ...(draft.web ? { web: draft.web } : {}),
       };
       S.computeTotals(o);
       if (!o.customerId && (o.phone || (o.customerName && o.type === 'delivery'))) {

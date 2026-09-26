@@ -6,7 +6,7 @@
 (function (PZ) {
   const U = PZ.util;
   const S = PZ.store;
-  const MODS = [['delivery', '🛵 Delivery'], ['mesas', '🍽️ Mesas'], ['stock', '📦 Stock e insumos'], ['gastos', '💸 Gastos y ganancias']];
+  const MODS = [['delivery', '🛵 Delivery'], ['mesas', '🍽️ Mesas'], ['stock', '📦 Stock e insumos'], ['gastos', '💸 Gastos y ganancias'], ['carta', '📲 Carta online'], ['mercadopago', '💳 QR de Mercado Pago']];
   const genPass = () => {
     const a = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     const b = new Uint32Array(10);

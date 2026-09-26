@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ core — utilidades compartidas (formato, DOM, modales, toasts)
    ========================================================================== */
@@ -71,11 +72,25 @@ window.PZ.views = window.PZ.views || {};
       const c = document.createElement('canvas');
       c.width = Math.round(img.width * scale);
       c.height = Math.round(img.height * scale);
-      const ctx = c.getContext('2d');
+      const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(img, 0, 0, c.width, c.height);
       return c.toDataURL('image/png');
+    },
+
+    /** Foto lista para subir: JPEG de hasta maxW px de ancho (livianita para el celular del cliente) */
+    async imageBlob(file, maxW = 900, quality = 0.82) {
+      const img = await PZ.util.loadImage(await PZ.util.readFileAsDataURL(file));
+      const scale = Math.min(1, maxW / img.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('No se pudo leer la imagen'))), 'image/jpeg', quality));
     },
 
     loadImage(src) {
@@ -176,6 +191,11 @@ window.PZ.views = window.PZ.views || {};
   };
 
   /* ---------- Modales ---------- */
+  /**
+   * Ventana emergente.
+   * @param {{ title?: string, body?: string, footer?: string, size?: string, dismissable?: boolean,
+   *   onOpen?: (el: HTMLElement, api: { el: HTMLElement, close: () => void }) => void, onClose?: () => void }} [opts]
+   */
   PZ.modal = function ({ title = '', body = '', footer = '', size = '', onOpen, onClose, dismissable = true } = {}) {
     const back = document.createElement('div');
     back.className = 'modal-back';
@@ -191,7 +211,7 @@ window.PZ.views = window.PZ.views || {};
     document.body.appendChild(back);
     requestAnimationFrame(() => back.classList.add('show'));
     const api = {
-      el: back.querySelector('.modal'),
+      el: /** @type {HTMLElement} */ (back.querySelector('.modal')),
       close() {
         back.classList.remove('show');
         document.removeEventListener('keydown', onKey);
@@ -199,14 +219,15 @@ window.PZ.views = window.PZ.views || {};
         onClose && onClose();
       },
     };
-    const onKey = (e) => { if (e.key === 'Escape' && dismissable) api.close(); };
+    // Escape cierra solo la ventana de arriba (no la que quedó abajo)
+    const onKey = (e) => { if (e.key === 'Escape' && dismissable && back === Array.from(document.querySelectorAll('.modal-back')).pop()) api.close(); };
     document.addEventListener('keydown', onKey);
     if (dismissable) {
       back.addEventListener('mousedown', (e) => { if (e.target === back) api.close(); });
-      back.querySelector('.modal-x').addEventListener('click', () => api.close());
+      /** @type {HTMLElement} */ (back.querySelector('.modal-x')).addEventListener('click', () => api.close());
     }
     onOpen && onOpen(api.el, api);
-    const first = api.el.querySelector('[autofocus]');
+    const first = /** @type {HTMLElement | null} */ (api.el.querySelector('[autofocus]'));
     if (first) setTimeout(() => first.focus(), 60);
     return api;
   };
@@ -242,6 +263,24 @@ window.PZ.views = window.PZ.views || {};
       m.el.querySelector('[data-a=no]').onclick = () => { done = true; m.close(); resolve(null); };
       m.el.querySelector('[data-a=yes]').onclick = accept;
     });
+  };
+
+  /* ---------- Aviso sonoro (pedido nuevo) ---------- */
+  PZ.beep = function (notes = [784, 1046]) {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      notes.forEach((f, i) => {
+        const t = i * 0.18;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0.2, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.25);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.26);
+      });
+    } catch (e) { /* sin audio */ }
   };
 
   /* ---------- Confeti de pepperoni / albahaca al cobrar ---------- */

@@ -38,6 +38,7 @@
         'Los pedidos que pasan el tiempo objetivo se marcan en <b>rojo</b>.',
         'Suena un aviso cuando entra un pedido nuevo. Si usan una tablet en la cocina, se actualiza sola.',
         'Con 💬 le avisás al cliente por WhatsApp en qué estado está su pedido.',
+        'Los pedidos de la <b>carta online</b> aparecen arriba en verde: <b>Aceptar</b> los manda a la cocina con todo cargado; <b>Rechazar</b> le avisa al cliente.',
       ],
     },
     caja: {
@@ -76,6 +77,17 @@
         'Marcá un producto como <b>agotado</b> para que no aparezca al vender.',
         'Cargá la <b>receta</b> de cada producto: el stock baja solo al vender y el sistema calcula cuánto te cuesta cada pizza.',
         '<b>Carta para clientes</b> arma un menú lindo para imprimir o mandar como PDF.',
+      ],
+    },
+    online: {
+      title: 'Carta online',
+      intro: 'La carta que tus clientes abren en el celular: arman el pedido y te lo mandan por WhatsApp.',
+      tips: [
+        'Para publicarla: elegí la <b>dirección</b>, cargá el <b>WhatsApp</b> que recibe los pedidos y activá <b>Carta publicada</b>.',
+        'Cada pedido llega también a <b>Pedidos</b> (con aviso sonoro): tocá <b>Aceptar</b> y pasa a la cocina con todo cargado, sin tipear nada.',
+        'En <b>Diseño</b> elegís colores, letra, logo y portada. La vista previa muestra al instante cómo queda.',
+        'En <b>Productos y fotos</b> elegís qué se ve y le ponés foto a cada producto.',
+        'Imprimí el <b>QR</b> para la vidriera, el mostrador o cada mesa. Con <b>Pausar pedidos</b> frenás los pedidos una noche complicada.',
       ],
     },
     stock: {
@@ -119,7 +131,7 @@
       intro: 'Los datos de la sucursal que salen en el ticket, la impresora y los cobros.',
       tips: [
         '<b>Ticket e impresora</b>: elegí cómo imprimir (impresora del sistema, Bluetooth o la app RawBT), el ancho del papel y hacé una prueba.',
-        '<b>Cobros</b>: cargá el alias y CBU para transferencias y la imagen del QR de Mercado Pago.',
+        '<b>Cobros</b>: cargá el alias y CBU para transferencias y la imagen del QR de Mercado Pago. Si conectás Mercado Pago, el QR sale con el monto y el cobro se registra solo.',
         '<b>Apariencia</b>: el "sabor" de colores se guarda en cada equipo.',
       ],
     },

@@ -30,6 +30,7 @@
       { id: 'historial', label: 'Ventas', icon: '🧾' },
       { id: 'clientes', label: 'Clientes', icon: '👥' },
       { id: 'menu', label: 'Menú y precios', icon: '📋' },
+      { id: 'online', label: 'Carta online', icon: '📲' },
       { id: 'stock', label: 'Stock', icon: '📦' },
       { id: 'gastos', label: 'Gastos y ganancias', icon: '💸' },
       { id: 'equipo', label: 'Equipo', icon: '🧑‍🍳' },
@@ -312,6 +313,9 @@
       if (!A.current.support) PZ.cloud.sb.rpc('touch_login', { p_org: A.current.orgId }).then(() => {}, () => {});
       // Sucursal nueva sin menú: se copia el menú modelo del negocio
       if (!S.data.categories.length && A.isAdmin()) await S.seedIfEmpty({ example: false });
+      // Pedidos de la carta online y estado de Mercado Pago (no bloquean la entrada)
+      PZ.web.load();
+      PZ.mp.load();
       App.renderShell();
       const cur = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
       if (!cur || modeOf(cur) !== 'branch') history.replaceState(null, '', '#/inicio');
@@ -481,7 +485,8 @@
       chip.className = 'cash-chip ' + (s ? 'open' : 'closed');
       chip.innerHTML = `<span class="c-ico">💰</span><span class="dot"></span><span class="c-txt">${s ? 'Caja abierta' : 'Caja cerrada'}</span>`;
       chip.title = s ? 'Caja abierta' : 'Caja cerrada';
-      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status)).length;
+      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status)).length
+        + (PZ.web && A.can('vender') ? PZ.web.pending().length : 0);
       r.querySelectorAll('.n-count').forEach((el) => {
         el.textContent = active;
         el.classList.toggle('hidden', !active);

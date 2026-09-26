@@ -27,7 +27,7 @@ export function loadApp({ online = true } = {}) {
   ctx.globalThis = ctx;
   ctx.PZ_CONFIG = { supabaseUrl: 'http://test', supabaseKey: 'x', staffDomain: 'staff.pizzeria.local', version: 'test' };
   vm.createContext(ctx);
-  for (const f of ['js/core.js', 'js/seed.js', 'js/store.js', 'js/auth.js']) {
+  for (const f of ['js/core.js', 'js/carta-core.js', 'js/seed.js', 'js/store.js', 'js/auth.js']) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   }
   const PZ = ctx.PZ;

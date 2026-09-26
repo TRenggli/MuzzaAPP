@@ -23,7 +23,7 @@
   };
 
   // Secciones que dependen de un módulo contratado
-  const FEATURE_OF = { stock: 'stock', gastos: 'gastos' };
+  const FEATURE_OF = { stock: 'stock', gastos: 'gastos', online: 'carta' };
 
   const A = (PZ.auth = {
     ROLES,
@@ -83,7 +83,7 @@
     can(section) {
       if (!A.current) return false;
       if (FEATURE_OF[section] && !A.feature(FEATURE_OF[section])) return false;
-      if (['gastos', 'equipo', 'menu', 'reportes', 'config'].includes(section)) return A.isAdmin();
+      if (['gastos', 'equipo', 'menu', 'online', 'reportes', 'config'].includes(section)) return A.isAdmin();
       const acc = BRANCH_ACCESS[A.current.role];
       return acc === '*' || (acc || []).includes(section);
     },

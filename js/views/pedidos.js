@@ -38,12 +38,18 @@
 
     const prep = S.data.settings.prepMinutes || 35;
     const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime()).slice().reverse();
+    const web = PZ.web && PZ.auth.can('vender') ? PZ.web.pending() : [];
 
     el.innerHTML = `
       <div class="row-flex space-between mb">
         <div class="muted">Los pedidos avanzan de izquierda a derecha. Se marcan en rojo los que pasan los ${prep} minutos.</div>
         ${PZ.auth.can('vender') ? '<a class="btn primary" href="#/vender">🍕 Nuevo pedido</a>' : ''}
       </div>
+      ${web.length ? `<div class="card web-inbox mb">
+        <h3>📲 Pedidos de la carta online por confirmar <span class="badge pri">${web.length}</span></h3>
+        <p class="muted small" style="margin-top:0">Al aceptarlo pasa a <b>Recibidos</b> con todos los productos cargados. Se cobra al entregar, como cualquier pedido.</p>
+        <div class="web-grid">${web.map((w) => PZ.web.cardHTML(w)).join('')}</div>
+      </div>` : ''}
       <div class="seg board-tabs">${COLS.map((c) => `<button data-mc="${c.id}" class="${mobileCol === c.id ? 'on' : ''}">${c.label} (${active.filter((o) => o.status === c.id || (c.id === 'horno' && o.status === 'preparando')).length})</button>`).join('')}</div>
       <div class="board tabs">
         ${COLS.map((c) => {
@@ -60,6 +66,7 @@
 
     el.querySelectorAll('[data-mc]').forEach((b) => b.onclick = () => { mobileCol = b.dataset.mc; render(el); });
     el.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => action(el, b.dataset.id, b.dataset.act));
+    if (web.length) PZ.web.bind(el, () => render(el));
   }
 
   function card(o, col, prep) {
@@ -84,6 +91,7 @@
       </div>
       <div class="row-flex" style="gap:6px">
         <span class="badge pri">${L.typeIcon[o.type]} ${L.type[o.type]}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</span>
+        ${o.web ? `<span class="badge">📲 W-${o.web.number}</span>` : ''}
         ${o.paid ? '<span class="badge ok">Pagado</span>' : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
         ${o.eta ? `<span class="badge">🕒 ${U.esc(o.eta)}</span>` : ''}
       </div>
@@ -194,7 +202,8 @@
     render(el) {
       render(el);
       const t = setInterval(() => { if (!document.querySelector('.modal-back')) render(el); }, 30000);
-      return () => clearInterval(t);
+      const off = PZ.web ? PZ.web.onChange(() => { if (!document.querySelector('.modal-back')) render(el); }) : () => {};
+      return () => { clearInterval(t); off(); };
     },
   };
 })(window.PZ);

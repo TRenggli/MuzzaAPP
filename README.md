@@ -32,6 +32,22 @@ Un negocio de una sola persona funciona igual: el dueño tiene todas las funcion
 - Cada pantalla muestra un **consejo** la primera vez que se entra, y el botón **❓** de la barra superior abre su guía cuando se necesite.
 - Revisado en celular chico (360 px), celular (375 px), tablet vertical (768 px), tablet horizontal (1024 px) y compu, con todos los perfiles: sin scroll horizontal y con botones del tamaño del dedo.
 
+## Carta online (pedidos por WhatsApp)
+
+Cada sucursal puede publicar su carta en `carta.html?l=<dirección>` (sin instalar nada, se abre desde el celular del cliente):
+
+1. El cliente mira la carta, elige tamaños, **mitad y mitad**, agregados y aclaraciones, y arma el carrito.
+2. Carga sus datos (retiro, delivery con zona de envío o desde la mesa con un QR por mesa) y cómo va a pagar.
+3. El pedido **se guarda en el sistema** con los precios calculados por el servidor (no se confía en lo que manda el teléfono) y se abre **WhatsApp** con todo el detalle para mandarlo al local.
+4. En el local suena un aviso y el pedido aparece arriba en **Pedidos**: con **Aceptar** pasa a la cocina con todo cargado (sin tipearlo); con **Rechazar** se le avisa al cliente.
+5. El cliente sigue el estado de su pedido con el link que recibió.
+
+En **Carta online** el encargado elige la dirección, el WhatsApp que recibe, el horario (o la pausa), qué productos se ven, las fotos, los colores, la letra, el logo y la portada, con **vista previa en vivo**. También imprime el QR para la vidriera o para cada mesa.
+
+## Mercado Pago · QR con el monto
+
+Con la cuenta de Mercado Pago del negocio conectada (Configuración → Cobros), al cobrar con **QR** se genera un código con el **monto exacto** y el cobro **se registra solo** cuando se acredita. El Access Token queda guardado en el servidor: ninguna persona del equipo lo puede ver. Sin Mercado Pago conectado sigue funcionando el QR fijo y la confirmación manual.
+
 ## Comprobantes sin posnet integrado
 
 El comprobante se imprime **siempre**, se pague como se pague (efectivo, transferencia, QR o tarjeta en un posnet de cualquier marca). En *Configuración → Ticket e impresora* se elige si el papel dice **Comprobante de pago, Recibo, Ticket o Comprobante de venta**. Con tarjeta se elige débito o crédito y queda impreso.
@@ -46,9 +62,10 @@ El comprobante se imprime **siempre**, se pague como se pague (efectivo, transfe
 
 ## Calidad
 
-- `tests/*.test.mjs`: 26 pruebas de cálculos de dinero, CUIL, fechas y sincronización (`node --test tests/*.test.mjs`).
-- `supabase/tests/integridad.sql`: 18 pruebas de seguridad que simulan cajeros y encargados intentando hacer trampa (se deshacen solas).
-- GitHub Actions corre las pruebas en cada cambio y **publica la página solo si pasan**.
+- `tests/*.test.mjs`: 41 pruebas de cálculos de dinero, carta online (precios, horarios, mensaje de WhatsApp), Mercado Pago (con respuestas simuladas), CUIL, fechas y sincronización (`npm test`).
+- **TypeScript sin compilar**: los archivos con `// @ts-check` (carta, Mercado Pago, utilidades) se revisan con `npm run types`; los tipos del negocio están en `types/pz.d.ts`. Las funciones del servidor se revisan con `deno check`.
+- `supabase/tests/integridad.sql` (18) y `supabase/tests/carta.sql` (24): pruebas de seguridad que simulan cajeros, encargados y clientes anónimos intentando hacer trampa (se deshacen solas).
+- GitHub Actions corre todo en cada cambio y **publica la página solo si pasa**.
 - Los errores que tenga la app en los equipos de los clientes quedan registrados en *Plataforma → Errores de la app*.
 
 ## Datos separados por sucursal
@@ -61,7 +78,7 @@ Los usuarios y contraseñas de prueba se comparten por privado (no se publican e
 
 ## Módulos por negocio
 
-Desde la plataforma se activan o desactivan por negocio: **Delivery, Mesas, Stock, Gastos y ganancias** y el **máximo de sucursales**. Un negocio suspendido no puede ingresar (sus datos se conservan).
+Desde la plataforma se activan o desactivan por negocio: **Delivery, Mesas, Stock, Gastos y ganancias, Carta online, QR de Mercado Pago** y el **máximo de sucursales**. Un negocio suspendido no puede ingresar (sus datos se conservan).
 
 ## Sin internet
 
@@ -83,8 +100,14 @@ js/views/negocio.js    panel del dueño (resumen, sucursales, finanzas, menú mo
 js/views/equipo.js     equipo, códigos y rendimiento (sucursal y negocio)
 js/views/gastos.js     gastos y ganancias de la sucursal
 js/views/perfil.js     perfil de cada persona (foto, teléfono, CUIL, correo, contraseña)
+carta.html, js/carta.js  carta online pública (clientes)
+js/carta-core.js       precios, horario, mensaje de WhatsApp y temas de la carta
+js/online.js           pedidos web en la sucursal (aceptar / rechazar)
+js/views/online.js     panel "Carta online"
+js/mp.js               cobro con QR de Mercado Pago
+types/pz.d.ts          tipos del negocio (TypeScript)
 tests/                 pruebas automáticas
 js/views/*.js          operación de la sucursal
 supabase/migrations/   esquema, RLS y funciones SQL
-supabase/functions/    platform · join · staff · register (cerrado)
+supabase/functions/    platform · join · staff · profile · mp · register (cerrado)
 ```

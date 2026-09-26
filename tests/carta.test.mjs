@@ -1,0 +1,142 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { loadApp, withMenu } from './helpers/load.mjs';
+
+const { PZ, S, plain } = loadApp();
+const C = PZ.carta;
+
+/** Carta como la devuelve la base, armada con el menú de prueba */
+function menu({ halfPricing = 'max' } = {}) {
+  const d = withMenu(S);
+  d.categories.push({ id: 'c-beb', name: 'Bebidas', icon: '🥤', allowHalf: false });
+  d.products.push({ id: 'p-coca', categoryId: 'c-beb', name: 'Coca 1.5L', active: true, variants: [{ id: 'u', name: 'Unidad', price: 4000 }] });
+  return {
+    branch: { id: 'br-1', name: 'Centro', slug: 'test', org: 'Test' },
+    settings: { business: { name: 'Pizzería Test' }, online: C.defaults(), halfPricing, zones: [{ id: 'z1', name: 'Zona 1', fee: 1500 }], transfer: null, logo: null },
+    open: true,
+    categories: d.categories,
+    products: d.products,
+    extras: d.extras,
+  };
+}
+
+test('carta: el precio de una línea es igual al del mostrador (tamaño, mitad y agregados)', () => {
+  const m = menu();
+  const line = { productId: 'p-muz', variantId: 'chica', halfId: 'p-esp', extras: ['e1'], qty: 2 };
+  const pl = C.priceLine(m, line);
+  // mostrador: store.makeItem con los mismos datos
+  const pos = S.makeItem({
+    product: S.product('p-muz'), variant: S.product('p-muz').variants[1],
+    half: { product: S.product('p-esp'), variant: S.product('p-esp').variants[1] }, extras: S.data.extras, qty: 2,
+  });
+  assert.equal(pl.unit, pos.unitPrice);
+  assert.equal(pl.unit, 9000 + 1000, 'mitad más cara (9000) + huevo');
+  assert.equal(pl.name, '½ Muzzarella + ½ Especial');
+  assert.equal(pl.variantName, 'Chica');
+});
+
+test('carta: mitad y mitad al promedio', () => {
+  const m = menu({ halfPricing: 'avg' });
+  const pl = C.priceLine(m, { productId: 'p-muz', variantId: 'grande', halfId: 'p-esp', extras: [] });
+  assert.equal(pl.unit, 12000);
+});
+
+test('carta: bebidas no llevan mitades ni agregados aunque el teléfono los mande', () => {
+  const m = menu();
+  const pl = C.priceLine(m, { productId: 'p-coca', variantId: 'u', halfId: 'p-muz', extras: ['e1'] });
+  assert.equal(pl.unit, 4000);
+  assert.equal(pl.half, null);
+  assert.deepEqual(plain(pl.extras), []);
+});
+
+test('carta: totales con envío solo en delivery', () => {
+  const m = menu();
+  const lines = [
+    { key: 'a', productId: 'p-muz', variantId: 'grande', halfId: '', extras: [], qty: 2, notes: '' },
+    { key: 'b', productId: 'p-coca', variantId: 'u', halfId: '', extras: [], qty: 1, notes: '' },
+  ];
+  assert.deepEqual(plain(C.totals(m, lines, { type: 'retiro', zoneId: 'z1' })), { subtotal: 24000, deliveryFee: 0, total: 24000, count: 3 });
+  assert.deepEqual(plain(C.totals(m, lines, { type: 'delivery', zoneId: 'z1' })), { subtotal: 24000, deliveryFee: 1500, total: 25500, count: 3 });
+  // un producto que ya no existe se descarta del carrito guardado
+  assert.equal(C.validLines(m, lines.concat({ key: 'x', productId: 'borrado', variantId: 'u', halfId: '', extras: [], qty: 1, notes: '' })).length, 2);
+});
+
+test('carta: horario de atención en hora argentina (incluye cruce de medianoche)', () => {
+  // 26/09/2026 es sábado. 23:30 UTC = 20:30 en Argentina
+  const sab2030 = new Date('2026-09-26T23:30:00Z');
+  const dom0030 = new Date('2026-09-27T03:30:00Z'); // domingo 00:30 en Argentina
+  const sab1500 = new Date('2026-09-26T18:00:00Z');
+  const h = (days, from, to) => ({ paused: false, hours: { mode: 'schedule', days, from, to } });
+  assert.equal(C.isOpen(h([6], '19:00', '23:30'), sab2030), true);
+  assert.equal(C.isOpen(h([6], '19:00', '23:30'), sab1500), false);
+  assert.equal(C.isOpen(h([0, 1, 2, 3, 4, 5], '19:00', '23:30'), sab2030), false, 'sábado no está en los días');
+  assert.equal(C.isOpen(h([6], '19:00', '01:00'), dom0030), true, 'el turno del sábado sigue pasada la medianoche');
+  assert.equal(C.isOpen(h([0], '19:00', '01:00'), dom0030), false, 'domingo 00:30 corresponde al turno del sábado');
+  assert.equal(C.isOpen({ paused: true, hours: { mode: 'always' } }, sab2030), false, 'pausado');
+  assert.equal(C.isOpen({ hours: { mode: 'always' } }, sab1500), true);
+  assert.equal(C.hoursText({ mode: 'schedule', days: [2, 3, 4, 5, 6, 0], from: '19:00', to: '23:30' }), 'Mar a Dom · 19:00 a 23:30');
+  assert.equal(C.hoursText({ mode: 'schedule', days: [1, 3, 5], from: '12:00', to: '15:00' }), 'Lun, Mié y Vie · 12:00 a 15:00');
+});
+
+test('carta: número de WhatsApp en formato internacional', () => {
+  assert.equal(C.waNumber('11 5555-1234'), '5491155551234');
+  assert.equal(C.waNumber('011 15 5555-1234'), '5491155551234', 'saca el 0 y el 15');
+  assert.equal(C.waNumber('+54 9 11 5555-1234'), '5491155551234');
+  assert.equal(C.waNumber('362 15 4123456'), '5493624123456', 'característica de 3 dígitos con 15');
+  assert.equal(C.waNumber('3624 123456'), '5493624123456');
+  assert.equal(C.waNumber('1234'), '', 'incompleto');
+});
+
+test('carta: el mensaje de WhatsApp lleva todos los datos del pedido', () => {
+  const o = {
+    id: 'x', number: 15, createdAt: '2026-09-26T16:15:00Z', type: 'delivery', name: 'Tomás Renggli', phone: '1164797444',
+    address: 'Mitre 1234 2B', zoneId: 'z1', zoneName: 'Zona 1', table: '', payment: 'efectivo', cashWith: 30000, notes: 'Timbre no anda',
+    items: [
+      { id: 'a', productId: 'p-muz', variantId: 'grande', variantName: 'Grande', half: null, name: 'Muzzarella', extras: [{ id: 'e1', name: 'Huevo', price: 1000 }], qty: 2, unitPrice: 11000, total: 22000, notes: 'bien cocida' },
+    ],
+    subtotal: 22000, deliveryFee: 1500, total: 23500,
+  };
+  const t = C.waMessage({ business: 'Pizzería Test', branch: 'Centro' }, o, { trackUrl: 'https://x/carta.html?l=t&pedido=x' });
+  assert.match(t, /Número: \*W-15\*/);
+  assert.match(t, /Fecha: 26\/09\/26 13:15/, 'hora argentina');
+  assert.match(t, /Tipo de pedido: \*Delivery\*/);
+  assert.match(t, /Dirección: \*Mitre 1234 2B\* \(Zona 1\)/);
+  assert.match(t, /paga con \$ ?30\.000 \(vuelto \$ ?6\.500\)/);
+  assert.match(t, /2 x \*Muzzarella\* \(Grande\) — \$ ?22\.000/);
+  assert.match(t, /\+ Huevo/);
+  assert.match(t, /_bien cocida_/);
+  assert.match(t, /Envío: \$ ?1\.500/);
+  assert.match(t, /\*Total: \$ ?23\.500\*/);
+  assert.match(t, /Seguimiento: https:\/\/x\/carta\.html/);
+  assert.match(t, /Aclaraciones: Timbre no anda/);
+});
+
+test('carta: dirección pública', () => {
+  assert.equal(C.slugify('Pizzería Diego — Centro'), 'pizzeria-diego-centro');
+  assert.equal(C.validSlug('pizzeria-diego-centro'), true);
+  assert.equal(C.validSlug('Con Mayúscula'), false);
+  assert.equal(C.validSlug('-mal'), false);
+  assert.equal(C.cartaUrl('https://trenggli.github.io/pizzeria-diego/index.html', 'diego'), 'https://trenggli.github.io/pizzeria-diego/carta.html?l=diego');
+});
+
+test('carta: el texto del tema siempre se lee', () => {
+  for (const t of C.THEMES) {
+    const v = C.themeVars(t);
+    assert.ok(C.contrast(v['--c-primary'], v['--c-on-primary']) >= 3, `${t.id}: botón principal`);
+    assert.ok(C.contrast(v['--c-bg'], v['--c-ink']) >= 4.5, `${t.id}: texto sobre el fondo`);
+  }
+  // colores elegidos a mano: texto claro sobre fondo oscuro y viceversa
+  assert.equal(C.inkOn('#111111'), '#ffffff');
+  assert.equal(C.inkOn('#ffe08a'), '#1d1b19');
+});
+
+test('pedido web aceptado: mantiene los precios del servidor y suma el costo de mercadería', () => {
+  withMenu(S);
+  const items = [{ id: 'w1', productId: 'p-muz', variantId: 'grande', variantName: 'Grande', half: { productId: 'p-esp', name: 'Especial' }, name: '½ Muzzarella + ½ Especial', extras: [], qty: 1, unitPrice: 14000, total: 14000, notes: '' }];
+  const o = S.createOrder({ id: 'o-web-1', type: 'delivery', customerName: 'Web', phone: '1155551234', address: 'Mitre 1', zoneId: 'z1', deliveryFee: 1500, items: items.map((it) => ({ ...it, cost: S.itemCost(it) })), web: { id: 'uuid', number: 7 } });
+  assert.equal(o.id, 'o-web-1');
+  assert.equal(o.total, 15500);
+  assert.deepEqual(JSON.parse(JSON.stringify(o.web)), { id: 'uuid', number: 7 });
+  const recipe = Math.round(0.3 * 10000 + 500);  // grande: muzza 0.3 kg + 1 caja
+  assert.equal(o.items[0].cost, recipe, 'misma receta en las dos mitades');
+});

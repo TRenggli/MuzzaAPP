@@ -1,0 +1,19 @@
+{
+  // Chequeo de tipos sin compilar: el sitio sigue siendo JavaScript puro.
+  // Cada archivo se suma con "// @ts-check" en la primera línea; los tipos
+  // del negocio (producto, pedido, pagos…) están en types/pz.d.ts.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "preserve",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["types/**/*.d.ts", "js/**/*.js"]
+}
