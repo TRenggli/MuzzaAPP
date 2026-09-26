@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    Vista: VENDER — punto de venta + cobro
    ========================================================================== */
@@ -8,7 +9,7 @@
 
   const CART_KEY = 'pz-cart';
   const emptyCart = () => ({ type: 'mostrador', items: [], customerId: null, customerName: '', phone: '', address: '', zoneId: null, deliveryFee: 0, table: '', discount: null, notes: '', eta: '', driver: '' });
-  let cart = (() => { try { return JSON.parse(sessionStorage.getItem(CART_KEY)) || emptyCart(); } catch (e) { return emptyCart(); } })();
+  let cart = (() => { try { return JSON.parse(sessionStorage.getItem(CART_KEY) || 'null') || emptyCart(); } catch (e) { return emptyCart(); } })();
   let activeCat = null;
   let query = '';
   const saveCart = () => sessionStorage.setItem(CART_KEY, JSON.stringify(cart));
@@ -106,6 +107,7 @@
     const allowHalf = cat && cat.allowHalf;
     const halfCandidates = S.data.products.filter((x) => x.active && x.id !== p.id && S.category(x.categoryId) && S.category(x.categoryId).allowHalf);
     let variant = p.variants[0];
+    /** @type {PZ.Product | null} */
     let half = null;
     let qty = 1;
     const extras = new Set();
@@ -407,7 +409,8 @@
       let partials = [];
       let resolved = false;
       let mpManual = false;   // usar el QR fijo en vez del QR de Mercado Pago con monto
-      let mpPaid = null;      // cobro acreditado por Mercado Pago
+      /** cobro acreditado por Mercado Pago @type {{ order: string, payment: string, amount: number } | null} */
+      let mpPaid = null;
       const base = order.total;
       const useMp = () => method === 'qr' && !mpManual && PZ.mp && PZ.mp.ready();
 

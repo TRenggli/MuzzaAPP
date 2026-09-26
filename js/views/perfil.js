@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PERFIL — cada persona edita sus datos: foto, nombre completo, teléfono,
    CUIL, correo y contraseña. Teléfono y CUIL son obligatorios para quien
@@ -14,11 +15,13 @@
     const side = Math.min(img.width, img.height);
     const c = document.createElement('canvas');
     c.width = c.height = size;
-    c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+    /** @type {CanvasRenderingContext2D} */ (c.getContext('2d')).drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
     return new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
   }
 
   const P = (PZ.profile = {
+    /** perfil de quien usa este equipo (foto, teléfono, CUIL, email)
+     * @type {{ user_id?: string, full_name?: string, phone?: string, cuil?: string, email?: string, avatar_url?: string | null } | null} */
     me: null,
 
     async load() {
@@ -52,6 +55,7 @@
     },
 
     open({ required = false } = {}) {
+      /** @type {NonNullable<typeof P.me>} */
       const p = P.me || {};
       const u = A().current;
       const name = (u && !u.support && u.name) || (A().me && A().me.user_metadata && A().me.user_metadata.name) || '';

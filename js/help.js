@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.help — ayudas para guiar a cada persona:
      · un consejo corto arriba de cada pantalla la primera vez que entra
@@ -213,8 +214,8 @@
         <div class="ht-body"><b>${U.esc(g.title)}:</b> ${g.intro}${g.tips[0] ? `<div class="ht-first">${g.tips[0]}</div>` : ''}</div>
         <div class="ht-actions"><button class="btn sm ghost" data-a="more">Ver más</button><button class="btn sm primary" data-a="ok">Entendido</button></div>`;
       el.prepend(div);
-      div.querySelector('[data-a=ok]').onclick = () => { markSeen(id); div.classList.add('bye'); setTimeout(() => div.remove(), 280); };
-      div.querySelector('[data-a=more]').onclick = () => { markSeen(id); div.remove(); PZ.help.open(id); };
+      /** @type {HTMLElement} */ (div.querySelector('[data-a=ok]')).onclick = () => { markSeen(id); div.classList.add('bye'); setTimeout(() => div.remove(), 280); };
+      /** @type {HTMLElement} */ (div.querySelector('[data-a=more]')).onclick = () => { markSeen(id); div.remove(); PZ.help.open(id); };
     },
 
     /** Guía completa de una pantalla */

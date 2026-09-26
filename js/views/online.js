@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    Vista: CARTA ONLINE — la carta que ven los clientes en el celular
      · publicar, dirección (link y QR), WhatsApp que recibe los pedidos, horario
@@ -10,7 +11,8 @@
   const C = PZ.carta;
   let tab = 'publicar';
   const previews = new Set();   // ventanas de vista previa abiertas
-  let sendTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let sendTimer;
 
   const TABS = [['publicar', '📣 Publicar'], ['diseno', '🎨 Diseño'], ['pedidos', '🧾 Pedidos y pagos'], ['productos', '🍕 Productos y fotos']];
 
@@ -72,7 +74,7 @@
 
   const changed = (rerender) => { S.save(); sendPreview(); if (rerender) rerender(); };
 
-  /** Requisitos para publicar */
+  /** Requisitos para publicar @returns {[boolean, string][]} */
   function checks() {
     const o = cfg();
     const visible = S.data.products.filter((p) => p.active && p.online !== false).length;

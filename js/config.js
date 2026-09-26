@@ -1,3 +1,4 @@
+// @ts-check
 /* Conexión a Supabase. La clave "publishable" es pública por diseño:
    la seguridad la dan las políticas RLS de la base de datos. */
 window.PZ_CONFIG = {

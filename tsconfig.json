@@ -1,13 +1,14 @@
 {
   // Chequeo de tipos sin compilar: el sitio sigue siendo JavaScript puro.
-  // Cada archivo se suma con "// @ts-check" en la primera línea; los tipos
-  // del negocio (producto, pedido, pagos…) están en types/pz.d.ts.
+  // Se revisan TODOS los archivos de js/ (y los nuevos se suman solos); los
+  // tipos del negocio (producto, pedido, pagos…) están en types/pz.d.ts.
+  // El service worker se revisa aparte con tsconfig.sw.json.
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2023", "dom", "dom.iterable"],
     "module": "preserve",
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmit": true,
     "strict": true,
     "noImplicitAny": false,

@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.seed — configuración por defecto, menú de ejemplo y ventas de demo
    ========================================================================== */
@@ -189,7 +190,7 @@
       plan.forEach(({ dayStart, n }) => {
         const session = {
           id: U.uid('cs-'), openedAt: dayStart.getTime() + 18.5 * 36e5, openedBy: uid, openingAmount: 20000,
-          closedAt: null, closedBy: uid, countedCash: 0, expectedCash: 0, diff: 0, notes: '', demo: true,
+          closedAt: /** @type {number | null} */ (null), closedBy: uid, countedCash: 0, expectedCash: 0, diff: 0, notes: '', demo: true,
         };
         let cashIn = 0;
         let daySales = 0;

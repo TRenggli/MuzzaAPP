@@ -63,7 +63,7 @@ El comprobante se imprime **siempre**, se pague como se pague (efectivo, transfe
 ## Calidad
 
 - `tests/*.test.mjs`: 41 pruebas de cálculos de dinero, carta online (precios, horarios, mensaje de WhatsApp), Mercado Pago (con respuestas simuladas), CUIL, fechas y sincronización (`npm test`).
-- **TypeScript sin compilar**: los archivos con `// @ts-check` (carta, Mercado Pago, utilidades) se revisan con `npm run types`; los tipos del negocio están en `types/pz.d.ts`. Las funciones del servidor se revisan con `deno check`.
+- **TypeScript sin compilar**: TODOS los archivos de la app (y el service worker) se revisan con `npm run types`; los nuevos se suman solos. Los tipos del negocio (producto, pedido, pagos, sucursal) están en `types/pz.d.ts`. Las funciones del servidor se revisan con `deno check`.
 - `supabase/tests/integridad.sql` (18) y `supabase/tests/carta.sql` (24): pruebas de seguridad que simulan cajeros, encargados y clientes anónimos intentando hacer trampa (se deshacen solas).
 - GitHub Actions corre todo en cada cambio y **publica la página solo si pasa**.
 - Los errores que tenga la app en los equipos de los clientes quedan registrados en *Plataforma → Errores de la app*.

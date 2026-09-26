@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PLATAFORMA — solo para el creador del sistema.
    Crea negocios a medida (dueño, módulos, límite de sucursales), los
@@ -196,8 +197,8 @@
       g.count++;
       g.rows.push(r);
     });
-    const list = Object.values(groups).sort((a, b) => new Date(b.last) - new Date(a.last));
-    const day = rows.filter((r) => Date.now() - new Date(r.at) < 864e5).length;
+    const list = Object.values(groups).sort((a, b) => new Date(b.last).getTime() - new Date(a.last).getTime());
+    const day = rows.filter((r) => Date.now() - new Date(r.at).getTime() < 864e5).length;
     el.innerHTML = `
       <div class="kpis mb">
         <div class="kpi"><span class="k-ico">🐞</span><div class="k-label">Errores (últimos ${rows.length})</div><div class="k-value">${list.length} distintos</div></div>

@@ -68,6 +68,7 @@ declare namespace PZ {
     mp?: { order: string; payment?: string };
   }
   interface Order {
+    [field: string]: any;
     id: string;
     number: number;
     ticketNumber: number | null;
@@ -80,20 +81,73 @@ declare namespace PZ {
     address: string;
     zoneId: string | null;
     items: OrderItem[];
-    subtotal?: number;
+    subtotal: number;
     discount: { type: '%' | '$'; value: number } | null;
-    discountAmount?: number;
+    discountAmount: number;
     cashDiscount: number;
     surcharge: number;
     deliveryFee: number;
-    total?: number;
+    total: number;
     payments: Payment[];
     paid: boolean;
-    status: OrderStatus;
+    status: OrderStatus | string;
     notes: string;
     voided: boolean;
     /** pedido que llegó por la carta online */
     web?: { id: string; number: number };
+  }
+
+  /* ---------------- Sucursal ---------------- */
+  interface Customer {
+    id: string;
+    name: string;
+    phone: string;
+    address: string;
+    zoneId: string | null;
+    notes: string;
+    createdAt?: number;
+    branchId?: string | null;
+  }
+  interface Ingredient {
+    id: string;
+    name: string;
+    unit: string;
+    stock: number;
+    min: number;
+    cost?: number;
+  }
+  /** Todo lo que el equipo tiene de la sucursal abierta */
+  interface BranchData {
+    settings: any;
+    users: any[];
+    categories: Category[];
+    products: Product[];
+    extras: Extra[];
+    customers: Customer[];
+    orders: Order[];
+    cashSessions: any[];
+    cashMoves: any[];
+    ingredients: Ingredient[];
+    stockMoves: any[];
+    audit: any[];
+    expenses: any[];
+    demo: boolean;
+    [col: string]: any;
+  }
+  interface StoreCtx {
+    orgId: string | null;
+    branchId: string | null;
+    org: any;
+    branches: any[];
+    members: any[];
+    role: string | null;
+  }
+  interface SyncStatus {
+    pending: number;
+    state: 'idle' | 'syncing' | 'ok' | 'retry' | 'error';
+    lastSync: number | null;
+    error: string;
+    online?: boolean;
   }
 
   /* ---------------- Carta online ---------------- */

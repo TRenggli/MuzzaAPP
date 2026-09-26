@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.auth — sesión, niveles (plataforma / negocio / sucursal), roles,
    permisos y módulos contratados por cada negocio
@@ -27,10 +28,13 @@
 
   const A = (PZ.auth = {
     ROLES,
-    current: null,     // { id, name, username, role, branchIds, orgId }
+    /** @type {{ id: string, name: string, username: string, role: string, branchIds: string[], orgId: string, support: boolean } | null} */
+    current: null,
+    /** @type {any[]} */
     memberships: [],
     platform: false,   // es el administrador de la plataforma
-    me: null,          // usuario de Supabase
+    /** usuario de Supabase @type {any} */
+    me: null,
 
     /** Arma el usuario actual para un negocio */
     use(member) {

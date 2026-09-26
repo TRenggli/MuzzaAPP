@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.cloud — todo lo que habla con Supabase: sesión, lectura, escritura,
    tiempo real, numeración y estadísticas del negocio.
@@ -17,7 +18,12 @@
   const C = (PZ.cloud = {
     sb,
     online: navigator.onLine,
+    /** @type {any} */
     channel: null,
+    /** estado del tiempo real ('SUBSCRIBED', …) @type {string} */
+    realtime: '',
+    /** errores ya reportados (para no inundar el registro) @type {Map<string, number>} */
+    _reported: new Map(),
 
     /* ---------------- Sesión ---------------- */
     async session() {
@@ -129,6 +135,7 @@
     async branchMenu(orgId, branchId) {
       const { data, error } = await sb.from('docs').select('col, id, data').eq('org_id', orgId).eq('branch_id', branchId).in('col', ['category', 'product', 'extra']);
       if (error) throw error;
+      /** @type {Record<string, any[]>} */
       const out = { categories: [], products: [], extras: [] };
       const key = { category: 'categories', product: 'products', extra: 'extras' };
       (data || []).forEach((r) => out[key[r.col]].push({ ...r.data, id: r.id.slice(r.id.indexOf('/') + 1) }));
@@ -247,7 +254,6 @@
     /* ---------------- Registro de errores ---------------- */
     async reportError(message, { stack = '', context = '' } = {}) {
       const key = String(message).slice(0, 200);
-      C._reported = C._reported || new Map();
       const n = C._reported.get(key) || 0;
       if (n >= 2 || C._reported.size > 25) return; // no inundar
       C._reported.set(key, n + 1);

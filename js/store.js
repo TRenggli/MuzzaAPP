@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.store — datos de la sucursal activa + sincronización con la nube.
 
@@ -32,26 +33,29 @@
 
   /* ---------------- Caché local (IndexedDB) ---------------- */
   const idb = {
+    /** @type {IDBDatabase | null} */
     db: null,
     async open() {
       if (this.db) return;
-      this.db = await new Promise((res, rej) => {
+      this.db = await /** @type {Promise<IDBDatabase>} */ (new Promise((res, rej) => {
         const r = indexedDB.open('pizzeria-cloud', 1);
         r.onupgradeneeded = () => r.result.createObjectStore('kv');
         r.onsuccess = () => res(r.result);
         r.onerror = () => rej(r.error);
-      });
+      }));
     },
+    /** @param {string} k @returns {Promise<any>} */
     get(k) {
       return new Promise((res) => {
-        const t = this.db.transaction('kv', 'readonly').objectStore('kv').get(k);
+        const t = /** @type {IDBDatabase} */ (this.db).transaction('kv', 'readonly').objectStore('kv').get(k);
         t.onsuccess = () => res(t.result);
         t.onerror = () => res(null);
       });
     },
+    /** @param {string} k @param {any} v @returns {Promise<void>} */
     set(k, v) {
       return new Promise((res) => {
-        const tx = this.db.transaction('kv', 'readwrite');
+        const tx = /** @type {IDBDatabase} */ (this.db).transaction('kv', 'readwrite');
         tx.objectStore('kv').put(v, k);
         tx.oncomplete = () => res();
         tx.onerror = () => res();
@@ -59,13 +63,18 @@
     },
   };
 
+  /** @type {Map<string, string>} */
   let shadow = new Map();   // key → JSON del último estado conocido
+  /** @type {Map<string, any>} */
   let outbox = new Map();   // key → { name, id, patch } | { name, id, del: true } | { name: 'settings' }
-  let syncTimer = null;
-  let cacheTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let syncTimer;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let cacheTimer;
   let flushing = false;
   let retryDelay = 3000;
-  let retryTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let retryTimer;
   const listeners = new Set();
   const statusListeners = new Set();
 
@@ -78,12 +87,20 @@
   const localId = (id) => (id.includes('/') ? id.slice(id.indexOf('/') + 1) : id);
 
   const S = (PZ.store = {
-    data: null,
+    /** Datos de la sucursal abierta (vacío hasta que se abre una) */
+    data: /** @type {PZ.BranchData} */ (/** @type {unknown} */ (null)),
+    /** @type {PZ.StoreCtx} */
     ctx: { orgId: null, branchId: null, org: null, branches: [], members: [], role: null },
     LOCAL_DAYS,
     /** Desde cuándo hay ventas guardadas en este equipo */
     localSince: () => U.startOfDay(Date.now() - (LOCAL_DAYS - 1) * 864e5).getTime(),
+    /** @type {PZ.SyncStatus} */
     status: { pending: 0, state: 'idle', lastSync: null, error: '' },
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    _remoteTimer: undefined,
+    /** Aviso a las pantallas "en vivo" cuando llega un cambio de otro equipo
+     * @type {((name: string, id: string, event: string) => void) | null} */
+    onRemoteHook: null,
 
     /* =================== Abrir sucursal =================== */
     emptyData(settings) {
@@ -396,7 +413,7 @@
     // Cada equipo reserva bloques de números en la base. Así se puede
     // vender sin internet sin que dos cajas repitan número.
     pools() {
-      try { return JSON.parse(localStorage.getItem(`pz-pool-${S.ctx.branchId}`)) || {}; } catch (e) { return {}; }
+      try { return JSON.parse(localStorage.getItem(`pz-pool-${S.ctx.branchId}`) || 'null') || {}; } catch (e) { return {}; }
     },
     savePools(p) { localStorage.setItem(`pz-pool-${S.ctx.branchId}`, JSON.stringify(p)); },
     poolLeft(kind) { return (S.pools()[kind] || []).reduce((a, [s, e]) => a + (e - s + 1), 0); },
@@ -442,7 +459,12 @@
     branch: (id) => S.ctx.branches.find((b) => b.id === (id || S.ctx.branchId)),
     branchName: (id) => { const b = S.branch(id); return b ? b.name : ''; },
 
-    /** Construye una línea de pedido con precio calculado */
+    /**
+     * Construye una línea de pedido con precio calculado
+     * @param {{ product: PZ.Product, variant: PZ.Variant, half?: { product: PZ.Product, variant: PZ.Variant } | null,
+     *   extras?: PZ.Extra[], qty?: number, notes?: string }} p
+     * @returns {PZ.OrderItem}
+     */
     makeItem({ product, variant, half = null, extras = [], qty = 1, notes = '' }) {
       let unit = variant.price;
       if (half) {
@@ -506,6 +528,7 @@
 
     createOrder(draft, { paid = false, payments = [], adjust = {} } = {}) {
       const now = Date.now();
+      /** @type {PZ.Order} */
       const o = {
         id: draft.id || U.uid('o-'),
         number: S.nextNumber('order'),
@@ -522,6 +545,10 @@
         zoneId: draft.zoneId || null,
         items: draft.items.map((x) => ({ ...x })),
         discount: draft.discount || null,
+        // los totales los calcula computeTotals más abajo
+        subtotal: 0,
+        discountAmount: 0,
+        total: 0,
         surcharge: 0,
         cashDiscount: 0,
         deliveryFee: draft.deliveryFee || 0,
@@ -621,6 +648,7 @@
     },
 
     /* =================== Clientes (compartidos por todas las sucursales) =================== */
+    /** @param {{ id?: string, name?: string, phone?: string, address?: string, zoneId?: string | null, notes?: string }} c */
     upsertCustomer({ id, name, phone, address, zoneId, notes }) {
       const clean = (s) => String(s || '').replace(/\D/g, '');
       let c = id ? S.customer(id) : phone ? S.data.customers.find((x) => clean(x.phone) && clean(x.phone) === clean(phone)) : null;
@@ -722,7 +750,7 @@
 
     /** Ingresos, costo de mercadería, gastos y resultado de la sucursal en un período */
     profit(from, to) {
-      const orders = S.data.orders.filter((o) => o.paid && !o.voided && o.paidAt >= from && o.paidAt <= to);
+      const orders = S.data.orders.filter((o) => o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to);
       const sales = orders.reduce((a, o) => a + o.total, 0);
       const cogs = orders.reduce((a, o) => a + o.items.reduce((x, i) => x + (i.cost || 0) * i.qty, 0), 0);
       const exps = S.data.expenses.filter((e) => e.at >= from && e.at <= to);
@@ -737,7 +765,7 @@
       const map = {};
       const get = (id) => (map[id] = map[id] || { id, sales: 0, tickets: 0, discounts: 0, voids: 0, voidAmount: 0, closes: 0, absDiff: 0, diff: 0, salary: 0 });
       S.data.orders.forEach((o) => {
-        if (o.paid && !o.voided && o.paidAt >= from && o.paidAt <= to) {
+        if (o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to) {
           const r = get(o.paidBy || o.userId);
           r.sales += o.total; r.tickets++; r.discounts += (o.discountAmount || 0) + (o.cashDiscount || 0);
         }
@@ -789,6 +817,7 @@
     async seedIfEmpty({ customers = false, example = true } = {}) {
       let changed = false;
       if (!S.data.categories.length && PZ.auth.isAdmin()) {
+        /** @type {any} */
         let model = null;
         try { model = await PZ.cloud.menuModel(S.ctx.orgId); } catch (e) { /* sin conexión */ }
         if ((!model || !(model.categories || []).length) && !example) return false;

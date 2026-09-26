@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    Panel del NEGOCIO (dueño): resumen en vivo, sucursales, finanzas,
    menú modelo y datos del negocio. Nada de esto opera la caja: para eso el

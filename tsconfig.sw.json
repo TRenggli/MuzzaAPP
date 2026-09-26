@@ -1,0 +1,8 @@
+{
+  // El service worker corre en otro entorno (sin ventana ni DOM): se revisa aparte.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2023", "webworker"]
+  },
+  "include": ["sw.js"]
+}

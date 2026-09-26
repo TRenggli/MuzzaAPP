@@ -29,8 +29,8 @@ jobs:
       - run: npm ci
       - name: Sintaxis de todos los archivos
         run: for f in js/*.js js/views/*.js sw.js; do node --check "$f"; done
-      - name: Tipos (TypeScript) de los archivos marcados con @ts-check
-        run: npx tsc -p tsconfig.json
+      - name: Tipos (TypeScript) de toda la app y del service worker
+        run: npm run types
       - name: Cálculos, carta online, Mercado Pago, sincronización y utilidades
         run: node --test tests/*.test.mjs
       - uses: denoland/setup-deno@v2

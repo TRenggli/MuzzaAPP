@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    Vista: INICIO — resumen del día
    ========================================================================== */
@@ -57,7 +58,7 @@
       </div>
       <div class="dash">
         <div class="card"><h3>⏰ Ventas por hora (hoy)</h3>
-          ${paid.length ? C.bars(Object.entries(hours).map(([h, v]) => ({ label: (h % 24) + 'h', value: v }))) : '<div class="empty"><span class="e-ico">🍕</span>Todavía no hay ventas hoy. ¡Que empiece el servicio!</div>'}
+          ${paid.length ? C.bars(Object.entries(hours).map(([h, v]) => ({ label: (Number(h) % 24) + 'h', value: v }))) : '<div class="empty"><span class="e-ico">🍕</span>Todavía no hay ventas hoy. ¡Que empiece el servicio!</div>'}
         </div>
         <div class="card"><h3>🔔 Atención</h3>
           ${!sess ? '<div class="alert-row">💰 La caja está cerrada</div>' : ''}

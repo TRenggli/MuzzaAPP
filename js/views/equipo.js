@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    EQUIPO — personas, códigos de invitación y rendimiento
      'equipo'   → dentro de una sucursal (encargado o dueño operando)
@@ -71,7 +72,7 @@
       if (!box.isConnected) return;
       list = list.filter((i) => !branchId || i.branch_id === branchId);
       const now = Date.now();
-      const state = (i) => (i.revoked ? ['err', 'Anulado'] : i.used_at ? ['ok', 'Usado'] : new Date(i.expires_at) < now ? ['', 'Vencido'] : ['warn', 'Pendiente']);
+      const state = (i) => (i.revoked ? ['err', 'Anulado'] : i.used_at ? ['ok', 'Usado'] : new Date(i.expires_at).getTime() < now ? ['', 'Vencido'] : ['warn', 'Pendiente']);
       if (!list.length) { box.innerHTML = '<div class="empty small">Todavía no generaste códigos</div>'; return; }
       const member = (id) => S.ctx.members.find((m) => m.user_id === id);
       box.innerHTML = `<div class="table-wrap"><table class="tbl"><thead><tr><th>Código</th><th>Sucursal</th><th>Rol</th><th>Estado</th><th>Vence / usado por</th><th></th></tr></thead><tbody>

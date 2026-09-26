@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.app — ingreso, niveles y navegación
 
@@ -57,13 +58,24 @@
   };
   const modeOf = (id) => (id.startsWith('p-') ? 'platform' : id.startsWith('n-') ? 'org' : 'branch');
 
+  /** @type {(() => void) | null} */
   let cleanup = null;
-  let clockTimer = null;
-  const root = () => document.getElementById('app');
+  /** @type {ReturnType<typeof setInterval> | undefined} */
+  let clockTimer;
+  const root = () => /** @type {HTMLElement} */ (document.getElementById('app'));
+  /**
+   * Elemento recién dibujado por la misma pantalla (siempre existe).
+   * @param {ParentNode} scope @param {string} sel @returns {HTMLElement}
+   */
+  const q = (scope, sel) => /** @type {HTMLElement} */ (scope.querySelector(sel));
+  /** @param {ParentNode} scope @param {string} sel @returns {HTMLElement[]} */
+  const qa = (scope, sel) => /** @type {HTMLElement[]} */ (Array.from(scope.querySelectorAll(sel)));
   const flavorDots = (current) => PZ.themes.map((t) => `<button type="button" class="flavor-dot ${t.id === current ? 'on' : ''}" data-t="${t.id}" title="${t.name}" aria-label="Tema ${t.name}" style="background:conic-gradient(${t.sw[0]} 0 50%, ${t.sw[1]} 50% 80%, ${t.sw[2]} 80%)"></button>`).join('');
 
   const App = (PZ.app = {
+    /** @type {'platform' | 'org' | 'branch' | null} */
     mode: null,
+    /** @type {string | null} */
     currentView: null,
 
     /* ===================== Tema (por equipo) ===================== */
@@ -72,7 +84,7 @@
       const t = id || App.theme();
       document.documentElement.dataset.theme = t;
       document.documentElement.dataset.motion = localStorage.getItem('pz-motion') === 'off' ? 'off' : 'on';
-      const meta = document.querySelector('meta[name=theme-color]');
+      const meta = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name=theme-color]'));
       const col = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
       if (meta && col) meta.content = col;
     },
@@ -120,18 +132,19 @@
             ${navigator.onLine ? '' : '<div class="demo-hint">📴 Sin conexión. Si ya ingresaste antes en este equipo, tu sesión sigue activa.</div>'}
           </form>
         </div>`;
-      const form = root().querySelector('form');
-      const err = form.querySelector('.err-msg');
+      const form = /** @type {HTMLFormElement} */ (q(root(), 'form'));
+      const f = /** @type {any} */ (form.elements);
+      const err = q(form, '.err-msg');
       App.bindFlavors(form);
-      form.querySelector('[data-a=code]').onclick = () => App.renderJoin();
+      q(form, '[data-a=code]').onclick = () => App.renderJoin();
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         err.classList.add('hidden');
-        const btn = form.querySelector('button[type=submit]');
+        const btn = /** @type {HTMLButtonElement} */ (q(form, 'button[type=submit]'));
         btn.disabled = true;
         btn.textContent = 'Un momento…';
         try {
-          await A.login(form.elements.user.value, form.elements.pass.value);
+          await A.login(f.user.value, f.pass.value);
           localStorage.setItem('pz-memberships', JSON.stringify(A.memberships));
           localStorage.setItem('pz-platform', A.platform ? '1' : '');
           await App.enter();
@@ -167,16 +180,16 @@
             </div>
             <p class="center small mt"><a href="#" data-a="back">← Volver al ingreso</a></p>
           </form></div>`;
-      const form = root().querySelector('form');
-      const err = form.querySelector('.err-msg');
-      const f = form.elements;
+      const form = /** @type {HTMLFormElement} */ (q(root(), 'form'));
+      const err = q(form, '.err-msg');
+      const f = /** @type {any} */ (form.elements);
       let step = 1;
       f.code.addEventListener('input', () => {
         let v = f.code.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
         if (v.length > 4) v = v.slice(0, 4) + '-' + v.slice(4);
         f.code.value = v;
       });
-      form.querySelector('[data-a=back]').onclick = async (e) => {
+      q(form, '[data-a=back]').onclick = async (e) => {
         e.preventDefault();
         if (await PZ.cloud.session()) return App.enter().catch((x) => App.renderLogin(x.message));
         App.renderLogin();
@@ -189,14 +202,14 @@
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         err.classList.add('hidden');
-        const btn = form.querySelector(step === 1 ? '.step1 button' : '.step2 button');
+        const btn = /** @type {HTMLButtonElement} */ (q(form, step === 1 ? '.step1 button' : '.step2 button'));
         btn.disabled = true;
         try {
           if (step === 1) {
             const info = await PZ.cloud.join({ code: f.code.value, check: true });
-            form.querySelector('.join-ok').innerHTML = `<div class="alert-row">✅ Te vas a sumar a <b>${U.esc(info.org)}</b> · sucursal <b>${U.esc(info.branch)}</b> como <b>${U.esc(A.ROLES[info.role].label)}</b></div>`;
-            form.querySelector('.step1').classList.add('hidden');
-            form.querySelector('.step2').classList.remove('hidden');
+            q(form, '.join-ok').innerHTML = `<div class="alert-row">✅ Te vas a sumar a <b>${U.esc(info.org)}</b> · sucursal <b>${U.esc(info.branch)}</b> como <b>${U.esc(A.ROLES[info.role].label)}</b></div>`;
+            q(form, '.step1').classList.add('hidden');
+            q(form, '.step2').classList.remove('hidden');
             f.code.readOnly = true;
             step = 2;
             setTimeout(() => f.name.focus(), 50);
@@ -342,8 +355,8 @@
               <div class="pick-list mt">${options.map((o) => `<button class="pick" data-id="${o.id}"><span class="pick-ico">${o.icon}</span><span><b>${U.esc(o.title)}</b><small>${U.esc(o.sub || '')}</small></span><span class="pick-go">→</span></button>`).join('')}</div>
               <p class="center small mt"><a href="#" data-a="out">Salir</a></p>
             </div></div>`;
-        root().querySelectorAll('.pick').forEach((b) => b.onclick = () => resolve(b.dataset.id));
-        root().querySelector('[data-a=out]').onclick = (e) => { e.preventDefault(); App.logout(); };
+        qa(root(), '.pick').forEach((b) => b.onclick = () => resolve(b.dataset.id));
+        q(root(), '[data-a=out]').onclick = (e) => { e.preventDefault(); App.logout(); };
       });
     },
 
@@ -435,7 +448,7 @@
         </div>`;
 
       const r = root();
-      const on = (a, fn) => { const b = r.querySelector(`[data-a=${a}]`); if (b) b.onclick = fn; };
+      const on = (a, fn) => { const b = /** @type {HTMLElement | null} */ (r.querySelector(`[data-a=${a}]`)); if (b) b.onclick = fn; };
       on('logout', App.logout);
       on('user', App.userMenu);
       on('branch', () => App.branchPicker());
@@ -479,7 +492,7 @@
     refreshChrome() {
       const r = root();
       if (App.mode !== 'branch' || !S.data) return;
-      const chip = r.querySelector('.cash-chip');
+      const chip = /** @type {HTMLElement | null} */ (r.querySelector('.cash-chip'));
       if (!chip) return;
       const s = S.currentSession();
       chip.className = 'cash-chip ' + (s ? 'open' : 'closed');
@@ -603,13 +616,13 @@
       const id = name && items.some((n) => n.id === name) ? name : items[0].id;
       if (id !== name) history.replaceState(null, '', '#/' + id);
       const view = PZ.views[id];
-      const nav = items.find((n) => n.id === id);
+      const nav = items.find((n) => n.id === id) || items[0];
       if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
-      document.querySelectorAll('[data-r]').forEach((a) => a.classList.toggle('on', a.dataset.r === id));
-      document.querySelector('.topbar .t-ico').textContent = nav.icon;
-      document.querySelector('.topbar .t-txt').textContent = view.title || nav.label;
+      qa(document, '[data-r]').forEach((a) => a.classList.toggle('on', a.dataset.r === id));
+      q(document, '.topbar .t-ico').textContent = nav.icon;
+      q(document, '.topbar .t-txt').textContent = view.title || nav.label;
       document.title = `${nav.label} · ${App.mode === 'branch' ? S.branchName() : App.mode === 'org' ? (S.ctx.org ? S.ctx.org.name : '') : 'Plataforma'}`;
-      const el = document.getElementById('view');
+      const el = q(document, '#view');
       el.innerHTML = '';
       el.style.animation = 'none';
       void el.offsetWidth;
@@ -650,11 +663,11 @@
 
     // Cambios de otros equipos: se redibujan las pantallas "en vivo"
     S.onRemoteHook = U.debounce(() => {
-      const v = PZ.views[App.currentView];
+      const v = App.currentView ? PZ.views[App.currentView] : null;
       if (v && v.live && !document.querySelector('.modal-back')) App.route();
     }, 600);
 
-    const bootEl = document.getElementById('boot');
+    const bootEl = q(document, '#boot');
     const hideBoot = () => { bootEl.style.opacity = '0'; setTimeout(() => bootEl.remove(), 400); };
     const invite = new URLSearchParams(location.search).get('codigo');
     if (invite) {

@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    Vista: GASTOS Y GANANCIAS de la sucursal
    Los gastos se cargan acá o salen solos de la caja (retiros con categoría).
@@ -7,7 +8,8 @@
   const S = PZ.store;
   const CAT_ICON = { Mercadería: '🧀', Sueldos: '🧑‍🍳', Alquiler: '🏠', Servicios: '💡', Impuestos: '🏛️', Delivery: '🛵', Mantenimiento: '🔧', Publicidad: '📣', Comisiones: '💳', Otros: '📦' };
   const CAT_COLORS = { Mercadería: '#e9a23b', Sueldos: '#6c8ebf', Alquiler: '#8e44ad', Servicios: '#2a9d8f', Impuestos: '#d7263d', Delivery: '#ff6b35', Mantenimiento: '#52b788', Publicidad: '#f4a261', Comisiones: '#1d7bd7', Otros: '#999' };
-  let month = null; // 'YYYY-MM'
+  /** @type {string | null} 'YYYY-MM' */
+  let month = null;
   let cat = '';
 
   function monthBounds(m) {

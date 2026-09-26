@@ -1,3 +1,4 @@
+// @ts-check
 /* Service worker: la app funciona sin internet una vez cargada. */
 const CACHE = 'pizzeria-v7';
 const ASSETS = [
@@ -6,17 +7,18 @@ const ASSETS = [
   './js/views/inicio.js', './js/views/vender.js', './js/views/pedidos.js', './js/views/caja.js', './js/views/historial.js',
   './js/views/clientes.js', './js/views/menu.js', './js/views/stock.js', './js/views/reportes.js', './js/views/config.js',
 ];
+const sw = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+sw.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => sw.skipWaiting()));
 });
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+sw.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => sw.clients.claim()));
 });
 
 // Red primero (para recibir actualizaciones), caché si no hay conexión
-self.addEventListener('fetch', (e) => {
+sw.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   // Solo archivos propios de la app: las llamadas a Supabase van directo
   if (new URL(e.request.url).origin !== location.origin) return;
@@ -29,6 +31,6 @@ self.addEventListener('fetch', (e) => {
         }
         return res;
       })
-      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('./index.html')))
+      .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('./index.html')).then((r) => r || Response.error()))
   );
 });

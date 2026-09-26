@@ -1,3 +1,4 @@
+// @ts-check
 /* ==========================================================================
    PZ.ticket — comprobantes de pago, comandas de cocina y cierres de caja.
    Tres formas de imprimir:
@@ -223,7 +224,8 @@
     const frame = document.createElement('iframe');
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
     document.body.appendChild(frame);
-    const doc = frame.contentDocument;
+    const doc = /** @type {Document} */ (frame.contentDocument);
+    const win = /** @type {Window} */ (frame.contentWindow);
     doc.open();
     doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ticket</title><style>
       @page{size:${w}mm auto;margin:0}
@@ -235,8 +237,8 @@
     doc.close();
     const go = () => {
       try {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
+        win.focus();
+        win.print();
       } catch (e) {
         PZ.toast('No se pudo abrir la impresión', 'err');
       }
@@ -332,7 +334,7 @@
       const h = Math.round((img.height / img.width) * w);
       const c = document.createElement('canvas');
       c.width = w; c.height = h;
-      const ctx = c.getContext('2d');
+      const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
       return c;
@@ -444,12 +446,15 @@
     '0000ffe0-0000-1000-8000-00805f9b34fb',
     '0000fee7-0000-1000-8000-00805f9b34fb',
   ];
+  // Web Bluetooth todavía no está en los tipos estándar del navegador
+  /** @type {{ device: any, ch: any }} */
   const bt = { device: null, ch: null };
+  const bluetooth = () => /** @type {any} */ (navigator).bluetooth;
 
   async function btConnect(forceNew = false) {
-    if (!navigator.bluetooth) throw new Error('Este navegador no soporta Bluetooth. Usá Chrome en Android o elegí "RawBT" en Configuración.');
+    if (!bluetooth()) throw new Error('Este navegador no soporta Bluetooth. Usá Chrome en Android o elegí "RawBT" en Configuración.');
     if (!bt.device || forceNew) {
-      bt.device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: BT_SERVICES });
+      bt.device = await bluetooth().requestDevice({ acceptAllDevices: true, optionalServices: BT_SERVICES });
       bt.ch = null;
     }
     if (!bt.device.gatt.connected || !bt.ch) {
@@ -571,6 +576,7 @@
     },
 
     async testPrint() {
+      /** @type {any} */
       const fake = {
         number: 999, ticketNumber: 0, createdAt: Date.now(), paidAt: Date.now(), userId: PZ.auth.current && PZ.auth.current.id, type: 'mostrador',
         items: [PZ.store.makeItem({ product: PZ.store.data.products[0], variant: PZ.store.data.products[0].variants[0], qty: 1 })],
@@ -607,7 +613,7 @@
       try { await navigator.clipboard.writeText(text); PZ.toast('Comprobante copiado al portapapeles'); } catch (e) { PZ.toast('No se pudo compartir', 'err'); }
     },
 
-    /** Vista previa con acciones */
+    /** Vista previa con acciones @param {any} o @param {{ title?: string }} [opts] */
     preview(o, { title } = {}) {
       const m = PZ.modal({
         title: title || (o.paid ? `Comprobante Nº ${ticketId(o)}` : `Pedido #${o.number}`),
