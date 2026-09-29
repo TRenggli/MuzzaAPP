@@ -58,8 +58,9 @@
     const ordersHtml = orders.length ? `<div class="table-orders">${orders.map((o) => `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <div><b>Tanda #${o.number}</b> <span class="muted">${o.items.map((i) => `${i.qty}× ${U.esc(i.name)}`).join(', ')}</span></div>
-        <div style="display:flex;align-items:center;gap:8px">
+        <div style="display:flex;align-items:center;gap:6px">
           <strong>${o.paid ? '<span class="badge ok">Cobrado</span>' : U.money(o.total)}</strong>
+          <button class="icon-btn" data-print-kit="${o.id}" title="Imprimir comanda de cocina" style="width:32px;height:32px;font-size:15px">👨‍🍳</button>
           ${!o.paid ? `<button class="btn sm accent" data-pay-order="${o.id}">💸 Cobrar</button>` : ''}
         </div>
       </div>`).join('')}</div>` : '<p class="muted">Todavía no se enviaron productos a esta mesa.</p>';
@@ -67,8 +68,8 @@
     const canClose = due === 0;
     const footerHtml = `
       <button class="btn ghost" data-a="move">↔ Mover</button>
-      ${orders.length ? `<button class="btn ghost" data-a="bill">${s.state === 'cuenta_solicitada' ? '✓ Cuenta pedida' : '🧾 Pedir cuenta'}</button>` : ''}
-      ${canClose ? `<button class="btn ghost danger" data-a="close">${orders.length ? 'Cerrar atención' : 'Cancelar atención'}</button>` : ''}
+      ${orders.length ? `<button class="btn ghost" data-a="bill">${s.state === 'cuenta_solicitada' ? '🧾 Imprimir cuenta' : '🧾 Pedir cuenta'}</button>` : ''}
+      ${canClose ? `<button class="btn ghost danger" data-a="close">${orders.length ? '✅ Cerrar mesa' : '✕ Liberar mesa'}</button>` : ''}
       <button class="btn primary" data-a="order">＋ Agregar tanda</button>
     `;
 
@@ -82,7 +83,15 @@
     const orderBtn = E.querySelector('[data-a=order]');
     if (orderBtn) orderBtn.onclick = () => { m.close(); takeTableOrder(el, s); };
     const billBtn = E.querySelector('[data-a=bill]');
-    if (billBtn) billBtn.onclick = () => { S.requestTableBill(s.id); m.close(); render(el); };
+    if (billBtn) {
+      billBtn.onclick = () => {
+        S.requestTableBill(s.id);
+        printTableBill(s);
+        PZ.toast(`Cuenta solicitada para Mesa ${table ? table.number : ''}`, 'ok');
+        m.close();
+        render(el);
+      };
+    }
     const moveBtn = E.querySelector('[data-a=move]');
     if (moveBtn) moveBtn.onclick = () => moveModal(el, m, s);
     const closeBtn = E.querySelector('[data-a=close]');
@@ -90,6 +99,15 @@
       if (S.closeTableSession(s.id)) { m.close(); render(el); }
       else PZ.toast('Todavía hay saldo pendiente', 'warn');
     };
+    E.querySelectorAll('[data-print-kit]').forEach((btn) => {
+      btn.onclick = () => {
+        const orderId = btn.getAttribute('data-print-kit');
+        const o = S.order(orderId);
+        if (o && PZ.ticket) {
+          PZ.ticket.printOrder(o, { kitchen: true, customer: false });
+        }
+      };
+    });
     E.querySelectorAll('[data-pay-order]').forEach((btn) => {
       btn.onclick = async () => {
         const orderId = btn.getAttribute('data-pay-order');
@@ -105,6 +123,29 @@
         render(el);
       };
     });
+  }
+
+  function printTableBill(s) {
+    const table = S.table(s.tableIds[0]);
+    const orders = S.tableOrders(s);
+    const due = S.tableBalance(s);
+    if (!orders.length || !PZ.ticket) return;
+    const allItems = orders.flatMap((o) => o.items);
+    const billOrder = {
+      id: s.id,
+      number: `Mesa ${table ? table.number : ''}`,
+      ticketNumber: table ? table.number : '0',
+      type: 'mesa',
+      table: table ? table.number : '',
+      createdAt: s.openedAt,
+      items: allItems,
+      subtotal: due,
+      total: due,
+      paid: false,
+      payments: [],
+      notes: `Pre-cuenta · ${orders.length} tanda(s)${s.guests ? ' · ' + s.guests + ' personas' : ''}`,
+    };
+    PZ.ticket.printOrder(billOrder, { kitchen: false, customer: true });
   }
 
   function takeTableOrder(el, s) {
@@ -309,7 +350,10 @@
         batchNumber,
         items,
       });
-      if (PZ.ticket) PZ.ticket.printOrder(o, { kitchen: true, customer: false });
+      const st = S.data.settings.ticket;
+      if (st && st.printKitchen && st.printMode !== 'browser' && PZ.ticket) {
+        PZ.ticket.printOrder(o, { kitchen: true, customer: false });
+      }
       PZ.toast(`Tanda #${batchNumber} enviada a cocina (${U.money(o.total)})`, 'ok');
       m.close();
       render(el);
