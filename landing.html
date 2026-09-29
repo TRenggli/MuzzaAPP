@@ -4,10 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>MuzzaAPP · Sistema Integral de Gestión Gastronómica</title>
-  <meta name="description" content="Software y sistema de gestión para pizzerías y locales gastronómicos: salón y mesas, mostrador, delivery con mapa, carta online y cobro con QR de Mercado Pago.">
+  <meta name="description" content="Software y sistema de gestión para pizzerías y locales gastronómicos: salón y mesas, mostrador, delivery estructurado, carta online y cobro con QR de Mercado Pago.">
   <meta name="theme-color" content="#d7263d">
   <link rel="icon" href="img/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="img/icon.svg">
+  <script>
+    (function () {
+      const saved = localStorage.getItem('pz-theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = saved || (prefersDark ? 'horno' : 'margherita');
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
@@ -15,8 +22,8 @@
   <link rel="stylesheet" href="css/responsive.css">
   <style>
     :root {
-      --hero-grad: linear-gradient(135deg, rgba(215, 38, 61, 0.08) 0%, rgba(255, 209, 102, 0.15) 100%);
-      --card-hover: 0 16px 36px -10px rgba(120, 60, 20, 0.22);
+      --hero-grad: linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, transparent) 0%, color-mix(in srgb, var(--accent) 15%, transparent) 100%);
+      --card-hover: 0 16px 36px -10px rgba(0, 0, 0, 0.35);
     }
     body {
       background: var(--bg);
@@ -34,7 +41,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(255, 248, 236, 0.92);
+      background: color-mix(in srgb, var(--bg) 92%, transparent);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--line);
       padding: 14px 24px;
@@ -118,12 +125,13 @@
       box-shadow: 0 8px 20px rgba(215, 38, 61, 0.25);
     }
     .btn-hero.secondary {
-      background: #ffffff;
+      background: var(--card);
       color: var(--ink);
       border: 1px solid var(--line);
     }
     .btn-hero.secondary:hover {
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+      background: var(--bg-2);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
     }
     .pill-trust {
       display: flex;
@@ -169,7 +177,7 @@
       box-shadow: 0 6px 16px rgba(215, 38, 61, 0.3);
     }
     .preview-window {
-      background: #ffffff;
+      background: var(--card);
       border-radius: 16px;
       border: 2px solid var(--line);
       box-shadow: var(--shadow);
@@ -338,14 +346,14 @@
 
     /* Footer */
     .landing-footer {
-      background: #2b1d14;
-      color: #fbe9d0;
+      background: var(--sidebar);
+      color: var(--sidebar-ink);
       padding: 40px 0 30px;
       text-align: center;
       border-top: 1px solid var(--line);
     }
     .landing-footer a {
-      color: #ffd166;
+      color: var(--accent);
       text-decoration: none;
     }
   </style>
@@ -359,6 +367,7 @@
       <span>MuzzaAPP</span>
     </a>
     <div class="nav-actions">
+      <button class="icon-btn" id="theme-toggle" title="Modo oscuro / claro" aria-label="Cambiar tema" style="width:38px;height:38px;border-radius:10px;font-size:1.15rem;display:inline-flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);cursor:pointer;color:inherit">🌙</button>
       <a href="#modules" class="btn ghost hide-xs">📋 Módulos</a>
       <a href="index.html" class="btn primary">🔑 Ingreso al Sistema</a>
     </div>
@@ -598,46 +607,65 @@
   <!-- Interactive Preview Script -->
   <script>
     (function () {
+      // Theme toggle support
+      const themeToggle = document.getElementById('theme-toggle');
+      function updateThemeBtn() {
+        if (!themeToggle) return;
+        const isDark = document.documentElement.dataset.theme === 'horno';
+        themeToggle.textContent = isDark ? '☀️' : '🌙';
+      }
+      updateThemeBtn();
+      if (themeToggle) {
+        themeToggle.onclick = () => {
+          const isDark = document.documentElement.dataset.theme === 'horno';
+          const next = isDark ? (localStorage.getItem('pz-theme-light') || 'margherita') : 'horno';
+          if (!isDark) localStorage.setItem('pz-theme-light', document.documentElement.dataset.theme || 'margherita');
+          document.documentElement.dataset.theme = next;
+          localStorage.setItem('pz-theme', next);
+          updateThemeBtn();
+        };
+      }
+
       const tabs = {
         salon: {
           title: '🍽️ Salón: Mapa de Mesas y Comandero por Tandas',
           html: `
             <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
-              <div style="background:var(--bg);border-radius:12px;padding:16px;border:1px solid var(--line);">
-                <div class="small bold muted mb" style="display:flex;justify-content:space-between">
-                  <span>Plano de Mesas · Sector Salón Principal</span>
-                  <span class="badge ok">3 Ocupadas · 5 Libres</span>
+              <div style="background:var(--bg);border-radius:14px;padding:16px;border:1px solid var(--line);">
+                <div class="small bold muted mb" style="display:flex;justify-content:space-between;align-items:center">
+                  <span>Plano del Salón Principal</span>
+                  <span class="badge ok">3 Ocupadas · 3 Libres</span>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;">
-                  <div style="background:#fff;border:2px solid var(--err);border-radius:10px;padding:14px;text-align:center;box-shadow:0 4px 10px rgba(0,0,0,0.04)">
+                  <div style="background:var(--card);border:2px solid var(--err);border-radius:12px;padding:12px;text-align:center;box-shadow:var(--shadow)">
                     <div class="bold" style="font-size:1.1rem">Mesa 1</div>
                     <span class="badge err mt-xs">Ocupada (4 comensales)</span>
-                    <div class="bold mt" style="color:var(--err);font-size:1.15rem">$18.500</div>
+                    <div class="bold mt" style="color:var(--err);font-size:1.15rem">$24.500</div>
                     <div class="small muted">2 tandas enviadas</div>
                   </div>
-                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                  <div style="background:var(--card);border:2px solid var(--ok);border-radius:12px;padding:12px;text-align:center">
                     <div class="bold" style="font-size:1.1rem">Mesa 2</div>
                     <span class="badge ok mt-xs">Libre</span>
                     <div class="small muted mt">Capacidad 2 pers.</div>
                   </div>
-                  <div style="background:#fff;border:2px solid var(--warn);border-radius:10px;padding:14px;text-align:center">
+                  <div style="background:var(--card);border:2px solid var(--warn);border-radius:12px;padding:12px;text-align:center">
                     <div class="bold" style="font-size:1.1rem">Mesa 3</div>
-                    <span class="badge warn mt-xs">Pidiendo la Cuenta</span>
-                    <div class="bold mt" style="color:var(--warn);font-size:1.15rem">$12.400</div>
+                    <span class="badge warn mt-xs">🧾 Cuenta pedida</span>
+                    <div class="bold mt" style="color:var(--warn);font-size:1.15rem">$14.200</div>
                     <div class="small muted">Mozo: Sofía</div>
                   </div>
-                  <div style="background:#fff;border:2px solid var(--err);border-radius:10px;padding:14px;text-align:center">
+                  <div style="background:var(--card);border:2px solid var(--err);border-radius:12px;padding:12px;text-align:center">
                     <div class="bold" style="font-size:1.1rem">Mesa 4</div>
                     <span class="badge err mt-xs">Ocupada (2 comensales)</span>
                     <div class="bold mt" style="color:var(--err);font-size:1.15rem">$9.800</div>
                     <div class="small muted">1 tanda enviada</div>
                   </div>
-                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                  <div style="background:var(--card);border:2px solid var(--ok);border-radius:12px;padding:12px;text-align:center">
                     <div class="bold" style="font-size:1.1rem">Mesa 5</div>
                     <span class="badge ok mt-xs">Libre</span>
                     <div class="small muted mt">Capacidad 6 pers.</div>
                   </div>
-                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                  <div style="background:var(--card);border:2px solid var(--ok);border-radius:12px;padding:12px;text-align:center">
                     <div class="bold" style="font-size:1.1rem">Mesa 6</div>
                     <span class="badge ok mt-xs">Libre</span>
                     <div class="small muted mt">Capacidad 4 pers.</div>
@@ -646,79 +674,115 @@
               </div>
 
               <!-- Side tray preview -->
-              <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
+              <div style="background:var(--card);border-radius:14px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
                 <div>
-                  <div class="bold" style="font-size:1.1rem;margin-bottom:4px">Comanda Mesa 1</div>
-                  <div class="small muted mb">Tanda 2 · Enviada a cocina hace 8 min</div>
-                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
-                    <span>1x Muzzarella Grande</span><b>$9.200</b>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <b style="font-size:1.1rem">Atención Mesa 1</b>
+                    <span class="badge warn">4 personas</span>
                   </div>
-                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
-                    <span>1x Fugazzeta Rellena</span><b>$9.300</b>
+                  <div class="small muted mb">Mozo: Sofía · Abierta hace 42 min</div>
+
+                  <div style="border-top:1px solid var(--line);padding:8px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div><b>Tanda #1</b> <span class="muted small">1× Muzza Grande</span></div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span class="badge ok">Cobrado</span>
+                        <span title="Imprimir comanda de cocina" style="cursor:pointer;font-size:14px">👨‍🍳</span>
+                      </div>
+                    </div>
                   </div>
-                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
-                    <span>2x Cerveza Quilmes 1L</span><b>$6.000</b>
+
+                  <div style="border-top:1px solid var(--line);padding:8px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div><b>Tanda #2</b> <span class="muted small">1× Fugazzeta, 2× Quilmes</span></div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <strong>$15.300</strong>
+                        <span title="Imprimir comanda de cocina" style="cursor:pointer;font-size:14px">👨‍🍳</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
+
                 <div>
                   <div style="border-top:2px solid var(--line);padding-top:10px;display:flex;justify-content:space-between;font-size:1.2rem;font-weight:900">
-                    <span>Total</span><span style="color:var(--primary)">$24.500</span>
+                    <span>Saldo a Cobrar</span><span style="color:var(--err)">$15.300</span>
                   </div>
-                  <div style="display:flex;gap:8px;margin-top:12px">
-                    <button class="btn sm primary" style="flex:1">🍽️ Enviar Tanda</button>
-                    <button class="btn sm ok" style="flex:1">💳 Cobrar Mesa</button>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+                    <button class="btn ghost sm" style="font-size:0.85em">🧾 Imprimir cuenta</button>
+                    <button class="btn primary sm" style="font-size:0.85em">＋ Agregar tanda</button>
                   </div>
+                  <button class="btn ghost danger sm mt-xs" style="width:100%;font-size:0.85em">✅ Cerrar mesa</button>
                 </div>
               </div>
             </div>
           `
         },
         mostrador: {
-          title: '⚡ Mostrador: Despacho Rápido y Mitad y Mitad',
+          title: '⚡ Mostrador: Despacho Rápido, Mitad y Mitad y Condimentos',
           html: `
             <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
-              <div style="background:var(--bg);border-radius:12px;padding:16px;border:1px solid var(--line);">
-                <div class="small bold muted mb">Catálogo Táctil Rápido</div>
+              <div style="background:var(--bg);border-radius:14px;padding:16px;border:1px solid var(--line);">
+                <div style="display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;">
+                  <span class="badge ok" style="cursor:pointer">🍕 Pizzas</span>
+                  <span class="badge" style="background:var(--card);color:var(--ink);border:1px solid var(--line);cursor:pointer">🥟 Empanadas</span>
+                  <span class="badge" style="background:var(--card);color:var(--ink);border:1px solid var(--line);cursor:pointer">🥤 Bebidas</span>
+                  <span class="badge" style="background:var(--card);color:var(--ink);border:1px solid var(--line);cursor:pointer">🍰 Postres</span>
+                </div>
                 <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🍕 Muzzarella</span><span class="small muted">$9.200</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🍕 Muzzarella</span><span class="small muted">G: $9.200 · Ch: $7.400</span>
                   </button>
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🍕 Napolitana</span><span class="small muted">$10.500</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🍕 Napolitana</span><span class="small muted">G: $10.500 · Ch: $8.400</span>
                   </button>
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🍕 Fugazzeta</span><span class="small muted">$9.800</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🍕 Fugazzeta</span><span class="small muted">G: $9.800 · Ch: $7.800</span>
                   </button>
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🍕 Calabresa</span><span class="small muted">$11.200</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🍕 Calabresa</span><span class="small muted">G: $11.200 · Ch: $8.900</span>
                   </button>
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🍕 Cuatro Quesos</span><span class="small muted">$11.900</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🍕 Cuatro Quesos</span><span class="small muted">G: $11.900 · Ch: $9.500</span>
                   </button>
-                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
-                    <span class="bold">🥟 Empanadas x12</span><span class="small muted">$14.400</span>
+                  <button class="btn ghost" style="height:76px;background:var(--card);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink)">
+                    <span class="bold">🥟 Empanadas x12</span><span class="small muted">Docena $14.400</span>
                   </button>
                 </div>
-                <div class="banner ok mt small" style="padding:10px;border-radius:8px">
-                  💡 Soporta combinación <b>Mitad y Mitad</b> en 1 clic y cálculo automático de precio más alto o promedio.
+                <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:12px;font-size:0.85rem">
+                  <div class="bold mb-xs">🧂 Condimentos y Extras incluidos:</div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <span class="badge ok">✓ Orégano</span>
+                    <span class="badge ok">✓ Chimi</span>
+                    <span class="badge" style="background:var(--bg);color:var(--ink);border:1px solid var(--line)">＋ Extra Muzza ($1.500)</span>
+                    <span class="badge" style="background:var(--bg);color:var(--ink);border:1px solid var(--line)">＋ Extra Jamón ($1.800)</span>
+                  </div>
                 </div>
               </div>
-              <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
+              <div style="background:var(--card);border-radius:14px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
                 <div>
-                  <div class="bold" style="font-size:1.1rem;margin-bottom:4px">Ticket Mostrador #108</div>
-                  <div class="small muted mb">Cliente: Carlos · Para retirar (15 min)</div>
+                  <div class="bold" style="font-size:1.1rem;margin-bottom:4px">Ticket Venta #142</div>
+                  <div class="small muted mb">🛵 Delivery · Juan Pérez · Demora ~40 min</div>
+                  <div class="small muted mb" style="padding:6px;background:var(--bg);border-radius:6px">📍 Corrientes 2450 3°B (e/ Paso y Larrea)</div>
                   <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
-                    <span>1x ½ Muzzarella / ½ Napo</span><b>$10.500</b>
+                    <div>
+                      <div>1× ½ Muzza / ½ Napo (Grande)</div>
+                      <div class="small muted">Sin orégano · + Extra muzza</div>
+                    </div>
+                    <b>$12.000</b>
                   </div>
                   <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
-                    <span>1x Coca Cola 1.5L</span><b>$3.200</b>
+                    <span>Envío (Zona 1)</span><b>$1.500</b>
                   </div>
                 </div>
                 <div>
                   <div style="border-top:2px solid var(--line);padding-top:10px;display:flex;justify-content:space-between;font-size:1.2rem;font-weight:900">
-                    <span>Total</span><span style="color:var(--primary)">$13.700</span>
+                    <span>Total</span><span style="color:var(--primary)">$13.500</span>
                   </div>
-                  <button class="btn primary mt" style="width:100%">⚡ Cobrar e Imprimir Ticket</button>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+                    <button class="btn sm ghost">💸 Efectivo</button>
+                    <button class="btn sm accent">📱 Mercado Pago</button>
+                  </div>
+                  <button class="btn primary sm mt-xs" style="width:100%">⚡ Cobrar y Despachar</button>
                 </div>
               </div>
             </div>
@@ -728,8 +792,8 @@
           title: '📱 Carta Online: Cada Negocio Arma la Suya',
           html: `
             <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:center">
-              <div style="background:#fff;border:3px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 10px 24px rgba(0,0,0,0.06);text-align:center">
-                <span class="badge ok mb">📱 Vista Cliente</span>
+              <div style="background:var(--card);border:3px solid var(--line);border-radius:24px;padding:18px;box-shadow:var(--shadow);text-align:center">
+                <span class="badge ok mb">📱 Vista Cliente en Celular</span>
                 <div class="bold" style="font-size:1.15rem">Tu Pizzería</div>
                 <div class="small muted mb">🍕 Abierto · Retiro en 15 min · Delivery en 40 min</div>
                 <div style="background:var(--bg);border-radius:12px;padding:12px;text-align:left;font-size:0.85rem">
@@ -737,19 +801,23 @@
                   <div class="muted">+ Extra muzzarella · Sin orégano</div>
                   <div class="bold mt-xs" style="color:var(--primary)">Total: $12.800</div>
                 </div>
-                <button class="btn primary sm mt" style="width:100%">Enviar Pedido por WhatsApp</button>
+                <div style="background:var(--bg-2);border-radius:10px;padding:10px;margin-top:10px;text-align:left;font-size:0.8rem">
+                  <div class="bold" style="color:var(--primary)">🛵 Estado del pedido W-15:</div>
+                  <div style="margin-top:4px">🔥 <b>En el horno</b> (faltan ~18 min)</div>
+                </div>
+                <button class="btn primary sm mt" style="width:100%">💬 Enviar Pedido por WhatsApp</button>
               </div>
               <div>
                 <h3>Cada negocio genera su propia carta online</h3>
                 <p class="muted">Tu cliente la configura desde el sistema: elige sus productos, precios, logo, colores y horarios. La comparte en Instagram, la imprime en un QR para la vidriera o para cada mesa del salón. Sin comisiones por pedido.</p>
                 <div style="display:flex;gap:12px;margin-top:16px;">
-                  <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
+                  <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;flex:1">
                     <div class="bold">📨 Seguimiento por Estados</div>
-                    <div class="small muted">El cliente ve en tiempo real: Recibido → En el horno → Listo → En camino → Entregado.</div>
+                    <div class="small muted">El cliente ve en tiempo real: Recibido → Confirmado → En el horno → Listo → En camino → Entregado.</div>
                   </div>
-                  <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
+                  <div style="background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;flex:1">
                     <div class="bold">📱 QR Mercado Pago</div>
-                    <div class="small muted">Acreditación directa a la cuenta del negocio sin intermediarios.</div>
+                    <div class="small muted">Acreditación directa a la cuenta bancaria del negocio sin comisiones abusivas.</div>
                   </div>
                 </div>
               </div>
@@ -760,14 +828,18 @@
           title: '📊 Finanzas: Control de Gastos y Rentabilidad Histórica',
           html: `
             <div>
-              <div class="kpis" style="margin-bottom:18px">
-                <div class="kpi"><span class="k-ico">💰</span><div class="k-label">Ventas del Mes</div><div class="k-value" style="font-size:1.4rem">$4.850.000</div><div class="k-sub">342 tickets</div></div>
-                <div class="kpi"><span class="k-ico">💸</span><div class="k-label">Gastos Totales</div><div class="k-value" style="font-size:1.4rem">$2.120.000</div><div class="k-sub">Sueldos, alquiler, insumos</div></div>
-                <div class="kpi"><span class="k-ico">📈</span><div class="k-label">Ganancia Neta</div><div class="k-value" style="font-size:1.4rem;color:var(--ok)">$2.730.000</div><div class="k-sub">Margen 56%</div></div>
-                <div class="kpi"><span class="k-ico">🧀</span><div class="k-label">Food Cost</div><div class="k-value" style="font-size:1.4rem">$1.350.000</div><div class="k-sub">28% según recetas</div></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+                <span class="bold">Resumen Económico Consolidado</span>
+                <span class="badge" style="background:var(--card);border:1px solid var(--line);color:var(--ink)">📅 Septiembre 2026 ▾</span>
               </div>
-              <div class="banner ok small" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(82,183,136,0.12);border:1px solid var(--ok);border-radius:8px">
-                <span>☁️</span><span><b>Soporte Histórico Consolidado:</b> Consultá hasta 24 meses de historial con métricas reales directamente desde el servidor Supabase.</span>
+              <div class="kpis" style="margin-bottom:18px">
+                <div class="kpi"><span class="k-ico">💰</span><div class="k-label">Ventas del Mes</div><div class="k-value" style="font-size:1.4rem">$5.420.000</div><div class="k-sub">384 tickets emitidos</div></div>
+                <div class="kpi"><span class="k-ico">💸</span><div class="k-label">Gastos Totales</div><div class="k-value" style="font-size:1.4rem">$2.340.000</div><div class="k-sub">Sueldos, alquiler, insumos</div></div>
+                <div class="kpi"><span class="k-ico">📈</span><div class="k-label">Ganancia Neta</div><div class="k-value" style="font-size:1.4rem;color:var(--ok)">$3.080.000</div><div class="k-sub">Margen neto 56.8%</div></div>
+                <div class="kpi"><span class="k-ico">🧀</span><div class="k-label">Food Cost Teórico</div><div class="k-value" style="font-size:1.4rem">$1.485.000</div><div class="k-sub">27.4% según recetas</div></div>
+              </div>
+              <div class="banner ok small" style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:color-mix(in srgb, var(--ok) 12%, transparent);border:1px solid var(--ok);border-radius:10px">
+                <span>☁️</span><span><b>Soporte Histórico Consolidado:</b> Consultá hasta 24 meses de historial con métricas reales directamente desde la base de datos Supabase, sin ralentizar las tablets del local.</span>
               </div>
             </div>
           `

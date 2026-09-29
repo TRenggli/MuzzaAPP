@@ -81,6 +81,16 @@
 
     /* ===================== Tema (por equipo) ===================== */
     theme: () => localStorage.getItem('pz-theme') || 'margherita',
+    isDark: () => (App.theme() === 'horno'),
+    toggleDark() {
+      if (App.isDark()) {
+        const prevLight = localStorage.getItem('pz-theme-light') || 'margherita';
+        App.setTheme(prevLight);
+      } else {
+        localStorage.setItem('pz-theme-light', App.theme() === 'horno' ? 'margherita' : App.theme());
+        App.setTheme('horno');
+      }
+    },
     applyTheme(id) {
       const t = id || App.theme();
       document.documentElement.dataset.theme = t;
@@ -88,6 +98,8 @@
       const meta = /** @type {HTMLMetaElement | null} */ (document.querySelector('meta[name=theme-color]'));
       const col = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
       if (meta && col) meta.content = col;
+      const btn = /** @type {HTMLElement | null} */ (document.querySelector('.topbar [data-a=theme]'));
+      if (btn) btn.textContent = App.isDark() ? '☀️' : '🌙';
     },
     setTheme(id) { localStorage.setItem('pz-theme', id); App.applyTheme(id); },
     bindFlavors(el) {
@@ -428,6 +440,7 @@
               <div class="spacer"></div>
               ${chips}
               <span class="clock"></span>
+              <button class="icon-btn theme-btn" data-a="theme" title="Modo oscuro / claro" aria-label="Cambiar tema">${App.isDark() ? '☀️' : '🌙'}</button>
               <button class="icon-btn help-btn" data-a="help" title="Ayuda de esta pantalla" aria-label="Ayuda">❓</button>
               <button class="user-pill" data-a="user" aria-label="Mi usuario">${PZ.profile.avatar(PZ.profile.me, name, 32)}<span class="u-name">${U.esc(name)}</span></button>
               <svg class="drip" viewBox="0 0 1200 14" preserveAspectRatio="none" aria-hidden="true">
@@ -457,6 +470,7 @@
       on('operate', () => App.branchPicker());
       on('platform', () => App.openPlatform());
       on('sync', App.syncInfo);
+      on('theme', App.toggleDark);
       on('help', () => PZ.help.open(App.currentView));
       on('cash', () => (A.can('caja') ? App.go('caja') : null));
       on('more', () => {
