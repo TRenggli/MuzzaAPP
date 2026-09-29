@@ -359,7 +359,7 @@
       <span>MuzzaAPP</span>
     </a>
     <div class="nav-actions">
-      <a href="carta.html" class="btn ghost hide-xs" target="_blank">📖 Carta Online</a>
+      <a href="#modules" class="btn ghost hide-xs">📋 Módulos</a>
       <a href="index.html" class="btn primary">🔑 Ingreso al Sistema</a>
     </div>
   </header>
@@ -375,8 +375,8 @@
         <a href="index.html" class="btn btn-hero primary">
           <span>🚀 Probar demo en vivo</span>
         </a>
-        <a href="carta.html" class="btn btn-hero secondary" target="_blank">
-          <span>📱 Ver Carta Online de ejemplo</span>
+        <a href="#modules" class="btn btn-hero secondary">
+          <span>📋 Ver los módulos</span>
         </a>
       </div>
 
@@ -384,7 +384,7 @@
         <span>⚡ Modo Offline: Funciona sin internet</span>
         <span>📱 QR Mercado Pago autónomo</span>
         <span>🧀 Control exacto de insumos</span>
-        <span>🛵 Delivery con mapa en vivo</span>
+        <span>🛵 Delivery con seguimiento paso a paso</span>
       </div>
     </div>
   </section>
@@ -423,7 +423,7 @@
   </section>
 
   <!-- Key Features Grid -->
-  <section style="background:var(--card);padding:50px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <section id="modules" style="background:var(--card);padding:50px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
     <div class="container">
       <div style="text-align:center;max-width:680px;margin:0 auto 36px;">
         <h2>Todo lo que necesitás en un solo lugar</h2>
@@ -451,8 +451,8 @@
 
         <div class="feat-card">
           <span class="feat-icon">🛵</span>
-          <h3>Delivery con Mapa y WhatsApp</h3>
-          <p>Direcciones estructuradas con piso, depto y entrecalles. Estimaciones de entrega configurables y botón directo a WhatsApp.</p>
+          <h3>Delivery con Seguimiento y WhatsApp</h3>
+          <p>Direcciones estructuradas con piso, depto y entrecalles. El cliente sigue el estado de su pedido paso a paso desde su celular, con botón directo a WhatsApp.</p>
         </div>
 
         <div class="feat-card">
@@ -586,7 +586,7 @@
       </p>
       <div style="display:flex;justify-content:center;gap:20px;font-size:0.9rem;margin-bottom:20px;">
         <a href="index.html">Ingreso al Sistema</a>
-        <a href="carta.html" target="_blank">Carta Online</a>
+        <a href="#modules">Módulos</a>
         <a href="index.html">Modo Demo</a>
       </div>
       <div class="small" style="color:#a89078;">
@@ -725,31 +725,31 @@
           `
         },
         carta: {
-          title: '📱 Carta Online: Pedidos Web y Cobro Mercado Pago',
+          title: '📱 Carta Online: Cada Negocio Arma la Suya',
           html: `
             <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:center">
               <div style="background:#fff;border:3px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 10px 24px rgba(0,0,0,0.06);text-align:center">
                 <span class="badge ok mb">📱 Vista Cliente</span>
-                <div class="bold" style="font-size:1.15rem">MuzzaAPP Demo</div>
+                <div class="bold" style="font-size:1.15rem">Tu Pizzería</div>
                 <div class="small muted mb">🍕 Abierto · Retiro en 15 min · Delivery en 40 min</div>
                 <div style="background:var(--bg);border-radius:12px;padding:12px;text-align:left;font-size:0.85rem">
-                  <div class="bold">1x Pizza Especial Jamón y Morrones</div>
-                  <div class="muted">Dirección: Av. Santa Fe 3420 4°B</div>
+                  <div class="bold">1x ½ Muzzarella + ½ Napolitana</div>
+                  <div class="muted">+ Extra muzzarella · Sin orégano</div>
                   <div class="bold mt-xs" style="color:var(--primary)">Total: $12.800</div>
                 </div>
                 <button class="btn primary sm mt" style="width:100%">Enviar Pedido por WhatsApp</button>
               </div>
               <div>
-                <h3>Tu carta online sin comisiones por pedido</h3>
-                <p class="muted">Tus clientes escanean el QR desde la mesa o ingresan desde Instagram para pedir directamente. Podés definir tiempos de espera de 15 a 45 min y recibir el pedido formateado en WhatsApp y en tu comandero.</p>
+                <h3>Cada negocio genera su propia carta online</h3>
+                <p class="muted">Tu cliente la configura desde el sistema: elige sus productos, precios, logo, colores y horarios. La comparte en Instagram, la imprime en un QR para la vidriera o para cada mesa del salón. Sin comisiones por pedido.</p>
                 <div style="display:flex;gap:12px;margin-top:16px;">
                   <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
-                    <div class="bold">🛵 Tracking en Vivo</div>
-                    <div class="small muted">El cliente ve el mapa con la ubicación del local y el estado de su pedido.</div>
+                    <div class="bold">📨 Seguimiento por Estados</div>
+                    <div class="small muted">El cliente ve en tiempo real: Recibido → En el horno → Listo → En camino → Entregado.</div>
                   </div>
                   <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
                     <div class="bold">📱 QR Mercado Pago</div>
-                    <div class="small muted">Acreditación directa a tu cuenta bancaria sin intermediarios.</div>
+                    <div class="small muted">Acreditación directa a la cuenta del negocio sin intermediarios.</div>
                   </div>
                 </div>
               </div>
