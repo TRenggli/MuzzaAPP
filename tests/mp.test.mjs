@@ -1,7 +1,7 @@
 // Cliente de Mercado Pago con respuestas simuladas (sin tocar la cuenta real)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { amount, externalIds, mpClient, MpError, orderState, qrOrderBody, validReference } from '../supabase/functions/_shared/mp.ts';
+import { amount, externalIds, mpClient, MpError, orderState, parseMpWebhook, qrOrderBody, validReference } from '../supabase/functions/_shared/mp.ts';
 
 function fakeFetch(responses) {
   const calls = [];
@@ -62,3 +62,36 @@ test('mp: los errores llegan en castellano y sin exponer el token', async () => 
   await assert.rejects(mp.me(), (e) => e instanceof MpError && e.status === 401 && /credenciales/.test(e.message) && !e.message.includes('secreto'));
   await assert.rejects(mp.getOrder('ORD1'), (e) => /external_pos_id not found/.test(e.message));
 });
+
+test('mp: getPayment consulta /v1/payments/{id}', async () => {
+  const { fn, calls } = fakeFetch([{ status: 200, body: { id: 888123, status: 'approved', order: { id: 'ORD-99' } } }]);
+  const mp = mpClient('APP_USR-token', fn);
+  const pay = await mp.getPayment('888123');
+  assert.equal(pay.id, 888123);
+  assert.equal(calls[0].url, 'https://api.mercadopago.com/v1/payments/888123');
+  assert.equal(calls[0].headers.Authorization, 'Bearer APP_USR-token');
+});
+
+test('mp: parseMpWebhook procesa query params y JSON body de webhooks v1 y v2', () => {
+  // IPN tradicional vía query params
+  const q1 = new URLSearchParams('topic=merchant_order&id=123456&user_id=789');
+  const r1 = parseMpWebhook(q1);
+  assert.equal(r1.id, '123456');
+  assert.equal(r1.topic, 'merchant_order');
+  assert.equal(r1.userId, '789');
+
+  // Webhooks v2 con body JSON
+  const q2 = new URLSearchParams('');
+  const b2 = { action: 'payment.updated', data: { id: 987654 }, type: 'payment', user_id: 5555 };
+  const r2 = parseMpWebhook(q2, b2);
+  assert.equal(r2.id, '987654');
+  assert.equal(r2.topic, 'payment');
+  assert.equal(r2.userId, '5555');
+
+  // Query params estilo v2 (data.id)
+  const q3 = new URLSearchParams('data.id=ORD-999&type=merchant_order');
+  const r3 = parseMpWebhook(q3);
+  assert.equal(r3.id, 'ORD-999');
+  assert.equal(r3.topic, 'merchant_order');
+});
+

@@ -163,9 +163,28 @@ export function mpClient(token: string, fetchImpl: Fetch = fetch) {
 
     getOrder: (id: string) => call<MpOrder>('GET', `/v1/orders/${encodeURIComponent(id)}`),
 
+    getPayment: (id: string) => call<any>('GET', `/v1/payments/${encodeURIComponent(id)}`),
+
     cancelOrder: (id: string, idempotencyKey: string) =>
       call<MpOrder>('POST', `/v1/orders/${encodeURIComponent(id)}/cancel`, undefined, idempotencyKey),
   };
 }
 
 export type MpClient = ReturnType<typeof mpClient>;
+
+/** Parsea los datos del webhook de Mercado Pago recibidos por query param o body JSON */
+export function parseMpWebhook(query: URLSearchParams, body?: unknown): { id: string; topic: string; userId: string } {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, any>;
+  const qId = query.get('data.id') || query.get('id') || '';
+  const qTopic = query.get('type') || query.get('topic') || '';
+  const qUser = query.get('user_id') || '';
+  const bId = b.data?.id || b.id || '';
+  const bTopic = b.type || b.topic || b.action || '';
+  const bUser = b.user_id || '';
+  return {
+    id: String(bId || qId || '').trim(),
+    topic: String(bTopic || qTopic || '').trim().toLowerCase(),
+    userId: String(bUser || qUser || '').trim(),
+  };
+}
+

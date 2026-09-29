@@ -31,14 +31,26 @@
     const L = PZ.labels;
     const list = p.exps.filter((e) => !cat || e.category === cat);
     const months = [];
-    for (let i = 0; i < 12; i++) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }
+    for (let i = 0; i < 24; i++) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }
     const monthLabel = (m) => new Date(m + '-15').toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+
+    let historyBanner = '';
+    if (from < S.localSince()) {
+      if (p.complete) {
+        historyBanner = `<div class="banner ok mb small" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(82,183,136,0.12);border:1px solid var(--ok);border-radius:8px;color:var(--text)"><span>☁️</span><span><b>Período histórico (>45 días):</b> Datos de ventas y rentabilidad consolidados directamente desde el servidor.</span></div>`;
+      } else if (navigator.onLine) {
+        historyBanner = `<div class="banner warn mb small" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(233,162,59,0.12);border:1px solid var(--warn);border-radius:8px;color:var(--text)"><span>⌛</span><span><b>Consultando servidor:</b> Sincronizando ventas históricas (>45 días) de esta sucursal…</span></div>`;
+      } else {
+        historyBanner = `<div class="banner err mb small" style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(215,38,61,0.12);border:1px solid var(--err);border-radius:8px;color:var(--text)"><span>⚠️</span><span><b>Sin conexión a internet:</b> Los datos anteriores a 45 días requieren conexión para consultarse en el servidor.</span></div>`;
+      }
+    }
 
     el.innerHTML = `
       <div class="row-flex space-between mb">
         <select class="month" style="max-width:220px">${months.map((m) => `<option value="${m}" ${m === month ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>
         <button class="btn primary" data-a="new">➕ Cargar gasto</button>
       </div>
+      ${historyBanner}
       <div class="kpis">
         <div class="kpi"><span class="k-ico">💰</span><div class="k-label">Ventas</div><div class="k-value">${U.money(p.sales)}</div><div class="k-sub">${p.orders.length} tickets</div></div>
         <div class="kpi"><span class="k-ico">💸</span><div class="k-label">Gastos</div><div class="k-value">${U.money(p.expenses)}</div><div class="k-sub">${p.exps.length} movimiento(s)</div></div>
@@ -64,7 +76,6 @@
           </div>
         </div>
       </div>
-      ${from < S.localSince() && !p.complete ? '<p class="small warn">⌛ Actualizando las ventas históricas del servidor. Sin conexión, este período puede estar incompleto.</p>' : ''}
       <p class="small muted">💡 Los retiros de caja con categoría (por ejemplo “pago a proveedor”) se suman solos. Cargá acá lo que se paga por transferencia: alquiler, sueldos, servicios, impuestos.</p>`;
 
     el.querySelector('.month').onchange = (e) => { month = e.target.value; cat = ''; render(el); };

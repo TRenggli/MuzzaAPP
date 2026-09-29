@@ -813,7 +813,7 @@
 
     /** Ingresos, costo de mercadería, gastos y resultado de la sucursal en un período */
     profit(from, to) {
-      const orders = S.data.orders.filter((o) => o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to);
+      const orders = S.data.orders.filter((o) => o.paid && !o.voided && (o.paidAt || o.createdAt || 0) >= from && (o.paidAt || o.createdAt || 0) <= to);
       const sales = orders.reduce((a, o) => a + o.total, 0);
       const cogs = orders.reduce((a, o) => a + o.items.reduce((x, i) => x + (i.cost || 0) * i.qty, 0), 0);
       const exps = S.data.expenses.filter((e) => e.at >= from && e.at <= to);
@@ -827,7 +827,7 @@
     async profitInRange(from, to) {
       const local = S.profit(from, to);
       if (from >= S.localSince() || !navigator.onLine) return { ...local, complete: from >= S.localSince() };
-      const orders = (await S.ordersInRange(from, to)).filter((o) => o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to);
+      const orders = (await S.ordersInRange(from, to)).filter((o) => o.paid && !o.voided && (o.paidAt || o.createdAt || 0) >= from && (o.paidAt || o.createdAt || 0) <= to);
       const sales = orders.reduce((a, o) => a + o.total, 0);
       const cogs = orders.reduce((a, o) => a + o.items.reduce((x, i) => x + (i.cost || 0) * i.qty, 0), 0);
       return { ...local, orders, sales, cogs, result: sales - local.expenses, margin: sales ? (sales - local.expenses) / sales : 0, complete: true };
@@ -838,7 +838,7 @@
       const map = {};
       const get = (id) => (map[id] = map[id] || { id, sales: 0, tickets: 0, discounts: 0, voids: 0, voidAmount: 0, closes: 0, absDiff: 0, diff: 0, salary: 0 });
       S.data.orders.forEach((o) => {
-        if (o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to) {
+        if (o.paid && !o.voided && (o.paidAt || o.createdAt || 0) >= from && (o.paidAt || o.createdAt || 0) <= to) {
           const r = get(o.paidBy || o.userId);
           r.sales += o.total; r.tickets++; r.discounts += (o.discountAmount || 0) + (o.cashDiscount || 0);
         }

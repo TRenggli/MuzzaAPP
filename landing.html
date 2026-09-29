@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="es-AR" data-theme="margherita">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pizzería · Sistema Integral de Gestión Gastronómica</title>
+  <meta name="description" content="Software y sistema de gestión para pizzerías y locales gastronómicos: salón y mesas, mostrador, delivery con mapa, carta online y cobro con QR de Mercado Pago.">
+  <meta name="theme-color" content="#d7263d">
+  <link rel="icon" href="img/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <style>
+    :root {
+      --hero-grad: linear-gradient(135deg, rgba(215, 38, 61, 0.08) 0%, rgba(255, 209, 102, 0.15) 100%);
+      --card-hover: 0 16px 36px -10px rgba(120, 60, 20, 0.22);
+    }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Nunito', -apple-system, sans-serif;
+      margin: 0;
+      padding: 0;
+      line-height: 1.5;
+    }
+    h1, h2, h3, h4, .brand-font {
+      font-family: 'Fredoka', 'Nunito', sans-serif;
+      letter-spacing: -0.01em;
+    }
+    .landing-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255, 248, 236, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--ink);
+      font-weight: 800;
+      font-size: 1.3rem;
+    }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    .hero {
+      padding: 60px 0 40px;
+      text-align: center;
+      background: var(--hero-grad);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      color: var(--ink);
+      margin: 0 auto 18px;
+      max-width: 820px;
+      line-height: 1.15;
+    }
+    .hero h1 span {
+      color: var(--primary);
+    }
+    .hero p {
+      font-size: clamp(1.05rem, 2vw, 1.25rem);
+      color: var(--ink-soft);
+      max-width: 680px;
+      margin: 0 auto 32px;
+    }
+    .hero-ctas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+    .btn-hero {
+      padding: 14px 28px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      border-radius: 12px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn-hero:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(215, 38, 61, 0.25);
+    }
+    .btn-hero.secondary {
+      background: #ffffff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .btn-hero.secondary:hover {
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    }
+    .pill-trust {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+      font-weight: 700;
+    }
+    .pill-trust span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Interactive Preview Switcher */
+    .section-preview {
+      padding: 60px 0;
+    }
+    .preview-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .preview-tab-btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 0.95rem;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--ink-soft);
+      transition: all 0.2s ease;
+    }
+    .preview-tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+      box-shadow: 0 6px 16px rgba(215, 38, 61, 0.3);
+    }
+    .preview-window {
+      background: #ffffff;
+      border-radius: 16px;
+      border: 2px solid var(--line);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .preview-header {
+      background: var(--bg-2);
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .window-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .window-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .preview-content {
+      padding: 24px;
+      min-height: 380px;
+    }
+
+    /* Grid Features */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 22px;
+      padding: 40px 0 60px;
+    }
+    .feat-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 26px;
+      transition: all 0.2s ease;
+    }
+    .feat-card:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--card-hover);
+      border-color: var(--primary);
+    }
+    .feat-icon {
+      font-size: 2.2rem;
+      margin-bottom: 14px;
+      display: inline-block;
+    }
+    .feat-card h3 {
+      margin: 0 0 8px;
+      font-size: 1.25rem;
+    }
+    .feat-card p {
+      color: var(--ink-soft);
+      margin: 0;
+      font-size: 0.95rem;
+    }
+
+    /* Pricing Section */
+    .pricing-section {
+      background: var(--bg-2);
+      padding: 60px 0 80px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 24px;
+      margin-top: 36px;
+    }
+    .pricing-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 32px 26px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .pricing-card.featured {
+      border: 2px solid var(--primary);
+      box-shadow: 0 12px 32px -8px rgba(215, 38, 61, 0.25);
+      transform: scale(1.02);
+    }
+    .featured-badge {
+      position: absolute;
+      top: -13px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: #ffffff;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pricing-card h3 {
+      font-size: 1.5rem;
+      margin: 0 0 8px;
+    }
+    .price-value {
+      font-size: 2.3rem;
+      font-weight: 900;
+      color: var(--ink);
+      margin: 12px 0;
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .price-period {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+    .pricing-feats {
+      list-style: none;
+      padding: 0;
+      margin: 20px 0;
+      flex: 1;
+    }
+    .pricing-feats li {
+      padding: 7px 0;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 0.95rem;
+      color: var(--ink);
+    }
+    .pricing-feats li.off {
+      color: var(--ink-soft);
+      opacity: 0.6;
+      text-decoration: line-through;
+    }
+
+    /* FAQ */
+    .faq-section {
+      padding: 60px 0;
+    }
+    .faq-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+      margin-top: 30px;
+    }
+    .faq-item {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .faq-item h4 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+    }
+    .faq-item p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    /* Footer */
+    .landing-footer {
+      background: #2b1d14;
+      color: #fbe9d0;
+      padding: 40px 0 30px;
+      text-align: center;
+      border-top: 1px solid var(--line);
+    }
+    .landing-footer a {
+      color: #ffd166;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header class="landing-nav">
+    <a href="landing.html" class="brand-logo">
+      <svg width="34" height="34" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#c8813a"/><circle cx="32" cy="32" r="25" fill="#ffd166"/><g fill="#d62828"><circle cx="22" cy="22" r="5"/><circle cx="41" cy="20" r="4.5"/><circle cx="43" cy="39" r="5"/><circle cx="24" cy="42" r="4.5"/></g></svg>
+      <span>Pizzería Diego</span>
+    </a>
+    <div class="nav-actions">
+      <a href="carta.html" class="btn ghost hide-xs" target="_blank">📖 Carta Online</a>
+      <a href="index.html" class="btn primary">🔑 Ingreso al Sistema</a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">🍕 Software Gastronómico Especializado en Pizzerías</div>
+      <h1>El sistema definitivo para tu <span>pizzería</span></h1>
+      <p>Controlá salón y mesas, mostrador y delivery, comandas en cocina, cobros automáticos con QR de Mercado Pago y stock por receta en tiempo real.</p>
+      
+      <div class="hero-ctas">
+        <a href="index.html" class="btn btn-hero primary">
+          <span>🚀 Probar demo en vivo</span>
+        </a>
+        <a href="carta.html" class="btn btn-hero secondary" target="_blank">
+          <span>📱 Ver Carta Online de ejemplo</span>
+        </a>
+      </div>
+
+      <div class="pill-trust">
+        <span>⚡ Modo Offline: Funciona sin internet</span>
+        <span>📱 QR Mercado Pago autónomo</span>
+        <span>🧀 Control exacto de insumos</span>
+        <span>🛵 Delivery con mapa en vivo</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Modules Preview -->
+  <section class="section-preview">
+    <div class="container">
+      <div style="text-align:center;max-width:640px;margin:0 auto 24px;">
+        <h2>Diseñado para la velocidad del local</h2>
+        <p class="muted">Elegí un módulo para ver cómo optimiza el trabajo diario de tu equipo:</p>
+      </div>
+
+      <div class="preview-tabs" id="preview-tabs">
+        <button class="preview-tab-btn active" data-tab="salon">🍽️ Salón y Mesas</button>
+        <button class="preview-tab-btn" data-tab="mostrador">⚡ Mostrador y Delivery</button>
+        <button class="preview-tab-btn" data-tab="carta">📱 Carta Online y QR</button>
+        <button class="preview-tab-btn" data-tab="finanzas">📊 Finanzas y Gastos</button>
+      </div>
+
+      <div class="preview-window">
+        <div class="preview-header">
+          <div class="window-dots">
+            <span class="window-dot" style="background:#ff5f56"></span>
+            <span class="window-dot" style="background:#ffbd2e"></span>
+            <span class="window-dot" style="background:#27c93f"></span>
+          </div>
+          <span class="small bold" id="preview-title" style="color:var(--ink-soft)">Salón: Mapa de Mesas y Comandero por Tandas</span>
+          <span class="badge ok">En vivo</span>
+        </div>
+
+        <div class="preview-content" id="preview-container">
+          <!-- Dynamic Content rendered by JS -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Key Features Grid -->
+  <section style="background:var(--card);padding:50px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+    <div class="container">
+      <div style="text-align:center;max-width:680px;margin:0 auto 36px;">
+        <h2>Todo lo que necesitás en un solo lugar</h2>
+        <p class="muted">Sin licencias ocultas ni configuraciones complejas. Abrís el navegador y empezás a despachar.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feat-card">
+          <span class="feat-icon">🍽️</span>
+          <h3>Salón & Comandero de Mesas</h3>
+          <p>Plano interactivo con estado de mesas (libres, ocupadas, pidiendo la cuenta). Comandas por tandas que viajan directo al maestro pizzero.</p>
+        </div>
+
+        <div class="feat-card">
+          <span class="feat-icon">⚡</span>
+          <h3>Venta Ultra Rápida de Mostrador</h3>
+          <p>Tomá pedidos en 3 toques. Soporte completo para pizzas mitad y mitad, agregados, promociones y cálculo automático de vuelto.</p>
+        </div>
+
+        <div class="feat-card">
+          <span class="feat-icon">📱</span>
+          <h3>Cobros QR con Mercado Pago</h3>
+          <p>Genera el QR con el monto exacto de la venta. El sistema confirma el pago en el acto, incluso si el cajero cerró la pantalla o se cortó la red.</p>
+        </div>
+
+        <div class="feat-card">
+          <span class="feat-icon">🛵</span>
+          <h3>Delivery con Mapa y WhatsApp</h3>
+          <p>Direcciones estructuradas con piso, depto y entrecalles. Estimaciones de entrega configurables y botón directo a WhatsApp.</p>
+        </div>
+
+        <div class="feat-card">
+          <span class="feat-icon">🧀</span>
+          <h3>Stock por Receta e Insumos</h3>
+          <p>Descuenta automáticamente muzzarella, harina, salsa y cajas de pizza. Alertas tempranas cuando un ingrediente está por agotarse.</p>
+        </div>
+
+        <div class="feat-card">
+          <span class="feat-icon">🏢</span>
+          <h3>Multi-Sucursal & Historial >45 Días</h3>
+          <p>Controlá todas tus sucursales desde un usuario dueño central. Reportes consolidados de rentabilidad histórica de hasta 2 años.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Plans -->
+  <section class="pricing-section">
+    <div class="container">
+      <div style="text-align:center;max-width:680px;margin:0 auto;">
+        <h2>Planes pensados para cada etapa</h2>
+        <p class="muted">Desde una pizzería de barrio hasta cadenas con múltiples locales.</p>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Emprender -->
+        <div class="pricing-card">
+          <h3>Emprender</h3>
+          <p class="muted small">Ideal para locales que despachan por mostrador y delivery.</p>
+          <div class="price-value">
+            <span>$35.000</span>
+            <span class="price-period">/ mes</span>
+          </div>
+          <ul class="pricing-feats">
+            <li>✅ Mostrador y Venta Rápida</li>
+            <li>✅ Delivery y Retiro en Local</li>
+            <li>✅ Carta Online con WhatsApp</li>
+            <li>✅ Modo Offline First (sin cortes)</li>
+            <li>✅ Control de Caja y Arqueos</li>
+            <li class="off">❌ Salón y Plano de Mesas</li>
+            <li class="off">❌ Cobro integrado Mercado Pago</li>
+            <li class="off">❌ Multi-sucursal</li>
+          </ul>
+          <a href="index.html" class="btn ghost" style="width:100%">Empezar prueba</a>
+        </div>
+
+        <!-- Local (Destacado) -->
+        <div class="pricing-card featured">
+          <span class="featured-badge">Más Elegido</span>
+          <h3>Local</h3>
+          <p class="muted small">Gestión integral completa para pizzerías con mesas y mostrador.</p>
+          <div class="price-value">
+            <span>$59.000</span>
+            <span class="price-period">/ mes</span>
+          </div>
+          <ul class="pricing-feats">
+            <li>✅ <b>Todo lo del plan Emprender</b></li>
+            <li>✅ <b>Salón con Plano y Mesas interactivas</b></li>
+            <li>✅ <b>Comandas por tandas para cocina</b></li>
+            <li>✅ <b>Cobro con QR Mercado Pago dinámico</b></li>
+            <li>✅ Roles para empleados (Caja, Mozo, Cocina)</li>
+            <li>✅ Historial de rentabilidad >45 días</li>
+            <li>✅ Control de stock por recetas</li>
+            <li class="off">❌ Sucursales ilimitadas</li>
+          </ul>
+          <a href="index.html" class="btn primary" style="width:100%">Elegir Plan Local</a>
+        </div>
+
+        <!-- Cadena -->
+        <div class="pricing-card">
+          <h3>Cadena</h3>
+          <p class="muted small">Para marcas y franquicias con múltiples puntos de venta.</p>
+          <div class="price-value">
+            <span>$95.000</span>
+            <span class="price-period">/ mes</span>
+          </div>
+          <ul class="pricing-feats">
+            <li>✅ <b>Todo lo del plan Local</b></li>
+            <li>✅ <b>Sucursales ilimitadas</b></li>
+            <li>✅ Panel corporativo del dueño en tiempo real</li>
+            <li>✅ Carta y menú centralizado modelo</li>
+            <li>✅ Reportes consolidados de todas las sucursales</li>
+            <li>✅ Auditoría transaccional de anulaciones</li>
+            <li>✅ Soporte prioritario vía WhatsApp</li>
+          </ul>
+          <a href="index.html" class="btn ghost" style="width:100%">Contactar para Cadena</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq-section">
+    <div class="container">
+      <div style="text-align:center;max-width:680px;margin:0 auto;">
+        <h2>Preguntas Frecuentes</h2>
+        <p class="muted">Respuestas claras a las dudas más comunes.</p>
+      </div>
+
+      <div class="faq-grid">
+        <div class="faq-item">
+          <h4>¿Qué pasa si se corta internet en el local?</h4>
+          <p>El sistema sigue funcionando con normalidad gracias a su arquitectura offline-first. Podés cobrar, imprimir tickets y anotar pedidos; cuando vuelve la red, todo se sincroniza solo con la nube.</p>
+        </div>
+        <div class="faq-item">
+          <h4>¿Tengo que comprar computadoras caras?</h4>
+          <p>No. El sistema corre en cualquier navegador moderno: podés usar una notebook, una PC vieja, una tablet o un celular. También se instala como aplicación de escritorio o móvil (PWA).</p>
+        </div>
+        <div class="faq-item">
+          <h4>¿Cómo funciona el cobro con Mercado Pago?</h4>
+          <p>Conectás tu cuenta de Mercado Pago con un solo clic. La caja genera el QR con el monto exacto de la venta y nuestro webhook concilia el pago al instante, evitando que los clientes te muestren comprobantes falsos.</p>
+        </div>
+        <div class="faq-item">
+          <h4>¿Cómo configuro los tiempos de entrega y retiro?</h4>
+          <p>Desde el panel de configuración podés definir en minutos cuánto demora la cocina para retiro (ej: 15 min) y para delivery (ej: 40 min). Se actualiza de inmediato en tu carta online visible para los clientes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="landing-footer">
+    <div class="container">
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
+        <svg width="28" height="28" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#c8813a"/><circle cx="32" cy="32" r="25" fill="#ffd166"/><g fill="#d62828"><circle cx="22" cy="22" r="5"/><circle cx="41" cy="20" r="4.5"/><circle cx="43" cy="39" r="5"/><circle cx="24" cy="42" r="4.5"/></g></svg>
+        <span class="brand-font" style="font-size:1.2rem;font-weight:800;color:#fff">Pizzería Diego · SaaS</span>
+      </div>
+      <p style="color:#d8c0aa;font-size:0.9rem;max-width:500px;margin:0 auto 16px;">
+        El sistema de gestión especializado para pizzerías, rotiserías y locales gastronómicos.
+      </p>
+      <div style="display:flex;justify-content:center;gap:20px;font-size:0.9rem;margin-bottom:20px;">
+        <a href="index.html">Ingreso al Sistema</a>
+        <a href="carta.html" target="_blank">Carta Online</a>
+        <a href="index.html">Modo Demo</a>
+      </div>
+      <div class="small" style="color:#a89078;">
+        © 2026 Pizzería Diego. Todos los derechos reservados.
+      </div>
+    </div>
+  </footer>
+
+  <!-- Interactive Preview Script -->
+  <script>
+    (function () {
+      const tabs = {
+        salon: {
+          title: '🍽️ Salón: Mapa de Mesas y Comandero por Tandas',
+          html: `
+            <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
+              <div style="background:var(--bg);border-radius:12px;padding:16px;border:1px solid var(--line);">
+                <div class="small bold muted mb" style="display:flex;justify-content:space-between">
+                  <span>Plano de Mesas · Sector Salón Principal</span>
+                  <span class="badge ok">3 Ocupadas · 5 Libres</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px;">
+                  <div style="background:#fff;border:2px solid var(--err);border-radius:10px;padding:14px;text-align:center;box-shadow:0 4px 10px rgba(0,0,0,0.04)">
+                    <div class="bold" style="font-size:1.1rem">Mesa 1</div>
+                    <span class="badge err mt-xs">Ocupada (4 comensales)</span>
+                    <div class="bold mt" style="color:var(--err);font-size:1.15rem">$18.500</div>
+                    <div class="small muted">2 tandas enviadas</div>
+                  </div>
+                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                    <div class="bold" style="font-size:1.1rem">Mesa 2</div>
+                    <span class="badge ok mt-xs">Libre</span>
+                    <div class="small muted mt">Capacidad 2 pers.</div>
+                  </div>
+                  <div style="background:#fff;border:2px solid var(--warn);border-radius:10px;padding:14px;text-align:center">
+                    <div class="bold" style="font-size:1.1rem">Mesa 3</div>
+                    <span class="badge warn mt-xs">Pidiendo la Cuenta</span>
+                    <div class="bold mt" style="color:var(--warn);font-size:1.15rem">$12.400</div>
+                    <div class="small muted">Mozo: Sofía</div>
+                  </div>
+                  <div style="background:#fff;border:2px solid var(--err);border-radius:10px;padding:14px;text-align:center">
+                    <div class="bold" style="font-size:1.1rem">Mesa 4</div>
+                    <span class="badge err mt-xs">Ocupada (2 comensales)</span>
+                    <div class="bold mt" style="color:var(--err);font-size:1.15rem">$9.800</div>
+                    <div class="small muted">1 tanda enviada</div>
+                  </div>
+                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                    <div class="bold" style="font-size:1.1rem">Mesa 5</div>
+                    <span class="badge ok mt-xs">Libre</span>
+                    <div class="small muted mt">Capacidad 6 pers.</div>
+                  </div>
+                  <div style="background:#fff;border:2px solid var(--ok);border-radius:10px;padding:14px;text-align:center">
+                    <div class="bold" style="font-size:1.1rem">Mesa 6</div>
+                    <span class="badge ok mt-xs">Libre</span>
+                    <div class="small muted mt">Capacidad 4 pers.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Side tray preview -->
+              <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div class="bold" style="font-size:1.1rem;margin-bottom:4px">Comanda Mesa 1</div>
+                  <div class="small muted mb">Tanda 2 · Enviada a cocina hace 8 min</div>
+                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
+                    <span>1x Muzzarella Grande</span><b>$9.200</b>
+                  </div>
+                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
+                    <span>1x Fugazzeta Rellena</span><b>$9.300</b>
+                  </div>
+                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
+                    <span>2x Cerveza Quilmes 1L</span><b>$6.000</b>
+                  </div>
+                </div>
+                <div>
+                  <div style="border-top:2px solid var(--line);padding-top:10px;display:flex;justify-content:space-between;font-size:1.2rem;font-weight:900">
+                    <span>Total</span><span style="color:var(--primary)">$24.500</span>
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:12px">
+                    <button class="btn sm primary" style="flex:1">🍽️ Enviar Tanda</button>
+                    <button class="btn sm ok" style="flex:1">💳 Cobrar Mesa</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+        },
+        mostrador: {
+          title: '⚡ Mostrador: Despacho Rápido y Mitad y Mitad',
+          html: `
+            <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;">
+              <div style="background:var(--bg);border-radius:12px;padding:16px;border:1px solid var(--line);">
+                <div class="small bold muted mb">Catálogo Táctil Rápido</div>
+                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🍕 Muzzarella</span><span class="small muted">$9.200</span>
+                  </button>
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🍕 Napolitana</span><span class="small muted">$10.500</span>
+                  </button>
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🍕 Fugazzeta</span><span class="small muted">$9.800</span>
+                  </button>
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🍕 Calabresa</span><span class="small muted">$11.200</span>
+                  </button>
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🍕 Cuatro Quesos</span><span class="small muted">$11.900</span>
+                  </button>
+                  <button class="btn ghost" style="height:70px;background:#fff;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+                    <span class="bold">🥟 Empanadas x12</span><span class="small muted">$14.400</span>
+                  </button>
+                </div>
+                <div class="banner ok mt small" style="padding:10px;border-radius:8px">
+                  💡 Soporta combinación <b>Mitad y Mitad</b> en 1 clic y cálculo automático de precio más alto o promedio.
+                </div>
+              </div>
+              <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div class="bold" style="font-size:1.1rem;margin-bottom:4px">Ticket Mostrador #108</div>
+                  <div class="small muted mb">Cliente: Carlos · Para retirar (15 min)</div>
+                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
+                    <span>1x ½ Muzzarella / ½ Napo</span><b>$10.500</b>
+                  </div>
+                  <div style="border-top:1px dashed var(--line);padding:8px 0;display:flex;justify-content:space-between">
+                    <span>1x Coca Cola 1.5L</span><b>$3.200</b>
+                  </div>
+                </div>
+                <div>
+                  <div style="border-top:2px solid var(--line);padding-top:10px;display:flex;justify-content:space-between;font-size:1.2rem;font-weight:900">
+                    <span>Total</span><span style="color:var(--primary)">$13.700</span>
+                  </div>
+                  <button class="btn primary mt" style="width:100%">⚡ Cobrar e Imprimir Ticket</button>
+                </div>
+              </div>
+            </div>
+          `
+        },
+        carta: {
+          title: '📱 Carta Online: Pedidos Web y Cobro Mercado Pago',
+          html: `
+            <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:center">
+              <div style="background:#fff;border:3px solid var(--line);border-radius:24px;padding:18px;box-shadow:0 10px 24px rgba(0,0,0,0.06);text-align:center">
+                <span class="badge ok mb">📱 Vista Cliente</span>
+                <div class="bold" style="font-size:1.15rem">Pizzería Diego</div>
+                <div class="small muted mb">🍕 Abierto · Retiro en 15 min · Delivery en 40 min</div>
+                <div style="background:var(--bg);border-radius:12px;padding:12px;text-align:left;font-size:0.85rem">
+                  <div class="bold">1x Pizza Especial Jamón y Morrones</div>
+                  <div class="muted">Dirección: Av. Santa Fe 3420 4°B</div>
+                  <div class="bold mt-xs" style="color:var(--primary)">Total: $12.800</div>
+                </div>
+                <button class="btn primary sm mt" style="width:100%">Enviar Pedido por WhatsApp</button>
+              </div>
+              <div>
+                <h3>Tu carta online sin comisiones por pedido</h3>
+                <p class="muted">Tus clientes escanean el QR desde la mesa o ingresan desde Instagram para pedir directamente. Podés definir tiempos de espera de 15 a 45 min y recibir el pedido formateado en WhatsApp y en tu comandero.</p>
+                <div style="display:flex;gap:12px;margin-top:16px;">
+                  <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
+                    <div class="bold">🛵 Tracking en Vivo</div>
+                    <div class="small muted">El cliente ve el mapa con la ubicación del local y el estado de su pedido.</div>
+                  </div>
+                  <div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;flex:1">
+                    <div class="bold">📱 QR Mercado Pago</div>
+                    <div class="small muted">Acreditación directa a tu cuenta bancaria sin intermediarios.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+        },
+        finanzas: {
+          title: '📊 Finanzas: Control de Gastos y Rentabilidad Histórica',
+          html: `
+            <div>
+              <div class="kpis" style="margin-bottom:18px">
+                <div class="kpi"><span class="k-ico">💰</span><div class="k-label">Ventas del Mes</div><div class="k-value" style="font-size:1.4rem">$4.850.000</div><div class="k-sub">342 tickets</div></div>
+                <div class="kpi"><span class="k-ico">💸</span><div class="k-label">Gastos Totales</div><div class="k-value" style="font-size:1.4rem">$2.120.000</div><div class="k-sub">Sueldos, alquiler, insumos</div></div>
+                <div class="kpi"><span class="k-ico">📈</span><div class="k-label">Ganancia Neta</div><div class="k-value" style="font-size:1.4rem;color:var(--ok)">$2.730.000</div><div class="k-sub">Margen 56%</div></div>
+                <div class="kpi"><span class="k-ico">🧀</span><div class="k-label">Food Cost</div><div class="k-value" style="font-size:1.4rem">$1.350.000</div><div class="k-sub">28% según recetas</div></div>
+              </div>
+              <div class="banner ok small" style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(82,183,136,0.12);border:1px solid var(--ok);border-radius:8px">
+                <span>☁️</span><span><b>Soporte Histórico Consolidado:</b> Consultá hasta 24 meses de historial con métricas reales directamente desde el servidor Supabase.</span>
+              </div>
+            </div>
+          `
+        }
+      };
+
+      const container = document.getElementById('preview-container');
+      const title = document.getElementById('preview-title');
+      const tabBtns = document.querySelectorAll('.preview-tab-btn');
+
+      function switchTab(key) {
+        const item = tabs[key];
+        if (!item) return;
+        tabBtns.forEach((b) => b.classList.toggle('active', b.dataset.tab === key));
+        title.textContent = item.title;
+        container.innerHTML = item.html;
+      }
+
+      tabBtns.forEach((b) => {
+        b.onclick = () => switchTab(b.dataset.tab);
+      });
+
+      // Init with salon
+      switchTab('salon');
+    })();
+  </script>
+</body>
+</html>

@@ -145,6 +145,31 @@ test('ganancia: ventas − gastos, y rendimiento por persona', () => {
   assert.equal(st.salary, 4000);
 });
 
+test('ganancia histórica (>45 días): consulta al servidor y consolida ventas', async () => {
+  const { PZ, S, setOnline } = setup();
+  setOnline(true);
+  const sixtyDaysAgo = Date.now() - 60 * 864e5;
+  const fakeRemoteOrder = {
+    id: 'ord-hist-1',
+    createdAt: sixtyDaysAgo,
+    paidAt: sixtyDaysAgo + 300000,
+    paid: true,
+    voided: false,
+    total: 25000,
+    items: [{ cost: 8000, qty: 1 }],
+  };
+  PZ.cloud.ordersRange = async () => [fakeRemoteOrder];
+
+  S.addExpense({ category: 'Alquiler', amount: 5000, at: sixtyDaysAgo + 1000 });
+  const p = await S.profitInRange(sixtyDaysAgo - 1000, sixtyDaysAgo + 36e5);
+  assert.equal(p.complete, true);
+  assert.equal(p.sales, 25000);
+  assert.equal(p.expenses, 5000);
+  assert.equal(p.result, 20000);
+  assert.equal(p.cogs, 8000);
+  assert.equal(Math.round(p.margin * 100), 80);
+});
+
 test('anular requiere conexión', async () => {
   const { S, setOnline } = setup();
   const o = S.createOrder({ type: 'mostrador', items: [S.makeItem({ product: P(S, 'p-muz'), variant: V(S, 'p-muz', 'grande') })] });

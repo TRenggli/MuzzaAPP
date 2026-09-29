@@ -275,9 +275,11 @@
     /** Ventas de un período que no está en el equipo (historial viejo) */
     async ordersRange(branchId, from, to) {
       let out = [];
+      const since = new Date(from - 864e5).toISOString();
+      const until = new Date(to + 864e5).toISOString();
       for (let i = 0; ; i += 1000) {
         const { data, error } = await sb.from('orders').select('id, data').eq('branch_id', branchId)
-          .gte('created_at', new Date(from).toISOString()).lte('created_at', new Date(to).toISOString())
+          .gte('created_at', since).lte('created_at', until)
           .order('created_at').range(i, i + 999);
         if (error) throw error;
         out = out.concat(data.map((r) => ({ ...r.data, id: r.id })));
