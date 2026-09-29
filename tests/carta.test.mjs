@@ -140,3 +140,39 @@ test('pedido web aceptado: mantiene los precios del servidor y suma el costo de 
   const recipe = Math.round(0.3 * 10000 + 500);  // grande: muzza 0.3 kg + 1 caja
   assert.equal(o.items[0].cost, recipe, 'misma receta en las dos mitades');
 });
+
+test('carta: Extra jamón solo aplica a pizzas con jamón (o mitad con jamón)', () => {
+  const m = menu();
+  const extraMuzza = { id: 'x-muz', name: 'Extra muzzarella', price: 2500 };
+  const extraJamon = { id: 'x-jam', name: 'Extra jamón', price: 2000 };
+  m.extras = [extraMuzza, extraJamon];
+
+  const pizzaMuzza = m.products.find((p) => p.id === 'p-muz');
+  const pizzaJamon = { id: 'p-jam', categoryId: 'c-piz', name: 'Jamón y morrones', desc: 'Muzzarella, jamón cocido y morrones', recipe: [{ ingredientId: 'i-jam', qty: 0.1 }], variants: [{ id: 'grande', name: 'Grande', price: 14000, factor: 1 }] };
+  m.products.push(pizzaJamon);
+
+  // Extra muzzarella aplica siempre
+  assert.equal(C.extraApplies(extraMuzza, pizzaMuzza, null), true);
+  assert.equal(C.extraApplies(extraMuzza, pizzaJamon, null), true);
+
+  // Extra jamón no aplica a Muzzarella sola
+  assert.equal(C.extraApplies(extraJamon, pizzaMuzza, null), false);
+
+  // Extra jamón sí aplica a Jamón y morrones
+  assert.equal(C.extraApplies(extraJamon, pizzaJamon, null), true);
+
+  // Extra jamón aplica en mitad y mitad si la otra mitad tiene jamón
+  assert.equal(C.extraApplies(extraJamon, pizzaMuzza, pizzaJamon), true);
+
+  // priceLine filtra extras que no aplican
+  const plMuzzaSinJamon = C.priceLine(m, { productId: 'p-muz', variantId: 'grande', halfId: '', extras: ['x-jam', 'x-muz'] });
+  assert.equal(plMuzzaSinJamon.extras.length, 1);
+  assert.equal(plMuzzaSinJamon.extras[0].id, 'x-muz');
+  assert.equal(plMuzzaSinJamon.unit, 10000 + 2500);
+
+  // priceLine incluye Extra jamón cuando el producto lo admite
+  const plJamon = C.priceLine(m, { productId: 'p-jam', variantId: 'grande', halfId: '', extras: ['x-jam', 'x-muz'] });
+  assert.equal(plJamon.extras.length, 2);
+  assert.equal(plJamon.unit, 14000 + 2500 + 2000);
+});
+

@@ -300,6 +300,8 @@
     /** @type {PZ.CartLine} */
     const line = { key: '', productId: p.id, variantId: p.variants[0].id, halfId: '', extras: [], qty: 1, notes: '' };
     const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo"><img src="${esc(p.photo)}" alt=""></div>` : '';
+    let withOregano = true;
+    let withChimi = true;
 
     const s = sheet(`
       ${photo}
@@ -310,7 +312,13 @@
         <div class="c-half"><span class="c-half-pz" aria-hidden="true"><i class="h1" style="background:${esc(p.color || '#ffd166')}"></i><i class="h2"></i></span>
           <select class="c-select" data-g="h" aria-label="Otra mitad"><option value="">Entera de ${esc(p.name)}</option>${halves.map((h) => `<option value="${esc(h.id)}">½ ${esc(p.name)} + ½ ${esc(h.name)}</option>`).join('')}</select></div>
         <p class="c-muted small">${m.settings.halfPricing === 'avg' ? 'Se cobra el promedio de las dos mitades.' : 'Se cobra la mitad de mayor precio.'}</p>` : ''}
-      ${allowHalf && m.extras.length ? `<div class="c-opt-title">Agregados</div><div class="c-opts" data-g="x">${m.extras.map((x) => `<button class="c-opt" data-x="${esc(x.id)}">${esc(x.name)}<small>${x.price ? '+ ' + money(x.price) : 'sin cargo'}</small></button>`).join('')}</div>` : ''}
+      ${allowHalf ? `
+        <div class="c-opt-title">Condimentos incluidos <small class="c-muted" style="font-weight:normal">(tocá para quitar)</small></div>
+        <div class="c-opts c-conds" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <button type="button" class="c-opt on cond-oregano">🌿 Con orégano<small>Incluido</small></button>
+          <button type="button" class="c-opt on cond-chimi">🌶️ Con chimi<small>Incluido</small></button>
+        </div>` : ''}
+      ${allowHalf && m.extras.length ? `<div class="c-extras-wrap"><div class="c-opt-title">Agregados</div><div class="c-opts" data-g="x"></div></div>` : ''}
       <div class="c-opt-title">Aclaraciones</div>
       <input class="c-input" data-g="n" maxlength="140" placeholder="Ej: bien cocida, sin aceitunas…">
       <div class="c-sheet-foot">
@@ -318,30 +326,70 @@
         <button class="c-btn primary grow" data-a="add"></button>
       </div>`);
     const E = s.el;
+
+    const renderConds = () => {
+      if (!allowHalf) return;
+      const bo = /** @type {HTMLElement | null} */ (E.querySelector('.cond-oregano'));
+      const bc = /** @type {HTMLElement | null} */ (E.querySelector('.cond-chimi'));
+      if (bo) {
+        bo.className = `c-opt ${withOregano ? 'on' : ''} cond-oregano`;
+        bo.innerHTML = withOregano ? '🌿 Con orégano<small>Incluido</small>' : '<span style="color:#b3261e">❌ Sin orégano</span><small style="color:#b3261e">Quitar</small>';
+      }
+      if (bc) {
+        bc.className = `c-opt ${withChimi ? 'on' : ''} cond-chimi`;
+        bc.innerHTML = withChimi ? '🌶️ Con chimi<small>Incluido</small>' : '<span style="color:#b3261e">❌ Sin chimi</span><small style="color:#b3261e">Quitar</small>';
+      }
+    };
+    if (allowHalf) {
+      const bo = /** @type {HTMLElement | null} */ (E.querySelector('.cond-oregano'));
+      const bc = /** @type {HTMLElement | null} */ (E.querySelector('.cond-chimi'));
+      if (bo) bo.onclick = () => { withOregano = !withOregano; renderConds(); };
+      if (bc) bc.onclick = () => { withChimi = !withChimi; renderConds(); };
+      renderConds();
+    }
+
     const draw = () => {
       $$('[data-v]', E).forEach((b) => b.classList.toggle('on', b.dataset.v === line.variantId));
-      $$('[data-x]', E).forEach((b) => b.classList.toggle('on', line.extras.includes(b.dataset.x || '')));
       const h2 = E.querySelector('.h2');
+      const half = m.products.find((x) => x.id === line.halfId);
       if (h2) {
-        const half = m.products.find((x) => x.id === line.halfId);
         /** @type {HTMLElement} */ (h2).style.background = half ? (half.color || '#ffd166') : (p.color || '#ffd166');
         /** @type {HTMLElement} */ (E.querySelector('.c-half-pz')).classList.toggle('split', !!half);
+      }
+      if (allowHalf && m.extras.length) {
+        const wrap = /** @type {HTMLElement | null} */ (E.querySelector('.c-extras-wrap'));
+        const xg = E.querySelector('[data-g=x]');
+        if (xg && wrap) {
+          const visibleExtras = m.extras.filter((x) => C.extraApplies ? C.extraApplies(x, p, half) : true);
+          line.extras = line.extras.filter((xId) => visibleExtras.some((ve) => ve.id === xId));
+          wrap.style.display = visibleExtras.length ? '' : 'none';
+          xg.innerHTML = visibleExtras.map((x) => `<button type="button" class="c-opt ${line.extras.includes(x.id) ? 'on' : ''}" data-x="${esc(x.id)}">${esc(x.name)}<small>${x.price ? '+ ' + money(x.price) : 'sin cargo'}</small></button>`).join('');
+          $$('[data-x]', xg).forEach((b) => b.onclick = () => {
+            const x = b.dataset.x || '';
+            line.extras = line.extras.includes(x) ? line.extras.filter((y) => y !== x) : line.extras.concat(x);
+            draw();
+          });
+        }
       }
       $('.c-qty span', E).textContent = String(line.qty);
       const pl = C.priceLine(m, line);
       $('[data-a=add]', E).textContent = `Agregar · ${money(pl ? pl.unit * line.qty : 0)}`;
     };
     $$('[data-v]', E).forEach((b) => b.onclick = () => { line.variantId = b.dataset.v || line.variantId; draw(); });
-    $$('[data-x]', E).forEach((b) => b.onclick = () => {
-      const x = b.dataset.x || '';
-      line.extras = line.extras.includes(x) ? line.extras.filter((y) => y !== x) : line.extras.concat(x);
-      draw();
-    });
     const hs = /** @type {HTMLSelectElement | null} */ (E.querySelector('[data-g=h]'));
     if (hs) hs.onchange = () => { line.halfId = hs.value; draw(); };
     $$('[data-q]', E).forEach((b) => b.onclick = () => { line.qty = Math.max(1, Math.min(50, line.qty + Number(b.dataset.q))); draw(); });
     $('[data-a=add]', E).onclick = () => {
-      line.notes = inp('[data-g=n]', E).value.trim().slice(0, 140);
+      let userNotes = inp('[data-g=n]', E).value.trim().slice(0, 140);
+      const exclusions = [];
+      if (allowHalf) {
+        if (!withOregano) exclusions.push('Sin orégano');
+        if (!withChimi) exclusions.push('Sin chimi');
+      }
+      if (exclusions.length) {
+        userNotes = exclusions.join(' · ') + (userNotes ? ` · ${userNotes}` : '');
+      }
+      line.notes = userNotes;
       line.key = [line.productId, line.variantId, line.halfId, line.extras.slice().sort().join('+'), line.notes].join('|');
       const same = cart.find((l) => l.key === line.key);
       if (same) same.qty = Math.min(50, same.qty + line.qty);

@@ -169,7 +169,7 @@
         unit = menu.settings.halfPricing === 'avg' ? Math.round((unit + p2) / 2) : Math.max(unit, p2);
       }
     }
-    const extras = cat && cat.allowHalf ? menu.extras.filter((x) => (line.extras || []).includes(x.id)) : [];
+    const extras = cat && cat.allowHalf ? menu.extras.filter((x) => (line.extras || []).includes(x.id) && extraApplies(x, p, half)) : [];
     unit += extras.reduce((a, x) => a + (Number(x.price) || 0), 0);
     return {
       product: p,
@@ -180,6 +180,15 @@
       variantName: p.variants.length > 1 ? v.name : '',
       unit,
     };
+  }
+
+  /**
+   * Determina si un agregado aplica al producto (por ejemplo: Extra jamón solo en pizzas con jamón)
+   */
+  function extraApplies(extra, product, half) {
+    if (!extra || !/jam[oó]n/i.test(extra.name)) return true;
+    const hasJ = (x) => !!(x && (/jam[oó]n/i.test(x.name) || /jam[oó]n/i.test(x.desc || '') || (x.recipe || []).some((r) => r.ingredientId === 'i-jam' || r.ingredientId === 'i-cru')));
+    return hasJ(product) || hasJ(half);
   }
 
   /**
@@ -290,7 +299,7 @@
     THEMES, FONTS, TYPE_LABEL, PAY_LABEL, DAYS,
     money, defaults, themeVars, contrast, inkOn,
     isOpen, hoursText, localTime,
-    priceLine, totals, validLines,
+    priceLine, totals, validLines, extraApplies,
     waNumber, waLink, waMessage, shortDate,
     slugify, validSlug, cartaUrl,
   };

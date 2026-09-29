@@ -111,6 +111,9 @@
     let half = null;
     let qty = 1;
     const extras = new Set();
+    let withOregano = true;
+    let withChimi = true;
+    const extraApplies = (e) => (PZ.carta && PZ.carta.extraApplies ? PZ.carta.extraApplies(e, p, half) : true);
 
     const m = PZ.modal({
       title: `${cat ? cat.icon : ''} ${U.esc(p.name)}`,
@@ -122,7 +125,13 @@
           <div class="half-preview"><div class="half-pizza"><div class="h1"></div><div class="h2"></div></div><div class="half-txt grow"></div></div>
           <select class="half-sel"><option value="">— Entera (sin mitad) —</option>${halfCandidates.map((x) => `<option value="${x.id}">½ ${U.esc(x.name)}</option>`).join('')}</select>
           <p class="small muted">Precio de la mitad y mitad: ${S.data.settings.halfPricing === 'avg' ? 'promedio de ambas' : 'se cobra la más cara'}.</p>` : ''}
-        ${allowHalf && S.data.extras.length ? `<div class="opt-section">Agregados</div><div class="opt-grid x-grid">${S.data.extras.map((e) => `<button class="opt" data-x="${e.id}">${U.esc(e.name)}<small>${e.price ? '+ ' + U.money(e.price) : 'sin cargo'}</small></button>`).join('')}</div>` : ''}
+        ${allowHalf ? `
+          <div class="opt-section">Condimentos de la casa (incluidos)</div>
+          <div class="opt-grid cond-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 8px;">
+            <button type="button" class="opt on cond-oregano">🌿 Con orégano <small class="cond-st">Incluido</small></button>
+            <button type="button" class="opt on cond-chimi">🌶️ Con chimi <small class="cond-st">Incluido</small></button>
+          </div>` : ''}
+        ${allowHalf && S.data.extras.length ? `<div class="opt-section">Agregados</div><div class="opt-grid x-grid"></div>` : ''}
         <div class="opt-section">Aclaraciones</div>
         <input class="notes" placeholder="Ej: bien cocida, sin aceitunas…">
         <div class="opt-section">Cantidad</div>
@@ -130,10 +139,39 @@
       footer: `<button class="btn ghost" data-a="cancel">Cancelar</button><button class="btn primary lg" data-a="add"></button>`,
     });
     const E = m.el;
+    const renderConds = () => {
+      if (!allowHalf) return;
+      const bo = E.querySelector('.cond-oregano');
+      const bc = E.querySelector('.cond-chimi');
+      if (bo) {
+        bo.className = `opt ${withOregano ? 'on' : ''} cond-oregano`;
+        bo.innerHTML = withOregano ? '🌿 Con orégano <small class="cond-st">Incluido</small>' : '<span style="color:var(--err)">❌ Sin orégano</span> <small class="cond-st" style="color:var(--err)">Quitar</small>';
+      }
+      if (bc) {
+        bc.className = `opt ${withChimi ? 'on' : ''} cond-chimi`;
+        bc.innerHTML = withChimi ? '🌶️ Con chimi <small class="cond-st">Incluido</small>' : '<span style="color:var(--err)">❌ Sin chimi</span> <small class="cond-st" style="color:var(--err)">Quitar</small>';
+      }
+    };
+    if (allowHalf) {
+      const bo = E.querySelector('.cond-oregano');
+      const bc = E.querySelector('.cond-chimi');
+      if (bo) bo.onclick = () => { withOregano = !withOregano; renderConds(); refresh(); };
+      if (bc) bc.onclick = () => { withChimi = !withChimi; renderConds(); refresh(); };
+      renderConds();
+    }
     const build = () => {
-      const chosenExtras = S.data.extras.filter((e) => extras.has(e.id));
+      const chosenExtras = S.data.extras.filter((e) => extras.has(e.id) && extraApplies(e));
       const hv = half ? { product: half, variant: half.variants.find((v) => v.id === variant.id) || half.variants[0] } : null;
-      return S.makeItem({ product: p, variant, half: hv, extras: chosenExtras, qty, notes: E.querySelector('.notes').value.trim() });
+      let finalNotes = E.querySelector('.notes').value.trim();
+      const exclusions = [];
+      if (allowHalf) {
+        if (!withOregano) exclusions.push('Sin orégano');
+        if (!withChimi) exclusions.push('Sin chimi');
+      }
+      if (exclusions.length) {
+        finalNotes = exclusions.join(' · ') + (finalNotes ? ` · ${finalNotes}` : '');
+      }
+      return S.makeItem({ product: p, variant, half: hv, extras: chosenExtras, qty, notes: finalNotes });
     };
     const refresh = () => {
       const vg = E.querySelector('.v-grid');
@@ -147,17 +185,23 @@
         E.querySelector('.half-pizza').style.transform = half ? 'rotate(-20deg)' : 'none';
         E.querySelector('.half-txt').innerHTML = half ? `<b>½ ${U.esc(p.name)}</b><br><b>½ ${U.esc(half.name)}</b>` : `<b>${U.esc(p.name)}</b> entera`;
       }
+      if (allowHalf && S.data.extras.length) {
+        const xg = E.querySelector('.x-grid');
+        if (xg) {
+          const visibleExtras = S.data.extras.filter((e) => extraApplies(e));
+          xg.innerHTML = visibleExtras.map((e) => `<button type="button" class="opt ${extras.has(e.id) ? 'on' : ''}" data-x="${e.id}">${U.esc(e.name)}<small>${e.price ? '+ ' + U.money(e.price) : 'sin cargo'}</small></button>`).join('');
+          xg.querySelectorAll('.opt').forEach((b) => b.onclick = () => {
+            extras.has(b.dataset.x) ? extras.delete(b.dataset.x) : extras.add(b.dataset.x);
+            refresh();
+          });
+        }
+      }
       E.querySelector('.q').textContent = qty;
       const it = build();
       E.querySelector('[data-a=add]').textContent = `Agregar · ${U.money(it.total)}`;
     };
     const hs = E.querySelector('.half-sel');
     if (hs) hs.onchange = () => { half = hs.value ? S.product(hs.value) : null; refresh(); };
-    E.querySelectorAll('.x-grid .opt').forEach((b) => b.onclick = () => {
-      extras.has(b.dataset.x) ? extras.delete(b.dataset.x) : extras.add(b.dataset.x);
-      b.classList.toggle('on');
-      refresh();
-    });
     E.querySelectorAll('[data-q]').forEach((b) => b.onclick = () => { qty = Math.max(1, qty + Number(b.dataset.q)); refresh(); });
     E.querySelector('[data-a=cancel]').onclick = () => m.close();
     E.querySelector('[data-a=add]').onclick = () => { onAdd(build()); m.close(); };

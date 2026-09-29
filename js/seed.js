@@ -105,11 +105,7 @@
       ];
       const extras = [
         { id: 'e1', name: 'Extra muzzarella', price: 2500 },
-        { id: 'e2', name: 'Huevo', price: 1000 },
-        { id: 'e3', name: 'Aceitunas extra', price: 800 },
-        { id: 'e4', name: 'Morrones', price: 1500 },
-        { id: 'e5', name: 'Borde relleno', price: 3000 },
-        { id: 'e6', name: 'Sin sal / sin orégano', price: 0 },
+        { id: 'e2', name: 'Extra jamón', price: 2000 },
       ];
       return { categories, products, extras };
     },
