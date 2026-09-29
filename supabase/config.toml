@@ -397,6 +397,8 @@ verify_jwt = true
 verify_jwt = true
 [functions.mp]
 verify_jwt = true
+[functions.mp-webhook]
+verify_jwt = false
 
 # Apagado para que el entorno local entre en la memoria de Docker
 [analytics]
