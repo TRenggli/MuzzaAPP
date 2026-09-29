@@ -116,7 +116,7 @@ test('carta: dirección pública', () => {
   assert.equal(C.validSlug('pizzeria-diego-centro'), true);
   assert.equal(C.validSlug('Con Mayúscula'), false);
   assert.equal(C.validSlug('-mal'), false);
-  assert.equal(C.cartaUrl('https://trenggli.github.io/pizzeria-diego/index.html', 'diego'), 'https://trenggli.github.io/pizzeria-diego/carta.html?l=diego');
+  assert.equal(C.cartaUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'diego'), 'https://trenggli.github.io/MuzzaAPP/carta.html?l=diego');
 });
 
 test('carta: el texto del tema siempre se lee', () => {

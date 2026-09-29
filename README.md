@@ -1,4 +1,4 @@
-# 🍕 Pizzería — Sistema de gestión para cadenas y locales
+# 🍕 MuzzaAPP — Sistema de gestión integral para pizzerías y locales gastronómicos
 
 Sistema web (instalable como app) para pizzerías de uno o muchos locales. Datos en la nube (Supabase), funciona sin internet y se adapta a celular, tablet y compu.
 

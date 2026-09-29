@@ -1,7 +1,7 @@
 {
-  "name": "Pizzería Diego · Sistema",
-  "short_name": "Pizzería",
-  "description": "Ventas, tickets, pedidos, caja y reportes",
+  "name": "MuzzaAPP · Sistema",
+  "short_name": "MuzzaAPP",
+  "description": "Sistema de gestión gastronómica: ventas, comandero, mesas, pedidos, caja y reportes",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

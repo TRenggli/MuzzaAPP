@@ -1,7 +1,7 @@
 {
-  "name": "pizzeria-diego",
+  "name": "muzzaapp",
   "private": true,
-  "description": "Sistema de gestión para pizzerías (sitio estático + Supabase)",
+  "description": "MuzzaAPP - Sistema de gestión para pizzerías (sitio estático + Supabase)",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "types": "tsc -p tsconfig.json && tsc -p tsconfig.sw.json",

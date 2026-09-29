@@ -1,6 +1,6 @@
 # 🚀 Guía de Puesta en Producción (Go-to-Live)
 
-Este documento detalla los pasos manuales que dependen del operador/dueño para encender el sistema **Pizzería Diego** en el entorno de producción real.
+Este documento detalla los pasos manuales que dependen del operador/dueño para encender el sistema **MuzzaAPP** en el entorno de producción real.
 
 ---
 
@@ -68,7 +68,7 @@ Desde **Configuración ⚙️**:
    - Cargá el número de teléfono con código de área (ej. `54911xxxxxxxx`).
 3. **Dirección pública (Slug)**:
    - Asigná la dirección amigable del local (ej. `pizzeria-diego-centro`).
-   - Tu carta quedará activa en: `https://trenggli.github.io/pizzeria-diego/carta.html?l=pizzeria-diego-centro`.
+   - Tu carta quedará activa en: `https://trenggli.github.io/MuzzaAPP/carta.html?l=pizzeria-diego-centro`.
 
 ---
 
@@ -98,7 +98,7 @@ Antes de abrir las puertas con público real, ejecutá esta verificación rápid
 
 ## 🌐 Enlaces Clave del Proyecto
 
-- **Sistema de Gestión:** [https://trenggli.github.io/pizzeria-diego/](https://trenggli.github.io/pizzeria-diego/)
-- **Landing Comercial SaaS:** [https://trenggli.github.io/pizzeria-diego/landing.html](https://trenggli.github.io/pizzeria-diego/landing.html)
-- **Carta Online Pública:** `https://trenggli.github.io/pizzeria-diego/carta.html?l=<slug>`
+- **Sistema de Gestión:** [https://trenggli.github.io/MuzzaAPP/](https://trenggli.github.io/MuzzaAPP/)
+- **Landing Comercial SaaS:** [https://trenggli.github.io/MuzzaAPP/landing.html](https://trenggli.github.io/MuzzaAPP/landing.html)
+- **Carta Online Pública:** `https://trenggli.github.io/MuzzaAPP/carta.html?l=<slug>`
 - **Proyecto Supabase:** `https://supabase.com/dashboard/project/yugonymkwdlyfdrrhntf`
