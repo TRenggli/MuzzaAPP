@@ -310,6 +310,20 @@
         </div>
         <div class="card mt"><h3>📏 Pedido mínimo</h3>
           <label class="field" style="max-width:260px"><span>Monto mínimo (0 = sin mínimo)</span><input data-x="minOrder" data-num inputmode="numeric"></label>
+        </div>
+        <div class="card mt"><h3>⏱️ Demoras estimadas</h3>
+          <p class="muted small" style="margin-top:0">Se muestran en los distintivos de la carta y en la confirmación por WhatsApp.</p>
+          <div class="grid-2">
+            <label class="field"><span>🥡 Retiro en local (minutos)</span><input data-x="pickupMinutes" data-num inputmode="numeric" placeholder="15"></label>
+            <label class="field"><span>🛵 Delivery (minutos)</span><input data-x="deliveryMinutes" data-num inputmode="numeric" placeholder="40"></label>
+          </div>
+        </div>
+        <div class="card mt"><h3>📍 Datos pedidos al cliente en Delivery</h3>
+          <p class="muted small" style="margin-top:0">Elegí qué campos adicionales solicitarle al cliente al pedir envío a domicilio.</p>
+          <label class="check"><input type="checkbox" data-x="deliveryFields.separateAddress" data-rerender> Separar dirección en calle y número</label>
+          <label class="check"><input type="checkbox" data-x="deliveryFields.floorDept" data-rerender> Piso / Departamento</label>
+          <label class="check"><input type="checkbox" data-x="deliveryFields.crossStreets" data-rerender> Entre qué calles</label>
+          <label class="check"><input type="checkbox" data-x="deliveryFields.notes" data-rerender> Observaciones de entrega (timbre, portón, etc.)</label>
         </div>`;
       bindX(b, rerender);
       const z = b.querySelector('[data-a=zones]');

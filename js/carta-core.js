@@ -47,6 +47,9 @@
       logo: '',
       showPhotos: true,
       theme: { preset: t.id, primary: t.primary, accent: t.accent, bg: t.bg, font: 'redonda', layout: 'grilla', dark: false },
+      pickupMinutes: 15,
+      deliveryMinutes: 40,
+      deliveryFields: { separateAddress: false, floorDept: true, crossStreets: true, notes: true },
     };
   }
 

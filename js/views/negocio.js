@@ -239,31 +239,89 @@
 
   function editBranch(b, done) {
     const bz = (b.settings && b.settings.business) || {};
+    const canDelete = S.ctx.branches && S.ctx.branches.length > 1;
     const m = PZ.modal({
       title: '✏️ ' + U.esc(b.name),
       body: `
-        <label class="field"><span>Nombre</span><input name="name" value="${U.esc(b.name)}"></label>
+        <label class="field"><span>Nombre de la sucursal</span><input name="name" value="${U.esc(b.name)}"></label>
+        <label class="field"><span>Link de la carta (dirección web)</span>
+          <div class="row-flex" style="gap:4px">
+            <span class="muted small" style="white-space:nowrap">…carta.html?l=</span>
+            <input name="slug" value="${U.esc(b.slug || '')}" placeholder="ej: palermo" maxlength="40">
+          </div>
+        </label>
         <div class="grid-2">
           <label class="field"><span>Dirección</span><input name="address" value="${U.esc(bz.address || '')}"></label>
           <label class="field"><span>Teléfono</span><input name="phone" value="${U.esc(bz.phone || '')}"></label>
         </div>
-        <label class="check"><input type="checkbox" name="active" ${b.active ? 'checked' : ''}> Sucursal activa (si la desactivás, sus empleados no pueden ingresar)</label>`,
-      footer: '<button class="btn ghost" data-a="x">Cancelar</button><button class="btn primary" data-a="ok">Guardar</button>',
+        <label class="check"><input type="checkbox" name="active" ${b.active ? 'checked' : ''}> Sucursal activa (si la desactivás, sus empleados no pueden ingresar)</label>
+        ${canDelete ? '<div class="alert-row err mt" style="font-size:0.85em">⚠️ ¿Querés eliminar esta sucursal? Se borrarán sus pedidos y configuraciones.</div>' : ''}`,
+      footer: `
+        ${canDelete ? '<button class="btn danger sm" data-a="del" style="margin-right:auto">🗑️ Borrar sucursal</button>' : ''}
+        <button class="btn ghost" data-a="x">Cancelar</button>
+        <button class="btn primary" data-a="ok">Guardar</button>`,
     });
     const E = m.el;
     const v = (n) => E.querySelector(`[name=${n}]`).value.trim();
     E.querySelector('[data-a=x]').onclick = () => m.close();
+
+    const delBtn = E.querySelector('[data-a=del]');
+    if (delBtn) {
+      delBtn.onclick = async () => {
+        if (!(await PZ.confirm(`¿Estás seguro de BORRAR la sucursal "${b.name}"?\nSe borrarán todas sus ventas, mesas y configuraciones locales. Esta acción no se puede deshacer.`, { danger: true, ok: 'Borrar definitivamente' }))) return;
+        try {
+          PZ.toast('Borrando sucursal…', 'info');
+          await PZ.cloud.deleteBranch(b.id);
+          S.ctx.branches = S.ctx.branches.filter((x) => x.id !== b.id);
+          m.close();
+          PZ.toast('Sucursal eliminada');
+          if (S.ctx.branchId === b.id && S.ctx.branches.length) {
+            await PZ.app.openBranch(S.ctx.branches[0].id);
+          } else {
+            done();
+          }
+        } catch (e) {
+          PZ.toast('No se pudo borrar: ' + e.message, 'err', 5000);
+        }
+      };
+    }
+
     E.querySelector('[data-a=ok]').onclick = async () => {
-      if (!v('name')) return PZ.toast('Poné un nombre', 'warn');
+      const name = v('name');
+      if (!name) return PZ.toast('Poné un nombre para la sucursal', 'warn');
+      const slugVal = v('slug').toLowerCase();
+      if (slugVal && !PZ.carta.validSlug(slugVal)) {
+        return PZ.toast('El link debe tener entre 3 y 40 caracteres (solo letras minúsculas, números y guiones)', 'warn');
+      }
+
       const settings = JSON.parse(JSON.stringify(b.settings || {}));
       settings.business = { ...(settings.business || {}), address: v('address'), phone: v('phone') };
-      const patch = { name: v('name'), settings, active: E.querySelector('[name=active]').checked };
-      const { error } = await C().sb.from('branches').update(patch).eq('id', b.id);
-      if (error) return PZ.toast(error.message, 'err');
-      Object.assign(b, patch);
-      m.close();
-      PZ.toast('Sucursal actualizada');
-      done();
+      const patch = { name, settings, active: E.querySelector('[name=active]').checked };
+
+      try {
+        if (slugVal !== (b.slug || '')) {
+          await PZ.cloud.setSlug(b.id, slugVal || null);
+          b.slug = slugVal || null;
+        }
+        await C().updateBranch(b.id, patch);
+        Object.assign(b, patch);
+
+        // Actualizar en el contexto local y en la barra superior
+        const target = S.ctx.branches.find((x) => x.id === b.id);
+        if (target) Object.assign(target, { name, slug: b.slug, active: b.active });
+
+        // Si es la sucursal actual, actualizar el chip del header
+        const chip = document.querySelector('.bc-txt');
+        if (chip && S.ctx.branchId === b.id) chip.textContent = name;
+        const brandSub = document.querySelector('.brand-txt small');
+        if (brandSub && S.ctx.branchId === b.id) brandSub.textContent = name;
+
+        m.close();
+        PZ.toast('Sucursal actualizada');
+        done();
+      } catch (error) {
+        PZ.toast(error.message, 'err');
+      }
     };
   }
 

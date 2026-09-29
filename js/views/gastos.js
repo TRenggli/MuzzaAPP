@@ -11,6 +11,7 @@
   /** @type {string | null} 'YYYY-MM' */
   let month = null;
   let cat = '';
+  const reports = new Map();
 
   function monthBounds(m) {
     const [y, mo] = m.split('-').map(Number);
@@ -22,7 +23,11 @@
   function render(el) {
     if (!month) { const d = new Date(); month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
     const [from, to] = monthBounds(month);
-    const p = S.profit(from, to);
+    const key = `${from}:${to}`;
+    const p = reports.get(key) || S.profit(from, to);
+    if (!reports.has(key) && from < S.localSince() && navigator.onLine) {
+      S.profitInRange(from, to).then((report) => { reports.set(key, report); render(el); }).catch(() => {});
+    }
     const L = PZ.labels;
     const list = p.exps.filter((e) => !cat || e.category === cat);
     const months = [];
@@ -59,6 +64,7 @@
           </div>
         </div>
       </div>
+      ${from < S.localSince() && !p.complete ? '<p class="small warn">⌛ Actualizando las ventas históricas del servidor. Sin conexión, este período puede estar incompleto.</p>' : ''}
       <p class="small muted">💡 Los retiros de caja con categoría (por ejemplo “pago a proveedor”) se suman solos. Cargá acá lo que se paga por transferencia: alquiler, sueldos, servicios, impuestos.</p>`;
 
     el.querySelector('.month').onchange = (e) => { month = e.target.value; cat = ''; render(el); };

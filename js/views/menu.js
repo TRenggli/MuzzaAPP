@@ -185,8 +185,9 @@
             <td><input data-nm="${c.id}" value="${U.esc(c.name)}"></td>
             <td class="nowrap"><label class="check" style="margin:0"><input type="checkbox" data-hf="${c.id}" ${c.allowHalf ? 'checked' : ''}> Mitad y mitad</label></td>
             <td class="actions">
-              <button class="icon-btn" data-up="${i}" ${i === 0 ? 'disabled' : ''}>⬆️</button>
-              <button class="icon-btn" data-del="${c.id}">🗑️</button>
+              <button class="icon-btn" data-up="${i}" ${i === 0 ? 'disabled' : ''} title="Subir">⬆️</button>
+              <button class="icon-btn" data-down="${i}" ${i === S.data.categories.length - 1 ? 'disabled' : ''} title="Bajar">⬇️</button>
+              <button class="icon-btn" data-del="${c.id}" title="Eliminar">🗑️</button>
             </td></tr>`).join('')}
         </tbody></table></div>
         <button class="btn primary mt" data-a="add">➕ Nueva categoría</button>
@@ -199,6 +200,14 @@
       const i = Number(b.dataset.up);
       const arr = S.data.categories;
       [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+      arr.forEach((c, idx) => { c._i = idx; });
+      S.save(); render(el);
+    });
+    body.querySelectorAll('[data-down]').forEach((b) => b.onclick = () => {
+      const i = Number(b.dataset.down);
+      const arr = S.data.categories;
+      [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+      arr.forEach((c, idx) => { c._i = idx; });
       S.save(); render(el);
     });
     body.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {

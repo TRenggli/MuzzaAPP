@@ -26,6 +26,7 @@
     branch: [
       { id: 'inicio', label: 'Inicio', icon: '🏠' },
       { id: 'vender', label: 'Vender', icon: '🍕' },
+      { id: 'salon', label: 'Salón y mesas', icon: '🍽️' },
       { id: 'pedidos', label: 'Pedidos', icon: '🔥' },
       { id: 'caja', label: 'Caja', icon: '💰' },
       { id: 'historial', label: 'Ventas', icon: '🧾' },

@@ -18,13 +18,13 @@
   const BRANCH_ACCESS = {
     owner: '*',
     admin: '*',
-    cajero: ['inicio', 'vender', 'pedidos', 'caja', 'clientes', 'historial', 'stock'],
+    cajero: ['inicio', 'vender', 'salon', 'pedidos', 'caja', 'clientes', 'historial', 'stock'],
     cocina: ['pedidos'],
     delivery: ['pedidos'],
   };
 
   // Secciones que dependen de un módulo contratado
-  const FEATURE_OF = { stock: 'stock', gastos: 'gastos', online: 'carta' };
+  const FEATURE_OF = { stock: 'stock', gastos: 'gastos', online: 'carta', salon: 'mesas' };
 
   const A = (PZ.auth = {
     ROLES,

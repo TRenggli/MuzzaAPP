@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadApp } from './helpers/load.mjs';
+import { withMenu } from './helpers/load.mjs';
 
 function setup() {
   const app = loadApp();
@@ -94,15 +95,18 @@ test('un corte a mitad del envío no pierde datos (se reintenta)', async () => {
   assert.equal(S.status.pending, 0);
 });
 
-test('si la nube rechaza un cambio (regla de seguridad) no se reintenta para siempre', async () => {
-  const { S, PZ } = setup();
+test('un rechazo permanente queda recuperable y no descarta otra operación del lote', async () => {
+  const { S, PZ, sent } = setup();
   S.refresh = async () => {};
   S.data.customers.push({ id: 'cl-1', name: 'María' });
+  S.data.orders.push({ id: 'o-1', createdAt: Date.now(), items: [], total: 0 });
   S.diff();
   PZ.cloud.fail = Object.assign(new Error('La venta ya está cobrada'), { code: 'P0001' });
   await S.flush();
   assert.equal(S.status.pending, 0);
   assert.equal(S.status.state, 'error');
+  assert.equal(S.conflicts().length, 1, 'el cambio rechazado se conserva para revisión');
+  assert.equal(sent.orders.length, 1, 'la venta válida del mismo lote sí llegó al servidor');
 });
 
 test('un cambio de otro equipo se aplica sin pisar lo que falta enviar', async () => {
@@ -128,4 +132,17 @@ test('los cambios de otra sucursal se ignoran', () => {
   const { S } = setup();
   S.onRemote('orders', { eventType: 'INSERT', new: { id: 'o-9', branch_id: 'br-OTRA', data: { id: 'o-9', createdAt: 1 } }, old: {} });
   assert.equal(S.data.orders.length, 0);
+});
+
+test('el consumo de stock se manda como movimiento idempotente, no como saldo sobrescrito', async () => {
+  const { S, sent } = setup();
+  withMenu(S);
+  S.rebuildShadow();
+  const p = S.product('p-muz');
+  S.createOrder({ type: 'mostrador', items: [S.makeItem({ product: p, variant: p.variants[0] })] });
+  S.diff();
+  await S.flush();
+  assert.ok(sent.docs.some((r) => r.col === 'stock_move' && r.data.delta === -0.3));
+  const ingredientWrites = sent.docs.filter((r) => r.col === 'ingredient');
+  assert.ok(ingredientWrites.every((r) => !Object.hasOwn(r.data, 'stock')), 'el cliente no reescribe el saldo remoto');
 });

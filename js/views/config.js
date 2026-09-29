@@ -9,7 +9,7 @@
 
   const TABS = [
     ['negocio', '🏪 Negocio'], ['ticket', '🧾 Ticket e impresora'], ['cobros', '💳 Cobros'], ['delivery', '🛵 Delivery'],
-    ['apariencia', '🎨 Apariencia'], ['sistema', '🛟 Respaldo y sistema'],
+    ['categorias', '🗂️ Categorías'], ['apariencia', '🎨 Apariencia'], ['sistema', '🛟 Respaldo y sistema'],
   ];
 
   function render(el) {
@@ -25,7 +25,14 @@
     root.querySelectorAll('[data-k]').forEach((inp) => {
       const path = inp.dataset.k.split('.');
       const get = () => path.reduce((o, k) => (o ? o[k] : undefined), S.data.settings);
-      const set = (v) => { let o = S.data.settings; path.slice(0, -1).forEach((k) => { o = o[k]; }); o[path[path.length - 1]] = v; };
+      const set = (v) => {
+        let o = S.data.settings;
+        path.slice(0, -1).forEach((k) => {
+          if (!o[k] || typeof o[k] !== 'object') o[k] = {};
+          o = o[k];
+        });
+        o[path[path.length - 1]] = v;
+      };
       const cur = get();
       if (inp.type === 'checkbox') inp.checked = !!cur;
       else inp.value = cur ?? '';
@@ -42,9 +49,16 @@
 
   const SECTIONS = {
     negocio(b) {
+      const curBranch = S.branch() || {};
       b.innerHTML = `<div class="card">
         <div class="grid-2">
           <label class="field"><span>Nombre del local</span><input data-k="business.name"></label>
+          <label class="field"><span>Nombre de esta sucursal</span>
+            <div class="row-flex" style="gap:6px">
+              <input id="cfg-branch-name" value="${U.esc(curBranch.name || S.branchName())}">
+              <button class="btn sm ghost" id="cfg-save-branch">Guardar</button>
+            </div>
+          </label>
           <label class="field"><span>Frase / slogan</span><input data-k="business.slogan"></label>
           <label class="field"><span>Dirección</span><input data-k="business.address"></label>
           <label class="field"><span>Localidad</span><input data-k="business.city"></label>
@@ -56,6 +70,26 @@
         <label class="field" style="max-width:260px"><span>Minutos objetivo de preparación (alerta)</span><input data-k="prepMinutes" data-num inputmode="numeric"></label>
       </div>`;
       bind(b);
+      const bBtn = b.querySelector('#cfg-save-branch');
+      if (bBtn) {
+        bBtn.onclick = async () => {
+          const nm = /** @type {HTMLInputElement} */ (b.querySelector('#cfg-branch-name')).value.trim();
+          if (!nm) return PZ.toast('Poné un nombre de sucursal', 'warn');
+          try {
+            await PZ.cloud.updateBranch(S.ctx.branchId, { name: nm });
+            if (curBranch) curBranch.name = nm;
+            const target = S.ctx.branches.find((x) => x.id === S.ctx.branchId);
+            if (target) target.name = nm;
+            const chip = document.querySelector('.bc-txt');
+            if (chip) chip.textContent = nm;
+            const brandSub = document.querySelector('.brand-txt small');
+            if (brandSub) brandSub.textContent = nm;
+            PZ.toast('Nombre de sucursal actualizado');
+          } catch (e) {
+            PZ.toast(e.message, 'err');
+          }
+        };
+      }
     },
 
     ticket(b, el) {
@@ -168,7 +202,22 @@
           ${st.drivers.map((d, i) => `<div class="row-flex" style="margin-bottom:8px"><input data-dn="${i}" value="${U.esc(d)}" class="grow"><button class="icon-btn" data-dd="${i}">🗑️</button></div>`).join('')}
           <button class="btn ghost sm" data-a="addd">➕ Agregar repartidor</button>
         </div>
+      </div>
+      <div class="card mt"><h3>⏱️ Demoras estimadas de entrega</h3>
+        <p class="muted small" style="margin-top:0">Se muestran en los distintivos de la carta online y en el mensaje de WhatsApp al cliente.</p>
+        <div class="grid-2">
+          <label class="field"><span>Demora estimada para delivery (minutos)</span><input data-k="deliveryMinutes" data-num inputmode="numeric" placeholder="40"></label>
+          <label class="field"><span>Demora estimada para retiro en local (minutos)</span><input data-k="pickupMinutes" data-num inputmode="numeric" placeholder="15"></label>
+        </div>
+      </div>
+      <div class="card mt"><h3>📍 Datos pedidos al cliente en Delivery</h3>
+        <p class="muted small" style="margin-top:0">Configurá qué campos solicitar al cliente al pedir envío a domicilio en la carta.</p>
+        <label class="check"><input type="checkbox" data-k="deliveryFields.separateAddress"> Pedir calle y número por separado</label>
+        <label class="check"><input type="checkbox" data-k="deliveryFields.floorDept"> Pedir piso y departamento</label>
+        <label class="check"><input type="checkbox" data-k="deliveryFields.crossStreets"> Pedir entre qué calles</label>
+        <label class="check"><input type="checkbox" data-k="deliveryFields.notes"> Pedir aclaraciones de entrega (timbre, portón, etc.)</label>
       </div>`;
+      bind(b);
       const save = () => { S.save(); PZ.toast('Guardado', 'ok', 1000); };
       b.querySelectorAll('[data-zn]').forEach((i) => i.onchange = () => { st.zones[i.dataset.zn].name = i.value; save(); });
       b.querySelectorAll('[data-zf]').forEach((i) => i.onchange = () => { st.zones[i.dataset.zf].fee = U.parseMoney(i.value); save(); });
@@ -177,6 +226,55 @@
       b.querySelectorAll('[data-dd]').forEach((i) => i.onclick = () => { st.drivers.splice(Number(i.dataset.dd), 1); save(); render(el); });
       b.querySelector('[data-a=addz]').onclick = () => { st.zones.push({ id: U.uid('z'), name: 'Nueva zona', fee: 0 }); save(); render(el); };
       b.querySelector('[data-a=addd]').onclick = () => { st.drivers.push('Nuevo repartidor'); save(); render(el); };
+    },
+
+    categorias(b, el) {
+      b.innerHTML = `<div class="card">
+        <h3>🗂️ Categorías de productos y comandas</h3>
+        <p class="muted small" style="margin-top:0">Renombrá y reordená las categorías a gusto. En el comandero de mesas y en la carta se muestran en este orden exacto.</p>
+        <div class="table-wrap"><table class="tbl"><tbody>
+          ${S.data.categories.map((c, i) => `<tr>
+            <td style="width:60px"><input data-ic="${c.id}" value="${c.icon || '🍽️'}" style="text-align:center;font-size:1.3em;padding:4px"></td>
+            <td><input data-nm="${c.id}" value="${U.esc(c.name)}"></td>
+            <td class="nowrap"><label class="check" style="margin:0"><input type="checkbox" data-hf="${c.id}" ${c.allowHalf ? 'checked' : ''}> Mitad y mitad</label></td>
+            <td class="actions" style="text-align:right">
+              <button class="icon-btn" data-up="${i}" ${i === 0 ? 'disabled' : ''} title="Subir">⬆️</button>
+              <button class="icon-btn" data-down="${i}" ${i === S.data.categories.length - 1 ? 'disabled' : ''} title="Bajar">⬇️</button>
+              <button class="icon-btn" data-del="${c.id}" title="Eliminar">🗑️</button>
+            </td></tr>`).join('')}
+        </tbody></table></div>
+        <button class="btn primary mt" data-a="add">➕ Nueva categoría</button>
+      </div>`;
+      const cat = (id) => S.category(id);
+      b.querySelectorAll('[data-ic]').forEach((i) => i.onchange = () => { cat(i.dataset.ic).icon = i.value || '🍽️'; S.save(); });
+      b.querySelectorAll('[data-nm]').forEach((i) => i.onchange = () => { cat(i.dataset.nm).name = i.value.trim() || 'Sin nombre'; S.save(); });
+      b.querySelectorAll('[data-hf]').forEach((i) => i.onchange = () => { cat(i.dataset.hf).allowHalf = i.checked; S.save(); });
+      b.querySelectorAll('[data-up]').forEach((btn) => btn.onclick = () => {
+        const i = Number(btn.dataset.up);
+        const arr = S.data.categories;
+        [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+        arr.forEach((c, idx) => { c._i = idx; });
+        S.save(); render(el);
+      });
+      b.querySelectorAll('[data-down]').forEach((btn) => btn.onclick = () => {
+        const i = Number(btn.dataset.down);
+        const arr = S.data.categories;
+        [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+        arr.forEach((c, idx) => { c._i = idx; });
+        S.save(); render(el);
+      });
+      b.querySelectorAll('[data-del]').forEach((btn) => btn.onclick = async () => {
+        const n = S.data.products.filter((p) => p.categoryId === btn.dataset.del).length;
+        if (n) return PZ.toast(`Tiene ${n} producto(s). Movelos o eliminalos primero.`, 'warn');
+        if (!(await PZ.confirm('¿Eliminar la categoría?', { danger: true }))) return;
+        S.data.categories = S.data.categories.filter((c) => c.id !== btn.dataset.del);
+        S.data.categories.forEach((c, idx) => { c._i = idx; });
+        S.save(); render(el);
+      });
+      b.querySelector('[data-a=add]').onclick = () => {
+        S.data.categories.push({ id: U.uid('c-'), name: 'Nueva categoría', icon: '🍽️', allowHalf: false, _i: S.data.categories.length });
+        S.save(); render(el);
+      };
     },
 
     apariencia(b, el) {
@@ -198,7 +296,7 @@
           <p class="muted" style="margin-top:0">Todo se guarda automáticamente en la base de datos (Supabase) y queda disponible en cualquier equipo donde ingreses. Además cada equipo guarda una copia para seguir funcionando si se corta internet.</p>
           <div class="bank-box">
             <div class="bk-row"><span>Sucursal</span><b>${U.esc(S.branchName())}</b></div>
-            <div class="bk-row"><span>Pedidos cargados en este equipo</span><b>${d.orders.length} (últimos 120 días)</b></div>
+            <div class="bk-row"><span>Pedidos cargados en este equipo</span><b>${d.orders.length} (últimos ${S.LOCAL_DAYS} días)</b></div>
             <div class="bk-row"><span>Clientes del negocio</span><b>${d.customers.length}</b></div>
             <div class="bk-row"><span>Copia local</span><b>${(size / 1024).toFixed(0)} KB</b></div>
           </div>

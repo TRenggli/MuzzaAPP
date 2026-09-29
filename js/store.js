@@ -27,6 +27,9 @@
     cashSessions: { col: 'cash_session', scope: 'branch', sort: (a, b) => a.openedAt - b.openedAt },
     cashMoves: { col: 'cash_move', scope: 'branch', sort: (a, b) => a.at - b.at },
     audit: { col: 'audit', scope: 'branch', appendOnly: true, sort: (a, b) => b.at - a.at },
+    diningAreas: { col: 'dining_area', scope: 'branch', ordered: true },
+    diningTables: { col: 'dining_table', scope: 'branch', ordered: true },
+    tableSessions: { col: 'table_session', scope: 'branch', sort: (a, b) => b.openedAt - a.openedAt },
     orders: { table: 'orders', scope: 'branch', appendOnly: true, sort: (a, b) => a.createdAt - b.createdAt },
   };
   const COL_TO_NAME = Object.fromEntries(Object.entries(COLS).filter(([, c]) => c.col).map(([n, c]) => [c.col, n]));
@@ -75,6 +78,8 @@
   let retryDelay = 3000;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let retryTimer;
+  /** Operaciones rechazadas por el servidor. Nunca se descartan en silencio. */
+  let conflicts = new Map();
   const listeners = new Set();
   const statusListeners = new Set();
 
@@ -107,7 +112,7 @@
       return {
         settings: settings || PZ.seed.settings(),
         users: [], categories: [], products: [], extras: [], customers: [], orders: [],
-        cashSessions: [], cashMoves: [], ingredients: [], stockMoves: [], audit: [], expenses: [],
+        cashSessions: [], cashMoves: [], ingredients: [], stockMoves: [], audit: [], expenses: [], diningAreas: [], diningTables: [], tableSessions: [],
         demo: false,
       };
     },
@@ -122,13 +127,17 @@
       S.ctx.branchId = branchId;
       shadow = new Map();
       outbox = new Map();
-      const cached = await idb.get(`branch:${branchId}`);
+      // La cola pertenece a una sucursal y a una persona, no al último local
+      // abierto en este navegador.
+      const cacheKey = S.cacheKey(orgId, branchId);
+      const cached = await idb.get(cacheKey);
       if (cached && cached.data) {
         S.data = cached.data;
         S.ctx.org = cached.org || S.ctx.org;
         S.ctx.branches = cached.branches || S.ctx.branches;
         S.ctx.members = cached.members || S.ctx.members;
         outbox = new Map(cached.outbox || []);
+        conflicts = new Map(cached.conflicts || []);
         S.rebuildShadow();
         S.afterLoad();
       }
@@ -250,6 +259,10 @@
             Object.keys(old).forEach((k) => { if (!(k in r)) patch[k] = null; });
             patch = JSON.parse(JSON.stringify(patch));
           }
+          // El saldo de un insumo lo modifica el servidor al insertar cada
+          // movimiento. Mandarlo como documento provocaría "last writer wins".
+          if (name === 'ingredients' && before) delete patch.stock;
+          if (!Object.keys(patch).length) { shadow.set(key, now); return; }
           queue(key, { name, id: r.id, patch });
           shadow.set(key, now);
         });
@@ -267,7 +280,7 @@
         queue('settings', { name: 'settings' });
         shadow.set('settings', st);
       }
-      S.cache();
+      S.cache(true);
       S.emitStatus();
     },
 
@@ -291,28 +304,55 @@
         if (cfg.table === 'orders') orders.push({ org_id: orgId, id: op.id, branch_id: branchId, data: op.patch });
         else docs.push({ org_id: orgId, col: cfg.col, id: remoteId(op.name, op.id), branch_id: cfg.scope === 'branch' ? branchId : '', data: op.patch });
       });
+      const pending = [];
+      let hadConflict = false;
+      const send = async (op, fn) => {
+        try { await fn(); }
+        catch (e) {
+          const permanent = e && e.code && /^(42|23|22|P0)/.test(e.code);
+          if (permanent) {
+            hadConflict = true;
+            conflicts.set(keyOf(op.name, op.id || 'settings'), { ...op, error: e.message || 'Cambio rechazado', at: Date.now() });
+            S.status.error = e.message || 'Cambio rechazado';
+            return;
+          }
+          pending.push(op);
+          throw e;
+        }
+      };
       try {
-        if (docs.length) await PZ.cloud.upsertDocs(docs);
-        if (orders.length) await PZ.cloud.upsertOrders(orders);
-        for (const op of dels) await PZ.cloud.deleteDoc(orgId, COLS[op.name].col, remoteId(op.name, op.id));
-        if (settings) await PZ.cloud.saveSettings(branchId, S.data.settings);
-        S.status.state = 'ok';
+        // Una operación por llamada: un rechazo no se lleva por delante el
+        // resto del lote. El costo es deliberado: las ventas son más valiosas
+        // que ahorrar una llamada de red.
+        for (const row of docs.filter((r) => r.col !== 'stock_move')) {
+          const op = Array.from(batch.values()).find((x) => x.name !== 'settings' && !x.del && x.id === localId(row.id) && COLS[x.name].col === row.col);
+          await send(op, () => PZ.cloud.upsertDocs([row]));
+        }
+        for (const row of docs.filter((r) => r.col === 'stock_move')) {
+          const op = Array.from(batch.values()).find((x) => x.name === 'stockMoves' && x.id === localId(row.id));
+          await send(op, () => PZ.cloud.upsertDocs([row]));
+        }
+        for (const row of orders) {
+          const op = batch.get(keyOf('orders', row.id));
+          await send(op, () => PZ.cloud.upsertOrders([row]));
+        }
+        for (const op of dels) await send(op, () => PZ.cloud.deleteDoc(orgId, COLS[op.name].col, remoteId(op.name, op.id)));
+        if (settings) await send({ name: 'settings', id: 'settings' }, () => PZ.cloud.saveSettings(branchId, S.data.settings));
+        S.status.state = hadConflict ? 'error' : 'ok';
         S.status.error = '';
+        if (hadConflict) {
+          S.status.error = 'Hay cambios rechazados que requieren revisión';
+          PZ.toast('Un cambio fue rechazado y quedó en Conflictos para recuperarlo.', 'err', 7000);
+        }
         S.status.lastSync = Date.now();
         retryDelay = 3000;
       } catch (e) {
         console.error('sync', e);
-        const permanent = e && e.code && /^(42|23|22|P0)/.test(e.code);
-        if (permanent) {
-          S.status.state = 'error';
-          S.status.error = e.message;
-          PZ.toast('La nube rechazó un cambio: ' + (e.message || ''), 'err', 7000);
-          PZ.cloud.reportError('Sync rechazado: ' + e.message, { context: e.code });
-          // volver a traer lo que dice el servidor para no quedar desalineados
-          setTimeout(() => S.refresh().then(() => S.emit()).catch(() => {}), 1500);
-        } else {
+        {
           // devolver a la cola sin pisar cambios más nuevos
+          const queued = new Set(pending.map((op) => keyOf(op.name, op.id || 'settings')));
           batch.forEach((op, key) => {
+            if (!queued.has(key)) return;
             const newer = outbox.get(key);
             if (!newer) outbox.set(key, op);
             else if (!newer.del && !op.del && newer.patch && op.patch) newer.patch = { ...op.patch, ...newer.patch };
@@ -337,15 +377,29 @@
       S.emitStatus();
     },
 
-    cache() {
+    cacheKey(orgId = S.ctx.orgId, branchId = S.ctx.branchId) {
+      const userId = (PZ.auth.current && PZ.auth.current.id) || 'anonymous';
+      return `branch:${orgId}:${branchId}:${userId}`;
+    },
+
+    conflicts: () => Array.from(conflicts.values()).sort((a, b) => b.at - a.at),
+    retryConflict(name, id) {
+      const key = keyOf(name, id);
+      const op = conflicts.get(key);
+      if (!op) return false;
+      conflicts.delete(key); queue(key, op); S.cache(true); S.flush(); return true;
+    },
+
+    cache(immediate = false) {
       clearTimeout(cacheTimer);
-      cacheTimer = setTimeout(() => {
+      const save = () => {
         if (!S.ctx.branchId || !S.data) return;
-        idb.set(`branch:${S.ctx.branchId}`, {
-          data: S.data, outbox: Array.from(outbox.entries()), savedAt: Date.now(),
+        idb.set(S.cacheKey(), {
+          data: S.data, outbox: Array.from(outbox.entries()), conflicts: Array.from(conflicts.entries()), savedAt: Date.now(),
           org: S.ctx.org, branches: S.ctx.branches, members: S.ctx.members,
-        });
-      }, 400);
+        }).catch((e) => { S.status.error = 'No se pudo guardar la operación en este dispositivo'; console.error('cache', e); S.emitStatus(); });
+      };
+      if (immediate) save(); else cacheTimer = setTimeout(save, 400);
     },
 
     /* =================== Cambios que llegan de otros equipos =================== */
@@ -444,7 +498,14 @@
         S.savePools(p);
       } else {
         // sin números reservados y sin internet: número provisorio único
-        n = 900000 + (Math.floor(Date.now() / 1000) % 100000);
+        const deviceKey = `pz-device-id`;
+        let device = localStorage.getItem(deviceKey);
+        if (!device) { const created = U.uid('d-').slice(-8); localStorage.setItem(deviceKey, created); device = created; }
+        const seqKey = `pz-emergency-${S.ctx.branchId}-${kind}`;
+        const seq = Number(localStorage.getItem(seqKey) || '0') + 1;
+        localStorage.setItem(seqKey, String(seq));
+        // Es provisorio, pero inequívoco entre pestañas y dispositivos.
+        n = `P-${device}-${Date.now().toString(36)}-${seq}`;
       }
       if (S.poolLeft(kind) < 10) S.ensurePools();
       return n;
@@ -562,6 +623,7 @@
         eta: draft.eta || '',
         voided: false,
         ...(draft.web ? { web: draft.web } : {}),
+        ...(draft.tableSessionId ? { tableSessionId: draft.tableSessionId, batchNumber: draft.batchNumber || 1 } : {}),
       };
       S.computeTotals(o);
       if (!o.customerId && (o.phone || (o.customerName && o.type === 'delivery'))) {
@@ -572,7 +634,8 @@
         if (c && !c.address) c.address = o.address;
       }
       S.data.orders.push(o);
-      S.applyStock(o, -1);
+      if (o.tableSessionId) S.addOrderToTableSession(o.tableSessionId, o.id);
+      S.applyStock(o, -1, 'consumo por pedido');
       if (paid) S.payOrder(o.id, payments, { silent: true, ...adjust });
       S.save();
       return o;
@@ -623,7 +686,7 @@
       const data = await PZ.cloud.voidOrder(S.ctx.orgId, o.id, reason, authClient);
       replaceInPlace(o, { ...data, id: o.id });
       shadow.set(keyOf('orders', o.id), JSON.stringify(o));
-      S.applyStock(o, +1);
+       S.applyStock(o, +1, 'reversión por anulación');
       S.log('anulación', `Pedido #${o.number} anulado: ${reason}`);
       S.save();
       return o;
@@ -760,6 +823,16 @@
       return { orders, sales, cogs, expenses, byCat, exps, result: sales - expenses, margin: sales ? (sales - expenses) / sales : 0 };
     },
 
+    /** Igual que profit, pero completa las ventas históricas desde el servidor. */
+    async profitInRange(from, to) {
+      const local = S.profit(from, to);
+      if (from >= S.localSince() || !navigator.onLine) return { ...local, complete: from >= S.localSince() };
+      const orders = (await S.ordersInRange(from, to)).filter((o) => o.paid && !o.voided && (o.paidAt || 0) >= from && (o.paidAt || 0) <= to);
+      const sales = orders.reduce((a, o) => a + o.total, 0);
+      const cogs = orders.reduce((a, o) => a + o.items.reduce((x, i) => x + (i.cost || 0) * i.qty, 0), 0);
+      return { ...local, orders, sales, cogs, result: sales - local.expenses, margin: sales ? (sales - local.expenses) / sales : 0, complete: true };
+    },
+
     /** Rendimiento de cada persona de la sucursal en un período */
     employeeStats(from, to) {
       const map = {};
@@ -779,7 +852,7 @@
     },
 
     /* =================== Stock (por sucursal) =================== */
-    applyStock(o, sign) {
+    applyStock(o, sign, reason = 'ajuste de pedido') {
       o.items.forEach((it) => {
         const parts = it.half ? [[it.productId, 0.5, false], [it.half.productId, 0.5, true]] : [[it.productId, 1, false]];
         parts.forEach(([pid, share, second]) => {
@@ -793,6 +866,10 @@
             // las unidades (cajas) no se dividen en mitades ni por tamaño
             const q = ing.unit === 'u' ? (second ? 0 : r.qty * it.qty) : r.qty * factor * share * it.qty;
             ing.stock = Math.round((ing.stock + sign * q) * 1000) / 1000;
+            if (q) {
+              const moveId = `sm-${o.id}-${it.id}-${pid}-${r.ingredientId}-${sign < 0 ? 'out' : 'back'}`;
+              if (!S.data.stockMoves.some((m) => m.id === moveId)) S.data.stockMoves.unshift({ id: moveId, operationId: moveId, orderId: o.id, ingredientId: r.ingredientId, delta: Math.round(sign * q * 1000) / 1000, reason, at: Date.now(), userId: PZ.auth.current ? PZ.auth.current.id : null });
+            }
           });
         });
       });
@@ -802,12 +879,71 @@
       const ing = S.data.ingredients.find((i) => i.id === ingredientId);
       if (!ing) return;
       ing.stock = Math.round((ing.stock + Number(delta)) * 1000) / 1000;
-      S.data.stockMoves.unshift({ id: U.uid('sm-'), ingredientId, delta: Number(delta), reason, at: Date.now(), userId: PZ.auth.current.id });
+      const id = U.uid('sm-');
+      S.data.stockMoves.unshift({ id, operationId: id, ingredientId, delta: Number(delta), reason, at: Date.now(), userId: PZ.auth.current.id });
       if (S.data.stockMoves.length > 500) S.data.stockMoves.length = 500;
       S.save();
     },
 
     lowStock: () => S.data.ingredients.filter((i) => i.stock <= i.min),
+
+    /* =================== Salón y mesas =================== */
+    tables: () => S.data.diningTables || [],
+    table: (id) => S.tables().find((t) => t.id === id),
+    tableSession: (id) => (S.data.tableSessions || []).find((s) => s.id === id),
+    activeTableSession(tableId) { return (S.data.tableSessions || []).find((s) => s.tableIds.includes(tableId) && !s.closedAt) || null; },
+    tableOrders(session) { return S.data.orders.filter((o) => o.tableSessionId === session.id && !o.voided); },
+    tableBalance(session) { return S.tableOrders(session).filter((o) => !o.paid).reduce((sum, o) => sum + o.total, 0); },
+    ensureDining() {
+      if (S.data.diningAreas.length || S.data.diningTables.length) return;
+      S.data.diningAreas.push({ id: 'area-salon', name: 'Salón', _i: 0 });
+      for (let n = 1; n <= 12; n++) S.data.diningTables.push({ id: `table-${n}`, areaId: 'area-salon', number: String(n), capacity: 4, shape: n % 3 ? 'round' : 'square', x: ((n - 1) % 4) * 25 + 8, y: Math.floor((n - 1) / 4) * 30 + 10, _i: n });
+      S.save();
+    },
+    openTable(tableId, { guests = 0 } = {}) {
+      const table = S.table(tableId); if (!table) return null;
+      const current = S.activeTableSession(tableId); if (current) return current;
+      const now = Date.now(); const userId = PZ.auth.current ? PZ.auth.current.id : null;
+      const s = { id: U.uid('ts-'), tableIds: [tableId], openedAt: now, openedBy: userId, waiterId: userId, guests: Number(guests) || 0, state: 'ocupada', requestedBillAt: null, orderIds: [], closedAt: null, version: 1, history: [{ at: now, action: 'apertura', userId }] };
+      S.data.tableSessions.unshift(s); S.log('salón', `Abrió mesa ${table.number}`); S.save();
+      if (typeof navigator !== 'undefined' && navigator.onLine && S.ctx.branchId && PZ.cloud && PZ.cloud.diningOpen && /^[0-9a-f-]{36}$/i.test(tableId)) {
+        const op = U.uid('op-open-');
+        PZ.cloud.diningOpen(S.ctx.branchId, tableId, s.guests, op).then((res) => {
+          if (res && res.id) { s.remoteId = res.id; s.version = res.version || s.version; S.save(); }
+        }).catch((e) => { console.warn('diningOpen RPC fallback a cola local:', e.message); });
+      }
+      return s;
+    },
+    addOrderToTableSession(sessionId, orderId) {
+      const s = S.tableSession(sessionId); if (!s || s.closedAt || s.orderIds.includes(orderId)) return;
+      s.orderIds.push(orderId); s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'tanda', orderId, userId: PZ.auth.current ? PZ.auth.current.id : null }); S.save();
+      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningAddBatch && s.remoteId) {
+        const order = S.data.orders.find((o) => o.id === orderId);
+        if (order) {
+          const op = U.uid('op-batch-');
+          PZ.cloud.diningAddBatch(s.remoteId, order, s.version - 1, op).catch((e) => { console.warn('diningAddBatch RPC fallback a cola local:', e.message); });
+        }
+      }
+    },
+    requestTableBill(sessionId) { const s = S.tableSession(sessionId); if (!s || s.closedAt) return; s.state = 'cuenta_solicitada'; s.requestedBillAt = Date.now(); s.history.push({ at: Date.now(), action: 'cuenta solicitada' }); S.save(); },
+    moveTableSession(sessionId, toTableId) {
+      const s = S.tableSession(sessionId); if (!s || s.closedAt || S.activeTableSession(toTableId)) return false;
+      s.tableIds = [toTableId]; s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'traslado', toTableId }); S.save();
+      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningMove && s.remoteId && /^[0-9a-f-]{36}$/i.test(toTableId)) {
+        const op = U.uid('op-move-');
+        PZ.cloud.diningMove(s.remoteId, toTableId, s.version - 1, op).catch((e) => { console.warn('diningMove RPC fallback a cola local:', e.message); });
+      }
+      return true;
+    },
+    closeTableSession(sessionId) {
+      const s = S.tableSession(sessionId); if (!s || s.closedAt || S.tableBalance(s) > 0) return false;
+      s.closedAt = Date.now(); s.state = 'limpieza'; s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'cierre' }); S.save();
+      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningClose && s.remoteId) {
+        const op = U.uid('op-close-');
+        PZ.cloud.diningClose(s.remoteId, s.version - 1, op).catch((e) => { console.warn('diningClose RPC fallback a cola local:', e.message); });
+      }
+      return true;
+    },
 
     /* =================== Datos iniciales y demo =================== */
     /**

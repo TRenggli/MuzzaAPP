@@ -70,8 +70,9 @@ declare namespace PZ {
   interface Order {
     [field: string]: any;
     id: string;
-    number: number;
-    ticketNumber: number | null;
+    /** Número definitivo o identificador provisorio único sin conexión. */
+    number: number | string;
+    ticketNumber: number | string | null;
     createdAt: number;
     paidAt: number | null;
     type: OrderType;
@@ -183,6 +184,14 @@ declare namespace PZ {
     logo: string;
     showPhotos: boolean;
     theme: CartaTheme;
+    pickupMinutes?: number;
+    deliveryMinutes?: number;
+    deliveryFields?: {
+      separateAddress?: boolean;
+      floorDept?: boolean;
+      crossStreets?: boolean;
+      notes?: boolean;
+    };
   }
   interface Zone {
     id: string;

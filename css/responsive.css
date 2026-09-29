@@ -188,6 +188,7 @@
 }
 
 @media (max-width: 700px) {
+  .salon-layout { grid-template-columns:1fr; }.salon-help { display:none; }.salon-map { min-height:430px; }.dining-table { width:104px; min-height:96px; }.dining-table.round { width:100px; height:100px; }.salon-head { flex-direction:column; }.table-summary { grid-template-columns:1fr; }
   /* Las tablas se vuelven tarjetas */
   .table-wrap { overflow: visible; }
   table.tbl.stackable thead { display: none; }

@@ -75,6 +75,14 @@ test('la numeración avanza y no se repite', () => {
   assert.equal(nums[1], nums[0] + 1);
 });
 
+test('sin bloque reservado el identificador provisorio no se repite', () => {
+  const { S, localStorage } = setup();
+  localStorage.removeItem('pz-pool-br-1');
+  const nums = Array.from({ length: 5 }, () => S.nextNumber('order'));
+  assert.equal(new Set(nums).size, 5);
+  assert.ok(nums.every((n) => String(n).startsWith('P-')));
+});
+
 test('stock: descuenta por receta y la mitad y mitad usa una sola caja', () => {
   const { S } = setup();
   const muz = S.data.ingredients[0];
@@ -82,6 +90,20 @@ test('stock: descuenta por receta y la mitad y mitad usa una sola caja', () => {
   S.createOrder({ type: 'mostrador', items: [S.makeItem({ product: P(S, 'p-muz'), variant: V(S, 'p-muz', 'grande'), half: { product: P(S, 'p-esp'), variant: V(S, 'p-esp', 'grande') } })] });
   assert.equal(Math.round(muz.stock * 1000) / 1000, 9.7);
   assert.equal(cajas.stock, 99);
+});
+
+test('salón conserva tandas de una mesa y solo cierra con saldo cero', () => {
+  const { S } = setup();
+  S.ensureDining();
+  const session = S.openTable('table-5', { guests: 3 });
+  const p = P(S, 'p-muz');
+  const o = S.createOrder({ type: 'mesa', table: '5', tableSessionId: session.id, items: [S.makeItem({ product: p, variant: V(S, 'p-muz', 'grande') })] });
+  assert.equal(session.orderIds.length, 1);
+  assert.equal(session.orderIds[0], o.id);
+  assert.equal(S.tableBalance(session), o.total);
+  assert.equal(S.closeTableSession(session.id), false, 'no se puede liberar una mesa con una cuenta pendiente');
+  S.payOrder(o.id, [{ method: 'efectivo', amount: o.total }], { silent: true });
+  assert.equal(S.closeTableSession(session.id), true);
 });
 
 test('cierre de caja: efectivo esperado = fondo + ventas en efectivo + ingresos − retiros', () => {
@@ -129,3 +151,22 @@ test('anular requiere conexión', async () => {
   setOnline(false);
   await assert.rejects(() => S.voidOrder(o.id, 'error de carga'), /conexión/);
 });
+
+test('carta y delivery: demoras estimadas configurables y campos de entrega', () => {
+  const { PZ, S } = setup();
+  const def = PZ.carta.defaults();
+  assert.equal(def.pickupMinutes, 15);
+  assert.equal(def.deliveryMinutes, 40);
+  assert.ok(def.deliveryFields);
+  assert.equal(typeof def.deliveryFields.separateAddress, 'boolean');
+
+  // Transición de estado sin romper la orden
+  const o = S.createOrder({ type: 'delivery', address: 'San Martín 1234', items: [S.makeItem({ product: P(S, 'p-muz'), variant: V(S, 'p-muz', 'grande') })] });
+  assert.equal(o.status, 'pendiente');
+  S.setStatus(o.id, 'horno');
+  assert.equal(o.status, 'horno');
+  assert.ok(o.statusTimes.horno);
+  assert.ok(o.items.length > 0);
+  assert.equal(o.total, 10000);
+});
+

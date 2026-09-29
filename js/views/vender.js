@@ -266,7 +266,20 @@
           <label class="field"><span>Teléfono / WhatsApp</span><input name="phone" value="${U.esc(cart.phone)}" inputmode="tel"></label>
         </div>
         ${cart.type === 'delivery' ? `
-          <label class="field"><span>Dirección</span><input name="address" value="${U.esc(cart.address)}" placeholder="Calle, número, piso, entre calles"></label>
+          ${(S.data.settings.deliveryFields && S.data.settings.deliveryFields.separateAddress) ? `
+            <div class="grid-2">
+              <label class="field"><span>Calle</span><input name="street" placeholder="Ej: Av. San Martín"></label>
+              <label class="field"><span>Altura / Nº</span><input name="streetNum" placeholder="Ej: 1420" inputmode="numeric"></label>
+            </div>
+          ` : `
+            <label class="field"><span>Dirección</span><input name="address" value="${U.esc(cart.address)}" placeholder="Calle, número, piso, entre calles"></label>
+          `}
+          ${(S.data.settings.deliveryFields && (S.data.settings.deliveryFields.floorDept || S.data.settings.deliveryFields.crossStreets)) ? `
+            <div class="grid-2">
+              ${S.data.settings.deliveryFields.floorDept ? '<label class="field"><span>Piso / Dpto</span><input name="floorDept" placeholder="Ej: 3B"></label>' : ''}
+              ${S.data.settings.deliveryFields.crossStreets ? '<label class="field"><span>Entre calles</span><input name="crossStreets" placeholder="Ej: Belgrano y Moreno"></label>' : ''}
+            </div>
+          ` : ''}
           <div class="grid-2">
             <label class="field"><span>Zona de envío</span><select name="zone"><option value="">Sin cargo</option>${zones.map((z) => `<option value="${z.id}" ${cart.zoneId === z.id ? 'selected' : ''}>${U.esc(z.name)} · ${U.money(z.fee)}</option>`).join('')}</select></label>
             <label class="field"><span>Costo de envío</span><input name="fee" value="${cart.deliveryFee || 0}" inputmode="numeric"></label>
@@ -302,11 +315,18 @@
       cart.customerName = f('name').value.trim();
       cart.phone = f('phone').value.trim();
       if (f('table')) cart.table = f('table').value.trim();
-      if (f('address')) {
-        cart.address = f('address').value.trim();
-        cart.zoneId = zoneSel.value || null;
-        cart.deliveryFee = U.parseMoney(f('fee').value);
-        cart.driver = f('driver').value;
+      if (cart.type === 'delivery') {
+        const df = S.data.settings.deliveryFields || {};
+        if (df.separateAddress) {
+          cart.address = `${(f('street') && f('street').value.trim()) || ''} ${(f('streetNum') && f('streetNum').value.trim()) || ''}`.trim();
+          if (f('floorDept') && f('floorDept').value.trim()) cart.address += (cart.address ? ', ' : '') + f('floorDept').value.trim();
+          if (f('crossStreets') && f('crossStreets').value.trim()) cart.address += ` (entre ${f('crossStreets').value.trim()})`;
+        } else if (f('address')) {
+          cart.address = f('address').value.trim();
+        }
+        if (zoneSel) cart.zoneId = zoneSel.value || null;
+        if (f('fee')) cart.deliveryFee = U.parseMoney(f('fee').value);
+        if (f('driver')) cart.driver = f('driver').value;
       }
       if (f('eta')) cart.eta = f('eta').value;
       // si cambiaron los datos de un cliente existente, se desvincula para no pisarlo
@@ -601,7 +621,16 @@
   };
 
   PZ.afterPaid = afterPaid;
+  PZ.productModal = productModal;
   PZ.setCart = (c) => { cart = { ...emptyCart(), ...c }; saveCart(); };
 
-  PZ.views.vender = { title: 'Nueva venta', render };
+  PZ.views.vender = {
+    title: 'Nueva venta', render,
+    /** Inicia una tanda nueva sin mezclarla con pedidos anteriores de la mesa. */
+    startTable(session) {
+      const table = S.table(session.tableIds[0]);
+      cart = { ...emptyCart(), type: 'mesa', table: table ? table.number : '', tableSessionId: session.id, batchNumber: (session.orderIds || []).length + 1 };
+      saveCart(); location.hash = '#/vender';
+    },
+  };
 })(window.PZ);

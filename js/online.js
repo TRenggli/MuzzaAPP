@@ -108,34 +108,25 @@
       if (!navigator.onLine) throw new Error('Para aceptar pedidos web hace falta internet');
       const d = w.data;
       const orderId = U.uid('o-');
-      // Primero se marca en la nube: si otro equipo ya lo aceptó, no se duplica
-      const claimed = await PZ.cloud.handleWebOrder(w.id, { status: 'aceptado', order_id: orderId });
-      if (!claimed) {
-        await W.load();
-        throw new Error('Este pedido ya lo atendió otra persona');
-      }
-      Object.assign(w, claimed);
+      // El servidor bloquea el pedido web y crea la comanda en una transacción.
+      // Repetir la llamada devuelve la misma comanda, no una segunda pizza.
+      const remoteOrder = await PZ.cloud.acceptWebOrder(w.id, orderId);
+      if (!remoteOrder) throw new Error('Este pedido ya lo atendió otra persona');
+      Object.assign(w, { status: 'aceptado', order_id: remoteOrder.id });
       const payTxt = `${PAY[d.payment] || d.payment}${d.payment === 'efectivo' && d.cashWith ? ` (trae ${U.money(d.cashWith)})` : ''}`;
-      const o = S.createOrder({
-        id: orderId,
-        type: d.type === 'mesa' ? 'mesa' : d.type === 'delivery' ? 'delivery' : 'retiro',
-        table: d.table || '',
-        customerName: d.name,
-        phone: d.phone,
-        address: d.address || '',
-        zoneId: d.zoneId || null,
-        deliveryFee: Number(d.deliveryFee) || 0,
-        items: d.items.map((it) => ({ ...it, extras: it.extras || [], cost: S.itemCost(it) })),
-        notes: [`📲 Web W-${w.number} · Pago: ${payTxt}`, d.notes].filter(Boolean).join(' · '),
-        web: { id: w.id, number: w.number },
-      });
+      const o = { ...remoteOrder, id: remoteOrder.id };
+      if (!S.order(o.id)) S.data.orders.push(o);
+      S.rebuildShadow();
+      S.cache(true);
       S.log('pedido web', `Aceptado W-${w.number} → pedido #${o.number}`);
       W.emit();
       const st = S.data.settings;
       if (st.ticket.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' });
-      const mins = st.prepMinutes || 35;
+      const on = st.online || {};
+      const pickupMins = on.pickupMinutes || st.pickupMinutes || st.prepMinutes || 15;
+      const deliveryMins = on.deliveryMinutes || st.deliveryMinutes || ((st.prepMinutes || 35) + 15);
       const msg = `¡Hola ${d.name.split(' ')[0]}! 🍕 Confirmamos tu pedido W-${w.number} en ${st.business.name}.\n`
-        + `${o.type === 'delivery' ? `Llega en aproximadamente ${mins + 15} minutos` : o.type === 'mesa' ? 'Ya lo estamos preparando' : `Va a estar listo para retirar en unos ${mins} minutos`}.\n`
+        + `${o.type === 'delivery' ? `Llega en aproximadamente ${deliveryMins} minutos` : o.type === 'mesa' ? 'Ya lo estamos preparando' : `Va a estar listo para retirar en unos ${pickupMins} minutos`}.\n`
         + `Total: ${U.money(o.total)}. ¡Gracias!`;
       const m = PZ.modal({
         title: `✅ Pedido W-${w.number} aceptado`,

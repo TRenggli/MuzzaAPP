@@ -28,7 +28,7 @@
   let cart = [];
   let query = '';
   /** Datos que el cliente cargó la última vez (en este teléfono) */
-  let me = load('pz-carta-me', { name: '', phone: '', address: '', zoneId: '', type: '', payment: '' });
+  let me = load('pz-carta-me', { name: '', phone: '', address: '', zoneId: '', type: '', payment: '', street: '', streetNum: '', floor: '', dept: '', crossStreets: '', deliveryNotes: '' });
 
   /* ---------------- utilidades ---------------- */
   /** @param {string} s */
@@ -152,13 +152,13 @@
       <header class="c-hero ${on.cover ? 'has-cover' : ''}" ${on.cover ? `style="--cover:url('${esc(on.cover)}')"` : ''}>
         <div class="c-hero-in">
           <div class="c-logo">${logo ? `<img src="${esc(logo)}" alt="">` : '<span aria-hidden="true">🍕</span>'}</div>
-          <h1>${esc(b.name || m.branch.org)}</h1>
+          <h1>${esc(b.name ? (m.branch && m.branch.name && m.branch.name !== b.name ? `${b.name} · ${m.branch.name}` : b.name) : m.branch.org)}</h1>
           ${b.slogan ? `<p class="c-slogan">${esc(b.slogan)}</p>` : ''}
           <div class="c-badges">
             <span class="c-badge ${open ? 'open' : 'closed'}">${open ? '● Abierto · tomando pedidos' : on.paused ? '● Pedidos pausados' : '● Cerrado ahora'}</span>
             ${on.hours.mode === 'schedule' ? `<span class="c-badge">🕒 ${esc(C.hoursText(on.hours))}</span>` : ''}
-            ${types.includes('delivery') ? '<span class="c-badge">🛵 Delivery</span>' : ''}
-            ${types.includes('retiro') ? '<span class="c-badge">🥡 Retiro</span>' : ''}
+            ${types.includes('delivery') ? `<span class="c-badge">🛵 Delivery ~${on.deliveryMinutes || 40} min</span>` : ''}
+            ${types.includes('retiro') ? `<span class="c-badge">🥡 Retiro ~${on.pickupMinutes || 15} min</span>` : ''}
           </div>
           <div class="c-info">
             ${b.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address + (b.city ? ', ' + b.city : ''))}" target="_blank" rel="noopener">📍 ${esc(b.address)}${b.city ? ', ' + esc(b.city) : ''}</a>` : ''}
@@ -418,7 +418,22 @@
           <label class="c-field"><span>Nombre y apellido</span><input name="name" autocomplete="name" maxlength="80" value="${esc(me.name)}" required></label>
           <label class="c-field"><span>Teléfono / WhatsApp</span><input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="20" placeholder="Ej: 11 5555-1234" value="${esc(me.phone)}" required></label>
           ${type === 'delivery' ? `
-            <label class="c-field"><span>Dirección de entrega</span><input name="address" autocomplete="street-address" maxlength="200" placeholder="Calle, número, piso, depto, entre calles" value="${esc(me.address)}" required></label>
+            ${(on.deliveryFields && on.deliveryFields.separateAddress) ? `
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+                <label class="c-field"><span>Calle</span><input name="street" autocomplete="address-line1" maxlength="120" placeholder="Ej: Av. San Martín" value="${esc(me.street || '')}" required></label>
+                <label class="c-field"><span>Número / Altura</span><input name="streetNum" inputmode="numeric" maxlength="10" placeholder="Ej: 1420" value="${esc(me.streetNum || '')}" required></label>
+              </div>
+            ` : `
+              <label class="c-field"><span>Dirección de entrega</span><input name="address" autocomplete="street-address" maxlength="200" placeholder="Calle, número, piso, depto" value="${esc(me.address)}" required></label>
+            `}
+            ${(on.deliveryFields && on.deliveryFields.floorDept) ? `
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <label class="c-field"><span>Piso (opcional)</span><input name="floor" maxlength="10" placeholder="Ej: 3" value="${esc(me.floor || '')}"></label>
+                <label class="c-field"><span>Depto (opcional)</span><input name="dept" maxlength="10" placeholder="Ej: B" value="${esc(me.dept || '')}"></label>
+              </div>
+            ` : ''}
+            ${(on.deliveryFields && on.deliveryFields.crossStreets) ? `<label class="c-field"><span>Entre qué calles (opcional)</span><input name="crossStreets" maxlength="120" placeholder="Ej: Belgrano y Moreno" value="${esc(me.crossStreets || '')}"></label>` : ''}
+            ${(on.deliveryFields && on.deliveryFields.notes) ? `<label class="c-field"><span>Aclaraciones para la entrega (opcional)</span><input name="deliveryNotes" maxlength="150" placeholder="Ej: timbre blanco, reja negra" value="${esc(me.deliveryNotes || '')}"></label>` : ''}
             ${zones.length ? `<label class="c-field"><span>Zona de envío</span><select name="zone" class="c-select">${zones.map((z) => `<option value="${esc(z.id)}" ${z.id === me.zoneId ? 'selected' : ''}>${esc(z.name)} · ${money(z.fee)}</option>`).join('')}</select></label>` : '<p class="c-muted small">El costo de envío te lo confirmamos por WhatsApp.</p>'}` : ''}
           ${type === 'mesa' ? `<label class="c-field"><span>Número de mesa</span><input name="table" inputmode="numeric" maxlength="10" value="${esc(tableParam)}" required></label>` : ''}
           ${pays.length ? `<div class="c-opt-title">¿Cómo pagás?</div>
@@ -442,7 +457,7 @@
       const form = /** @type {HTMLFormElement} */ (box.querySelector('form'));
       const keep = () => {
         // conserva lo escrito al redibujar
-        ['name', 'phone', 'address'].forEach((k) => { const x = inp(`[name=${k}]`, box); if (x) /** @type {any} */ (me)[k] = x.value; });
+        ['name', 'phone', 'address', 'street', 'streetNum', 'floor', 'dept', 'crossStreets', 'deliveryNotes'].forEach((k) => { const x = inp(`[name=${k}]`, box); if (x) /** @type {any} */ (me)[k] = x.value; });
         const z = inp('[name=zone]', box);
         if (z) me.zoneId = z.value;
       };
@@ -466,13 +481,34 @@
         if (f('website')) return; // formulario completado por un robot
         if (f('name').length < 2) return fail('Escribí tu nombre', 'name');
         if (f('phone').replace(/\D/g, '').length < 8) return fail('Revisá tu teléfono (con característica)', 'phone');
-        if (type === 'delivery' && f('address').length < 5) return fail('Falta la dirección de entrega', 'address');
+
+        let addressVal = f('address');
+        const df = on.deliveryFields || {};
+        if (type === 'delivery') {
+          if (df.separateAddress) {
+            if (f('street').length < 2) return fail('Falta la calle', 'street');
+            if (!f('streetNum')) return fail('Falta la altura / número', 'streetNum');
+            addressVal = `${f('street')} ${f('streetNum')}`.trim();
+          } else if (addressVal.length < 5) {
+            return fail('Falta la dirección de entrega', 'address');
+          }
+          if (df.floorDept && (f('floor') || f('dept'))) {
+            const fd = [f('floor') ? 'Piso ' + f('floor') : '', f('dept') ? 'Dpto ' + f('dept') : ''].filter(Boolean).join(' ');
+            addressVal += (addressVal ? ', ' : '') + fd;
+          }
+          if (df.crossStreets && f('crossStreets')) {
+            addressVal += ` (entre ${f('crossStreets')})`;
+          }
+          if (df.notes && f('deliveryNotes')) {
+            addressVal += ` [${f('deliveryNotes')}]`;
+          }
+        }
         if (type === 'mesa' && !f('table')) return fail('Indicá el número de mesa', 'table');
         keep();
-        me = { ...me, type, payment: pay };
+        me = { ...me, type, payment: pay, address: addressVal };
         save('pz-carta-me', me);
         const payload = {
-          type, name: f('name'), phone: f('phone'), address: f('address'), zoneId: f('zone') || null, table: f('table'),
+          type, name: f('name'), phone: f('phone'), address: addressVal, zoneId: f('zone') || null, table: f('table'),
           payment: pay, cashWith: f('cash').replace(/\D/g, ''), notes: f('notes'),
           items: cart.map((l) => ({ productId: l.productId, variantId: l.variantId, halfId: l.halfId, extras: l.extras, qty: l.qty, notes: l.notes })),
         };
@@ -579,6 +615,24 @@
       <main class="c-main">
         ${status === 'rechazado' || status === 'cancelado' ? `<div class="c-warn">😔 El local no pudo tomar este pedido${info.reason ? `: ${esc(info.reason)}` : '.'}</div>` : `
         <ol class="c-track">${steps.map(([k, ico, title, sub], i) => `<li class="${i < idx ? 'done' : i === idx ? 'now' : ''}"><span class="t-ico" aria-hidden="true">${ico}</span><div><b>${title}</b><small>${i === idx ? sub : ''}</small></div></li>`).join('')}</ol>`}
+        ${(info.type === 'delivery' && info.address && status !== 'rechazado' && status !== 'cancelado') ? `
+          <div class="c-card-plain" style="margin-top:14px;padding:14px;text-align:left">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <b>🛵 Seguimiento del envío</b>
+              <span class="c-badge ${status === 'en_camino' ? 'open' : ''}">${status === 'en_camino' ? '🛵 En camino a tu casa' : status === 'listo' ? '🍕 Listo para salir' : '🔥 En preparación'}</span>
+            </div>
+            <p class="c-muted small" style="margin:0 0 10px">📍 Entrega en: <b>${esc(info.address)}</b></p>
+            <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);background:#f2efe9">
+              <iframe width="100%" height="220" style="border:0;display:block" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+                src="https://maps.google.com/maps?q=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}&t=&z=15&ie=UTF8&iwloc=&output=embed"></iframe>
+              <div style="position:absolute;bottom:8px;right:8px;background:rgba(255,255,255,0.92);padding:4px 10px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.15)">
+                ${status === 'en_camino' ? `⏱️ Llegada estimada ~${Math.max(5, (on.deliveryMinutes || 40) - 20)} min` : `⏱️ Demora total estimada ~${on.deliveryMinutes || 40} min`}
+              </div>
+            </div>
+            <div style="margin-top:8px;text-align:right">
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}" target="_blank" rel="noopener" class="small" style="color:var(--pri, #d7263d);font-weight:600">Ver en Google Maps ↗</a>
+            </div>
+          </div>` : ''}
         <div class="c-card-plain">
           ${(info.items || []).map((/** @type {PZ.OrderItem} */ it) => `<div class="c-sum"><span>${it.qty} × ${esc(it.name)}${it.variantName ? ` (${esc(it.variantName)})` : ''}</span><span>${money(it.unitPrice * it.qty)}</span></div>`).join('')}
           <div class="c-sum big"><span>Total</span><b>${money(info.total)}</b></div>

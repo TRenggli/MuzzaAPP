@@ -196,7 +196,19 @@
     },
     changeEmail(email) { return C.invoke('profile', { action: 'change_email', email }); },
 
-    /* ---------------- Carta online ---------------- */
+    /* ---------------- Carta online y Sucursales ---------------- */
+    /** Actualiza datos de una sucursal (nombre, slug, settings, active) */
+    async updateBranch(branchId, patch) {
+      const { data, error } = await sb.from('branches').update(patch).eq('id', branchId).select().single();
+      if (error) throw error;
+      return data;
+    },
+    /** Borra una sucursal y todos sus datos relacionados (solo dueño/admin, si no es la única) */
+    async deleteBranch(branchId) {
+      const { error } = await sb.rpc('delete_branch', { p_branch: branchId });
+      if (error) throw error;
+      return true;
+    },
     /** Dirección pública de la sucursal (carta.html?l=slug). null la quita. */
     async setSlug(branchId, slug) {
       const { error } = await sb.from('branches').update({ slug: slug || null }).eq('id', branchId);
@@ -223,6 +235,29 @@
       const { data, error } = await sb.from('online_orders').update(patch).eq('id', id).eq('status', 'nuevo').select().maybeSingle();
       if (error) throw new Error(error.message);
       return data;
+    },
+    /** Aceptación idempotente: el servidor crea la comanda en la misma transacción. */
+    async acceptWebOrder(id, orderId) {
+      const { data, error } = await sb.rpc('accept_online_order', { p_id: id, p_order_id: orderId });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    /** Comandos transaccionales de salón; cada uno recibe una clave idempotente. */
+    async diningOpen(branchId, tableId, guests, operation) {
+      const { data, error } = await sb.rpc('dining_open_session', { p_branch: branchId, p_table: tableId, p_guests: guests, p_operation: operation });
+      if (error) throw new Error(error.message); return data;
+    },
+    async diningMove(sessionId, tableId, version, operation) {
+      const { data, error } = await sb.rpc('dining_move_session', { p_session: sessionId, p_to_table: tableId, p_expected_version: version, p_operation: operation });
+      if (error) throw new Error(error.message); return data;
+    },
+    async diningAddBatch(sessionId, order, version, operation) {
+      const { data, error } = await sb.rpc('dining_add_batch', { p_session: sessionId, p_order: order, p_expected_version: version, p_operation: operation });
+      if (error) throw new Error(error.message); return data;
+    },
+    async diningClose(sessionId, version, operation) {
+      const { data, error } = await sb.rpc('dining_close_session', { p_session: sessionId, p_expected_version: version, p_operation: operation });
+      if (error) throw new Error(error.message); return data;
     },
 
     /* ---------------- Mercado Pago ---------------- */
@@ -356,7 +391,7 @@
       }
     },
     async deleteDoc(orgId, col, id) {
-      const { error } = await sb.from('docs').delete().match({ org_id: orgId, col, id });
+      const { error } = await sb.rpc('delete_doc', { p_org: orgId, p_col: col, p_id: id });
       if (error) throw error;
     },
     async saveSettings(branchId, settings) {
