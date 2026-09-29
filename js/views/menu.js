@@ -11,7 +11,7 @@
     if (!PZ.auth.isAdmin()) { el.innerHTML = '<div class="card empty">Solo administradores</div>'; return; }
     el.innerHTML = `
       <div class="tabs-nav">
-        ${[['productos', '🍕 Productos'], ['categorias', '🗂️ Categorías'], ['extras', '➕ Agregados'], ['carta', '📜 Carta para clientes']].map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}
+        ${[['productos', '🍕 Productos'], ['categorias', '🗂️ Categorías'], ['extras', '➕ Agregados y condimentos'], ['carta', '📜 Carta para clientes']].map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}
       </div>
       <div class="tab-body"></div>`;
     el.querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { tab = b.dataset.t; render(el); });
@@ -220,21 +220,90 @@
     body.querySelector('[data-a=add]').onclick = () => { S.data.categories.push({ id: U.uid('c-'), name: 'Nueva categoría', icon: '🍽️', allowHalf: false }); S.save(); render(el); };
   }
 
-  /* ---------------- Agregados ---------------- */
+  /* ---------------- Agregados y condimentos ---------------- */
   function extras(body, el) {
+    const on = S.data.settings.online = S.data.settings.online || {};
+    if (!Array.isArray(on.condiments)) {
+      on.condiments = [
+        { id: 'oregano', name: 'Orégano', default: true },
+        { id: 'chimi', name: 'Chimi', default: true },
+      ];
+    }
     body.innerHTML = `
+      <div class="card mb">
+        <h3>🌿 Condimentos de la casa</h3>
+        <p class="muted" style="margin-top:0">Condimentos sin cargo que se ofrecen en cada pizza. Marcá los que vienen <b>incluidos por defecto</b> (para que el cliente o mozo pueda pedir sacarlos), o dejalos desmarcados si son <b>opcionales</b> (para pedir agregarlos).</p>
+        <div class="table-wrap"><table class="tbl">
+          <thead><tr><th>Nombre</th><th style="width:200px">Viene con la pizza</th><th style="width:40px"></th></tr></thead>
+          <tbody>
+            ${on.condiments.map((c, i) => `<tr>
+              <td><input data-cn="${i}" value="${U.esc(c.name)}" placeholder="Ej: Orégano, Chimi, Ajo…"></td>
+              <td><label class="check" style="margin:0"><input type="checkbox" data-cd="${i}" ${c.default !== false ? 'checked' : ''}> Incluido</label></td>
+              <td class="actions"><button class="icon-btn" data-cdel="${i}" title="Eliminar">🗑️</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+        <button class="btn primary mt" data-a="add-c">➕ Nuevo condimento</button>
+      </div>
+
       <div class="card">
-        <p class="muted" style="margin-top:0">Se ofrecen al elegir una pizza (categorías con mitad y mitad).</p>
+        <h3>➕ Agregados con costo (Extras)</h3>
+        <p class="muted" style="margin-top:0">Se cobran como adicional al elegir una pizza (ej: Extra muzzarella, Extra jamón).</p>
         ${S.data.extras.map((x) => `<div class="row-flex" style="margin-bottom:8px">
-          <input data-xn="${x.id}" value="${U.esc(x.name)}" style="flex:2"><input data-xp="${x.id}" value="${x.price}" inputmode="numeric" style="flex:1">
+          <input data-xn="${x.id}" value="${U.esc(x.name)}" placeholder="Nombre del agregado" style="flex:2">
+          <input data-xp="${x.id}" value="${x.price}" inputmode="numeric" placeholder="Precio" style="flex:1">
           <button class="icon-btn" data-xd="${x.id}">🗑️</button></div>`).join('')}
-        <button class="btn primary mt" data-a="add">➕ Nuevo agregado</button>
+        <button class="btn primary mt" data-a="add-x">➕ Nuevo agregado</button>
       </div>`;
+
+    // Handlers para condimentos
+    body.querySelectorAll('[data-cn]').forEach((inp) => {
+      const input = /** @type {HTMLInputElement} */ (inp);
+      input.onchange = () => {
+        on.condiments[Number(input.dataset.cn)].name = input.value.trim() || 'Condimento';
+        S.save();
+      };
+    });
+    body.querySelectorAll('[data-cd]').forEach((chk) => {
+      const check = /** @type {HTMLInputElement} */ (chk);
+      check.onchange = () => {
+        on.condiments[Number(check.dataset.cd)].default = check.checked;
+        S.save();
+      };
+    });
+    body.querySelectorAll('[data-cdel]').forEach((btn) => {
+      const b = /** @type {HTMLElement} */ (btn);
+      b.onclick = () => {
+        on.condiments.splice(Number(b.dataset.cdel), 1);
+        S.save(); render(el);
+      };
+    });
+    const addC = /** @type {HTMLElement | null} */ (body.querySelector('[data-a=add-c]'));
+    if (addC) {
+      addC.onclick = () => {
+        on.condiments.push({ id: U.uid('cond-'), name: 'Nuevo condimento', default: true });
+        S.save(); render(el);
+      };
+    }
+
+    // Handlers para agregados con costo
     const ex = (id) => S.data.extras.find((x) => x.id === id);
-    body.querySelectorAll('[data-xn]').forEach((i) => i.onchange = () => { ex(i.dataset.xn).name = i.value; S.save(); });
-    body.querySelectorAll('[data-xp]').forEach((i) => i.onchange = () => { ex(i.dataset.xp).price = U.parseMoney(i.value); S.save(); });
-    body.querySelectorAll('[data-xd]').forEach((b) => b.onclick = () => { S.data.extras = S.data.extras.filter((x) => x.id !== b.dataset.xd); S.save(); render(el); });
-    body.querySelector('[data-a=add]').onclick = () => { S.data.extras.push({ id: U.uid('e'), name: 'Nuevo agregado', price: 0 }); S.save(); render(el); };
+    body.querySelectorAll('[data-xn]').forEach((inp) => {
+      const input = /** @type {HTMLInputElement} */ (inp);
+      input.onchange = () => { const x = ex(input.dataset.xn); if (x) x.name = input.value; S.save(); };
+    });
+    body.querySelectorAll('[data-xp]').forEach((inp) => {
+      const input = /** @type {HTMLInputElement} */ (inp);
+      input.onchange = () => { const x = ex(input.dataset.xp); if (x) x.price = U.parseMoney(input.value); S.save(); };
+    });
+    body.querySelectorAll('[data-xd]').forEach((btn) => {
+      const b = /** @type {HTMLElement} */ (btn);
+      b.onclick = () => { S.data.extras = S.data.extras.filter((x) => x.id !== b.dataset.xd); S.save(); render(el); };
+    });
+    const addX = /** @type {HTMLElement | null} */ (body.querySelector('[data-a=add-x]'));
+    if (addX) {
+      addX.onclick = () => { S.data.extras.push({ id: U.uid('e'), name: 'Nuevo agregado', price: 0 }); S.save(); render(el); };
+    }
   }
 
   /* ---------------- Carta imprimible / para compartir ---------------- */

@@ -50,6 +50,10 @@
       pickupMinutes: 15,
       deliveryMinutes: 40,
       deliveryFields: { separateAddress: false, floorDept: true, crossStreets: true, notes: true },
+      condiments: [
+        { id: 'oregano', name: 'Orégano', default: true },
+        { id: 'chimi', name: 'Chimi', default: true },
+      ],
     };
   }
 

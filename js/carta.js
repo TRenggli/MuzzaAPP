@@ -297,11 +297,18 @@
     const allowHalf = !!(cat && cat.allowHalf);
     const halves = allowHalf ? m.products.filter((x) => x.id !== p.id && m.categories.some((c) => c.id === x.categoryId && c.allowHalf)) : [];
     const on = { ...C.defaults(), ...m.settings.online };
+    /** @type {PZ.Condiment[]} */
+    const condiments = Array.isArray(on.condiments) && on.condiments.length
+      ? on.condiments
+      : [
+          { id: 'oregano', name: 'Orégano', default: true },
+          { id: 'chimi', name: 'Chimi', default: true },
+        ];
+    /** @type {Record<string, boolean>} */
+    const condState = Object.fromEntries(condiments.map((c) => [c.id, c.default !== false]));
     /** @type {PZ.CartLine} */
     const line = { key: '', productId: p.id, variantId: p.variants[0].id, halfId: '', extras: [], qty: 1, notes: '' };
     const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo"><img src="${esc(p.photo)}" alt=""></div>` : '';
-    let withOregano = true;
-    let withChimi = true;
 
     const s = sheet(`
       ${photo}
@@ -312,11 +319,10 @@
         <div class="c-half"><span class="c-half-pz" aria-hidden="true"><i class="h1" style="background:${esc(p.color || '#ffd166')}"></i><i class="h2"></i></span>
           <select class="c-select" data-g="h" aria-label="Otra mitad"><option value="">Entera de ${esc(p.name)}</option>${halves.map((h) => `<option value="${esc(h.id)}">½ ${esc(p.name)} + ½ ${esc(h.name)}</option>`).join('')}</select></div>
         <p class="c-muted small">${m.settings.halfPricing === 'avg' ? 'Se cobra el promedio de las dos mitades.' : 'Se cobra la mitad de mayor precio.'}</p>` : ''}
-      ${allowHalf ? `
-        <div class="c-opt-title">Condimentos incluidos <small class="c-muted" style="font-weight:normal">(tocá para quitar)</small></div>
-        <div class="c-opts c-conds" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-          <button type="button" class="c-opt on cond-oregano">🌿 Con orégano<small>Incluido</small></button>
-          <button type="button" class="c-opt on cond-chimi">🌶️ Con chimi<small>Incluido</small></button>
+      ${allowHalf && condiments.length ? `
+        <div class="c-opt-title">Condimentos <small class="c-muted" style="font-weight:normal">(tocá para elegir o quitar)</small></div>
+        <div class="c-opts c-conds" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:12px;">
+          ${condiments.map((c) => `<button type="button" class="c-opt ${condState[c.id] ? 'on' : ''}" data-cid="${esc(c.id)}"></button>`).join('')}
         </div>` : ''}
       ${allowHalf && m.extras.length ? `<div class="c-extras-wrap"><div class="c-opt-title">Agregados</div><div class="c-opts" data-g="x"></div></div>` : ''}
       <div class="c-opt-title">Aclaraciones</div>
@@ -329,22 +335,31 @@
 
     const renderConds = () => {
       if (!allowHalf) return;
-      const bo = /** @type {HTMLElement | null} */ (E.querySelector('.cond-oregano'));
-      const bc = /** @type {HTMLElement | null} */ (E.querySelector('.cond-chimi'));
-      if (bo) {
-        bo.className = `c-opt ${withOregano ? 'on' : ''} cond-oregano`;
-        bo.innerHTML = withOregano ? '🌿 Con orégano<small>Incluido</small>' : '<span style="color:#b3261e">❌ Sin orégano</span><small style="color:#b3261e">Quitar</small>';
-      }
-      if (bc) {
-        bc.className = `c-opt ${withChimi ? 'on' : ''} cond-chimi`;
-        bc.innerHTML = withChimi ? '🌶️ Con chimi<small>Incluido</small>' : '<span style="color:#b3261e">❌ Sin chimi</span><small style="color:#b3261e">Quitar</small>';
-      }
+      condiments.forEach((c) => {
+        const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
+        if (!btn) return;
+        const isOn = !!condState[c.id];
+        const isDefault = c.default !== false;
+        btn.className = `c-opt ${isOn ? 'on' : ''}`;
+        if (isOn) {
+          btn.innerHTML = `🌿 Con ${esc(c.name)}<small>${isDefault ? 'Incluido' : 'Agregado'}</small>`;
+        } else {
+          btn.innerHTML = isDefault
+            ? `<span style="color:#b3261e">❌ Sin ${esc(c.name)}</span><small style="color:#b3261e">Quitar</small>`
+            : `<span style="color:var(--c-muted)">Sin ${esc(c.name)}</span><small>Opcional</small>`;
+        }
+      });
     };
     if (allowHalf) {
-      const bo = /** @type {HTMLElement | null} */ (E.querySelector('.cond-oregano'));
-      const bc = /** @type {HTMLElement | null} */ (E.querySelector('.cond-chimi'));
-      if (bo) bo.onclick = () => { withOregano = !withOregano; renderConds(); };
-      if (bc) bc.onclick = () => { withChimi = !withChimi; renderConds(); };
+      condiments.forEach((c) => {
+        const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
+        if (btn) {
+          btn.onclick = () => {
+            condState[c.id] = !condState[c.id];
+            renderConds();
+          };
+        }
+      });
       renderConds();
     }
 
@@ -381,13 +396,17 @@
     $$('[data-q]', E).forEach((b) => b.onclick = () => { line.qty = Math.max(1, Math.min(50, line.qty + Number(b.dataset.q))); draw(); });
     $('[data-a=add]', E).onclick = () => {
       let userNotes = inp('[data-g=n]', E).value.trim().slice(0, 140);
-      const exclusions = [];
+      const tags = [];
       if (allowHalf) {
-        if (!withOregano) exclusions.push('Sin orégano');
-        if (!withChimi) exclusions.push('Sin chimi');
+        condiments.forEach((c) => {
+          const isDefault = c.default !== false;
+          const isSelected = !!condState[c.id];
+          if (isDefault && !isSelected) tags.push(`Sin ${c.name.toLowerCase()}`);
+          else if (!isDefault && isSelected) tags.push(`Con ${c.name.toLowerCase()}`);
+        });
       }
-      if (exclusions.length) {
-        userNotes = exclusions.join(' · ') + (userNotes ? ` · ${userNotes}` : '');
+      if (tags.length) {
+        userNotes = tags.join(' · ') + (userNotes ? ` · ${userNotes}` : '');
       }
       line.notes = userNotes;
       line.key = [line.productId, line.variantId, line.halfId, line.extras.slice().sort().join('+'), line.notes].join('|');

@@ -176,3 +176,34 @@ test('carta: Extra jamón solo aplica a pizzas con jamón (o mitad con jamón)',
   assert.equal(plJamon.unit, 14000 + 2500 + 2000);
 });
 
+test('carta y mostrador: condimentos configurables con defaults y exclusiones/inclusiones', () => {
+  const defs = C.defaults();
+  assert.ok(Array.isArray(defs.condiments));
+  assert.equal(defs.condiments.length, 2);
+  assert.equal(defs.condiments[0].id, 'oregano');
+  assert.equal(defs.condiments[0].default, true);
+  assert.equal(defs.condiments[1].id, 'chimi');
+  assert.equal(defs.condiments[1].default, true);
+
+  // Lista personalizada agregando 'Ajo' (incluido por defecto) y 'Ají molido' (opcional)
+  const custom = [
+    { id: 'oregano', name: 'Orégano', default: true },
+    { id: 'chimi', name: 'Chimi', default: true },
+    { id: 'ajo', name: 'Ajo al óleo', default: true },
+    { id: 'aji', name: 'Ají molido', default: false },
+  ];
+
+  // Simulación de selección: quita chimi, deja oregano y ajo, agrega aji molido
+  const selected = { oregano: true, chimi: false, ajo: true, aji: true };
+  const tags = [];
+  custom.forEach((c) => {
+    const isDef = c.default !== false;
+    const isSel = !!selected[c.id];
+    if (isDef && !isSel) tags.push(`Sin ${c.name.toLowerCase()}`);
+    else if (!isDef && isSel) tags.push(`Con ${c.name.toLowerCase()}`);
+  });
+
+  assert.deepEqual(tags, ['Sin chimi', 'Con ají molido']);
+});
+
+

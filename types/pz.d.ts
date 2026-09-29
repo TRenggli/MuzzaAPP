@@ -192,6 +192,12 @@ declare namespace PZ {
       crossStreets?: boolean;
       notes?: boolean;
     };
+    condiments?: Condiment[];
+  }
+  interface Condiment {
+    id: string;
+    name: string;
+    default?: boolean;
   }
   interface Zone {
     id: string;
