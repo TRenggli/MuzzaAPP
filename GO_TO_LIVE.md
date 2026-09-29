@@ -4,39 +4,24 @@ Este documento detalla los pasos manuales que dependen del operador/dueño para 
 
 ---
 
-## 📋 Resumen de Tareas Pendientes
+## 📋 Resumen de Tareas
 
-| # | Tarea | Dónde se hace | Tiempo estimado |
+| # | Tarea | Dónde se hace | Estado |
 |---|---|---|---|
-| **1** | Desplegar Edge Function `mp-webhook` | Terminal local (PowerShell) | 3 minutos |
-| **2** | Configurar Webhook en Mercado Pago | Panel de Desarrolladores MP | 2 minutos |
-| **3** | Vincular Access Token y Caja en el local | Sistema (Configuración → Cobros) | 2 minutos |
-| **4** | Configurar demoras y WhatsApp de pedidos | Sistema (Configuración → Negocio / Carta) | 2 minutos |
-| **5** | Prueba de humo en vivo (End-to-End) | Salón, Mostrador y Celular | 5 minutos |
+| **1** | Desplegar Edge Functions (`mp-webhook` y resto) | Supabase Cloud | ✅ **COMPLETADO Y PROBADO** (HTTP 200 en vivo) |
+| **2** | Configurar Webhook en Mercado Pago | Panel de Desarrolladores MP | ⏳ Pendiente (2 minutos) |
+| **3** | Vincular Access Token y Caja en el local | Sistema (Configuración → Cobros) | ⏳ Pendiente (2 minutos) |
+| **4** | Configurar demoras y WhatsApp de pedidos | Sistema (Configuración → Negocio / Carta) | ⏳ Pendiente (2 minutos) |
+| **5** | Prueba de humo en vivo (End-to-End) | Salón, Mostrador y Celular | ⏳ Pendiente (5 minutos) |
 
 ---
 
-## Paso 1: Desplegar Edge Functions a Supabase
+## Paso 1: Desplegar Edge Functions a Supabase ✅ (Completado)
 
-La función autónoma `mp-webhook` permite que cuando un cliente pague un QR dinámico de Mercado Pago, la venta se concilie y se marque como pagada automáticamente, **incluso si el cajero cerró el navegador, apagó la tablet o se cortó la red local**.
+Todas las Edge Functions (`join`, `mp`, `mp-webhook`, `platform`, `profile`, `register`, `staff`) fueron desplegadas con éxito al proyecto de Supabase (`yugonymkwdlyfdrrhntf`) y se verificó que `mp-webhook` responde con `HTTP 200` ante peticiones externas.
 
-### Comandos a ejecutar en la terminal (PowerShell):
+- **URL activa del Webhook:** `https://yugonymkwdlyfdrrhntf.supabase.co/functions/v1/mp-webhook`
 
-```powershell
-# 1. Iniciar sesión en Supabase (abrirá el navegador para autorizar con tu cuenta)
-npx supabase login
-
-# 2. Vincular el proyecto remoto de Supabase (Ref: yugonymkwdlyfdrrhntf)
-npx supabase link --project-ref yugonymkwdlyfdrrhntf
-
-# 3. Desplegar la función del webhook autónomo
-npx supabase functions deploy mp-webhook
-
-# (Opcional recomendado) Desplegar todas las funciones para asegurar paridad total:
-npx supabase functions deploy
-```
-
-> **Nota:** La función `mp-webhook` ya tiene configurado `verify_jwt = false` en `supabase/config.toml`, por lo que Mercado Pago podrá notificarla directamente sin requerir token interno de Supabase.
 
 ---
 
