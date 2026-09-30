@@ -713,7 +713,21 @@
     }
 
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) reg.unregister();
+        });
+      } else {
+        navigator.serviceWorker.register('sw.js').then((reg) => {
+          reg.update().catch(() => {});
+        }).catch(() => {});
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!sessionStorage.getItem('pz-sw-reloaded')) {
+            sessionStorage.setItem('pz-sw-reloaded', '1');
+            window.location.reload();
+          }
+        });
+      }
     }
   }
 

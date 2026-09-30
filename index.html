@@ -2,6 +2,20 @@
 <html lang="es-AR" data-theme="margherita">
 <head>
   <meta charset="utf-8">
+  <script>
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var i = 0; i < regs.length; i++) regs[i].unregister();
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
+        });
+      }
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>MuzzaAPP · Sistema</title>
   <meta name="description" content="MuzzaAPP: sistema de gestión para pizzerías y locales gastronómicos: ventas, tickets, pedidos, caja y reportes.">
@@ -14,8 +28,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=4.2.0">
-  <link rel="stylesheet" href="css/responsive.css?v=4.2.0">
+  <link rel="stylesheet" href="css/styles.css?v=4.2.1">
+  <link rel="stylesheet" href="css/responsive.css?v=4.2.1">
 </head>
 <body>
   <div class="boot" id="boot">
@@ -23,14 +37,14 @@
   </div>
   <div id="app"></div>
 
-  <script src="vendor/qrcode.js?v=4.2.0"></script>
+  <script src="vendor/qrcode.js?v=4.2.1"></script>
   <script src="vendor/supabase.js"></script>
-  <script src="js/config.js?v=4.2.0"></script>
-  <script src="js/core.js?v=4.2.0"></script>
-  <script src="js/carta-core.js?v=4.2.0"></script>
+  <script src="js/config.js?v=4.2.1"></script>
+  <script src="js/core.js?v=4.2.1"></script>
+  <script src="js/carta-core.js?v=4.2.1"></script>
   <script src="js/cloud.js"></script>
   <script src="js/seed.js"></script>
-  <script src="js/store.js"></script>
+  <script src="js/store.js?v=4.2.1"></script>
   <script src="js/auth.js"></script>
   <script src="js/ticket.js"></script>
   <script src="js/charts.js"></script>
@@ -49,11 +63,11 @@
   <script src="js/views/perfil.js"></script>
   <script src="js/views/historial.js"></script>
   <script src="js/views/clientes.js"></script>
-  <script src="js/views/menu.js?v=4.2.0"></script>
+  <script src="js/views/menu.js?v=4.2.1"></script>
   <script src="js/views/online.js"></script>
   <script src="js/views/stock.js"></script>
   <script src="js/views/reportes.js"></script>
   <script src="js/views/config.js"></script>
-  <script src="js/app.js?v=4.2.0"></script>
+  <script src="js/app.js?v=4.2.1"></script>
 </body>
 </html>

@@ -2,6 +2,20 @@
 <html lang="es-AR">
 <head>
   <meta charset="utf-8">
+  <script>
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var i = 0; i < regs.length; i++) regs[i].unregister();
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
+        });
+      }
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Carta online</title>
   <meta name="description" content="Mirá la carta, armá tu pedido y mandalo por WhatsApp.">
@@ -9,7 +23,7 @@
   <link rel="icon" href="img/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="css/carta.css?v=4.2.0">
+  <link rel="stylesheet" href="css/carta.css?v=4.2.1">
   <link rel="stylesheet" href="vendor/leaflet.css">
 </head>
 <body>
@@ -19,10 +33,10 @@
       <p>Cargando la carta…</p>
     </div>
   </div>
-  <script src="vendor/qrcode.js?v=4.2.0"></script>
+  <script src="vendor/qrcode.js?v=4.2.1"></script>
   <script src="vendor/leaflet.js"></script>
-  <script src="js/config.js?v=4.2.0"></script>
-  <script src="js/carta-core.js?v=4.2.0"></script>
-  <script src="js/carta.js?v=4.2.0"></script>
+  <script src="js/config.js?v=4.2.1"></script>
+  <script src="js/carta-core.js?v=4.2.1"></script>
+  <script src="js/carta.js?v=4.2.1"></script>
 </body>
 </html>
