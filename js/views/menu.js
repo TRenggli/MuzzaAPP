@@ -432,119 +432,15 @@
         </div>
       </div>`;
 
-    // Generar tabla de productos para una lista de productos
-    const renderTable = (ps, c) => {
-      const colMap = new Map();
-      ps.forEach((p) => {
-        (p.variants || []).forEach((v) => {
-          const raw = String(v.name || '').trim();
-          if (!raw) return;
-          const key = norm(raw);
-          const price = Number(v.price) || 0;
-          if (!colMap.has(key)) {
-            const label = raw.charAt(0).toUpperCase() + raw.slice(1);
-            colMap.set(key, { key, label, avgPrice: price, count: 1 });
-          } else {
-            const cur = colMap.get(key);
-            if (cur) {
-              cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
-              cur.count += 1;
-            }
-          }
-        });
-      });
-
-      const cols = Array.from(colMap.values()).sort((x, y) => {
-        const rx = KNOWN_RANKS[x.key] || 99;
-        const ry = KNOWN_RANKS[y.key] || 99;
-        if (rx !== ry) return rx - ry;
-        return x.avgPrice - y.avgPrice;
-      });
-
-      const multiCol = cols.length > 1;
-
-      return `
-        <table class="tbl carta-tbl" style="width:100%;table-layout:fixed;border-collapse:collapse">
-          <thead>
-            <tr>
-              <th style="text-align:left;padding:8px 6px">Producto</th>
-              ${multiCol ? cols.map((col) => `<th class="right col-price" style="width:115px;text-align:right;padding:8px 6px">${U.esc(col.label)}</th>`).join('') : '<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'}
-            </tr>
-          </thead>
-          <tbody>
-            ${ps.map((p) => {
-              const vars = p.variants || [];
-              const soloEntera = c && c.allowHalf && p.allowHalf === false;
-              const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
-                <b>${U.esc(p.name)}</b>
-                ${cfg.showBadges !== false && soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
-                ${cfg.showDesc !== false && p.desc ? `<div class="small muted" style="margin-top:2px">${U.esc(p.desc)}</div>` : ''}
-              </td>`;
-
-              if (!multiCol) {
-                const price = vars[0] ? vars[0].price : 0;
-                return `<tr>${nameCell}<td class="right nowrap col-price" style="width:120px;text-align:right;padding:10px 6px;font-weight:bold">${U.money(price)}</td></tr>`;
-              }
-
-              const matchesAny = vars.some((v) => cols.some((col) => norm(v.name) === col.key));
-              if (vars.length === 1 && !matchesAny) {
-                return `<tr>${nameCell}<td colspan="${cols.length}" class="right nowrap col-price" style="text-align:right;padding:10px 6px"><b>${U.money(vars[0].price)}</b>${vars[0].name ? ` <small class="muted">(${U.esc(vars[0].name)})</small>` : ''}</td></tr>`;
-              }
-
-              const priceCells = cols.map((col) => {
-                const v = vars.find((x) => norm(x.name) === col.key);
-                return `<td class="right nowrap col-price" style="width:115px;text-align:right;padding:10px 6px">${v ? `<b>${U.money(v.price)}</b>` : '<span class="muted" style="opacity:0.4">—</span>'}</td>`;
-              }).join('');
-
-              return `<tr>${nameCell}${priceCells}</tr>`;
-            }).join('')}
-          </tbody>
-        </table>`;
-    };
-
-    let previewContent = '';
-    if (!prepared.length) {
-      previewContent = '<div class="empty small" style="padding:32px;text-align:center">No hay productos disponibles en las categorías seleccionadas.</div>';
-    } else if (cfg.groupByCategory === false) {
-      // Listado continuo
-      const allProds = prepared.flatMap((x) => x.products);
-      const sortedProds = PZ.carta.sortProducts(allProds, cfg.sortBy);
-      previewContent = `
-        <div style="margin-top:16px">
-          ${renderTable(sortedProds, null)}
-        </div>`;
-    } else {
-      // Agrupado por categorías
-      previewContent = prepared.map((item, idx) => {
-        const c = item.category;
-        const ps = item.products;
-        const pageBreakClass = cfg.pageBreakPerCat && idx > 0 ? 'carta-cat-section page-break' : 'carta-cat-section';
-        const pageBreakDivider = cfg.pageBreakPerCat && idx > 0
-          ? '<div class="page-break-indicator" style="margin:24px 0;text-align:center;border-top:2px dashed var(--line);padding-top:6px;font-size:0.8em;color:var(--muted);font-weight:bold"><span class="badge">📄 Salto de página para cartas de varias hojas</span></div>'
-          : '';
-
-        return `
-          ${pageBreakDivider}
-          <div class="${pageBreakClass}" style="margin-top:22px;page-break-inside:avoid;${cfg.pageBreakPerCat && idx > 0 ? 'page-break-before:always;' : ''}">
-            <h3 style="margin:0 0 8px;border-bottom:3px dotted var(--primary);padding-bottom:4px;display:flex;align-items:center;gap:8px">
-              <span>${c.icon}</span> <span>${U.esc(c.name)}</span>
-              ${cfg.showBadges !== false && c.allowHalf ? '<span class="badge" style="font-size:0.7em;font-weight:normal;margin-left:auto">🍕 Permite mitad y mitad</span>' : ''}
-            </h3>
-            ${renderTable(ps, c)}
-          </div>`;
-      }).join('');
-    }
-
     const fontSizeStyle = cfg.fontSize === 'sm' ? 'font-size:0.86em;' : cfg.fontSize === 'lg' ? 'font-size:1.14em;' : 'font-size:1em;';
 
-    const cartaHtml = `
-      <div style="text-align:center;margin-bottom:14px">
-        ${PZ.brandLogo(70)}
-        <h1 style="color:var(--primary);margin:6px 0 2px">${U.esc(b.name || 'Pizzería')}</h1>
-        <div class="muted">${U.esc(b.slogan || '')} · ${U.esc(b.phone || '')}</div>
-        ${b.address ? `<div class="muted small">📍 ${U.esc(b.address)}${b.city ? ', ' + U.esc(b.city) : ''}</div>` : ''}
-      </div>
-      ${previewContent}`;
+    const cartaHtml = PZ.carta.renderSalonHtml({
+      shop: { name: b.name, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, logo: S.data.settings.logo },
+      categories: allSystemCats,
+      products: S.data.products,
+      cfg,
+      interactive: false,
+    });
 
     body.innerHTML = `
       ${toolbarHtml}
@@ -616,6 +512,8 @@
       const slug = branch.slug || '';
       const origin = location.origin + location.pathname.replace(/index\.html$/, '');
       const qrUrl = slug ? PZ.carta.salonUrl(origin, slug, cfg.qrToken) : `${origin}carta.html?preview=carta`;
+      const qrSvg = PZ.util.qrSvg(qrUrl, 5, 2);
+      const qrDataUrl = PZ.util.qrDataUrl(qrUrl, 6, 2);
 
       const m = PZ.modal({
         title: '📱 Código QR permanente para mesas del local',
@@ -626,15 +524,16 @@
               <b>Aviso:</b> Tu sucursal aún no tiene asignada una dirección pública (slug). El código QR funcionará con la dirección completa, pero te recomendamos configurar un slug amigable en <i>Carta online</i> o <i>Ajustes</i>.
             </div>` : ''}
             <div class="qr-salon-frame" style="width:230px;height:230px;background:#fff;padding:12px;border-radius:20px;box-shadow:0 4px 18px rgba(0,0,0,0.1);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">
-              ${PZ.util.qrSvg(qrUrl, 5, 2)}
+              ${qrSvg || (qrDataUrl ? `<img src="${qrDataUrl}" width="206" height="206" alt="Código QR" style="display:block;max-width:100%">` : '<div style="color:var(--muted)">Generando QR...</div>')}
             </div>
             <h3 style="margin:4px 0 2px;color:var(--primary)">${U.esc(b.name || 'Nuestra Carta')}</h3>
             <p class="muted small" style="max-width:440px;margin:0 auto 14px">
-              Este código QR está pensado para colocar en las mesas de tu salón. Cuando los comensales lo escaneen con la cámara de su celular, accederán directamente a la <b>Carta del Salón</b> (sin tener que cargar datos de delivery ni pasar por un carrito obligatorio).
+              Este código QR está pensado para colocar en las mesas de tu salón. Cuando los comensales lo escaneen con la cámara de su celular, accederán directamente a la <b>Carta del Salón</b> tal como la ves en la previsualización.
             </p>
-            <div class="row-flex" style="max-width:460px;margin:0 auto 16px;gap:8px">
+            <div class="row-flex" style="max-width:480px;margin:0 auto 16px;gap:8px">
               <input type="text" readonly value="${U.esc(qrUrl)}" id="qr-salon-url" style="font-size:0.85em;padding:8px 10px" class="grow">
               <button class="btn ghost sm" data-a="copy-qr">📋 Copiar enlace</button>
+              ${qrDataUrl ? `<a class="btn ghost sm" href="${qrDataUrl}" download="QR-Mesas-${U.esc(slug || 'local')}.gif" style="text-decoration:none">💾 Descargar imagen</a>` : ''}
             </div>
             <div style="background:var(--bg-2);border-radius:12px;padding:12px;text-align:left;font-size:0.88em;max-width:480px;margin:0 auto">
               <div style="font-weight:bold;margin-bottom:4px">💡 Información sobre este código QR:</div>
@@ -684,6 +583,7 @@
           const w = window.open('', '_blank');
           if (!w) return PZ.toast('Permití las ventanas emergentes para imprimir', 'warn');
           const flyerSvg = PZ.util.qrSvg(qrUrl, 5, 2);
+          const flyerImg = PZ.util.qrDataUrl(qrUrl, 6, 2);
           w.document.write(`<!doctype html>
             <html lang="es">
             <head>
@@ -722,7 +622,7 @@
                 ${b.slogan ? `<div class="slogan">${U.esc(b.slogan)}</div>` : ''}
                 <div class="cta">📱 Escaneá con tu celular para ver la carta</div>
                 <div class="sub-cta">Variedades, pizzas mitad y mitad y precios actualizados en tu mesa.</div>
-                <div class="qr-wrap">${flyerSvg}</div>
+                <div class="qr-wrap">${flyerSvg || (flyerImg ? `<img src="${flyerImg}" style="width:196px;height:196px;display:block" alt="QR">` : '')}</div>
                 <div class="wifi-box">📡 Wi-Fi del local: Consultá la clave a nuestro personal</div>
                 <div class="footer">
                   ${b.address ? `📍 ${U.esc(b.address)}${b.city ? ', ' + U.esc(b.city) : ''} · ` : ''}

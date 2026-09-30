@@ -421,7 +421,7 @@ test('carta del salón: generación de URL pública y persistencia del código Q
   assert.ok(url.includes('qr=qr_token_permanente_999'), 'Debe incluir el token persistente de la mesa');
 });
 
-test('código QR permanente: genera SVG no vacío con dimensiones de ancho y alto explícitas', () => {
+test('código QR permanente: genera SVG no vacío con dimensiones de ancho y alto explícitas y DataURL de respaldo', () => {
   const url = C.salonUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'pizzeria-el-viejo-andres-el-viejo-andres', 'qr_token_permanente_123');
   const svg = PZ.util.qrSvg(url, 5, 2);
 
@@ -430,6 +430,56 @@ test('código QR permanente: genera SVG no vacío con dimensiones de ancho y alt
   assert.ok(/width="\d+px"/.test(svg), 'El SVG debe tener atributo width explícito para no colapsar a 0px');
   assert.ok(/height="\d+px"/.test(svg), 'El SVG debe tener atributo height explícito para no colapsar a 0px');
   assert.ok(svg.includes('viewBox="0 0'), 'El SVG debe conservar viewBox para ser escalable');
+
+  const durl = PZ.util.qrDataUrl(url, 5, 2);
+  assert.ok(durl.startsWith('data:image/'), 'qrDataUrl debe generar una Data URL base64');
+  assert.ok(durl.length > 200, 'La Data URL debe contener los bytes de la imagen');
+});
+
+test('carta del salón: sincronización de columnas y aislamiento de variantes no válidas (ej: Vienesa)', () => {
+  // Caso 1: En una categoría de pizzas donde todos tienen 1 tamaño (Grande) y uno se llama "Vienesa" con variante "Vienesa"
+  const pizzasDiego = [
+    { id: 'p1', name: 'Muzzarella', categoryId: 'c-piz', active: true, variants: [{ id: 'grande', name: 'Grande', price: 19000 }] },
+    { id: 'p2', name: 'Napolitana', categoryId: 'c-piz', active: true, variants: [{ id: 'grande', name: 'Grande', price: 20000 }] },
+    { id: 'p3', name: 'Vienesa', categoryId: 'c-piz', active: true, variants: [{ id: 'u', name: 'Vienesa', price: 25000 }] },
+  ];
+  const cols = C.getTableColumns(pizzasDiego, { id: 'c-piz', name: 'Pizzas', allowHalf: true });
+  assert.equal(cols.length, 0, 'No deben crearse múltiples columnas si ningún producto tiene múltiples tamaños; debe usar columna única "Precio"');
+
+  const html = C.renderSalonTable(pizzasDiego, { id: 'c-piz', name: 'Pizzas', allowHalf: true }, {}, false);
+  assert.ok(html.includes('<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'), 'Debe tener encabezado de columna única "Precio"');
+  assert.ok(!html.includes('>VIENESA<') && !html.includes('>Vienesa<th'), 'No debe existir columna con nombre "Vienesa"');
+  assert.ok(html.includes('>Vienesa</b>'), 'El producto Vienesa debe aparecer listado en su fila correspondiente');
+  assert.ok(html.includes('25.000'), 'El precio de Vienesa debe mostrarse bajo la columna de precio');
+
+  // Caso 2: Categoría con múltiples tamaños reales (ej: Empanadas)
+  const empanadas = [
+    { id: 'e1', name: 'Carne', categoryId: 'c-emp', active: true, variants: [{ id: 'u', name: 'Unidad', price: 2500 }, { id: 'm', name: 'Media docena', price: 15000 }, { id: 'd', name: 'Docena', price: 30000 }] },
+    { id: 'e2', name: 'Pollo', categoryId: 'c-emp', active: true, variants: [{ id: 'u', name: 'Unidad', price: 2500 }, { id: 'm', name: 'Media docena', price: 15000 }, { id: 'd', name: 'Docena', price: 30000 }] },
+  ];
+  const colsEmp = C.getTableColumns(empanadas, { id: 'c-emp', name: 'Empanadas', allowHalf: false });
+  assert.equal(colsEmp.length, 3, 'Debe generar 3 columnas para Unidad, Media docena y Docena');
+  assert.equal(colsEmp[0].label, 'Unidad');
+  assert.equal(colsEmp[1].label, 'Media docena');
+  assert.equal(colsEmp[2].label, 'Docena');
+
+  const htmlEmp = C.renderSalonTable(empanadas, { id: 'c-emp', name: 'Empanadas', allowHalf: false }, {}, false);
+  assert.ok(htmlEmp.includes('Unidad') && htmlEmp.includes('Media docena') && htmlEmp.includes('Docena'), 'Encabezados correctos de tamaños');
+});
+
+test('cartaUrl y salonUrl: resiliencia ante rutas con o sin barra final en GitHub Pages', () => {
+  const cases = [
+    'https://trenggli.github.io/MuzzaAPP',
+    'https://trenggli.github.io/MuzzaAPP/',
+    'https://trenggli.github.io/MuzzaAPP/index.html',
+  ];
+  for (const c of cases) {
+    const url = C.salonUrl(c, 'el-viejo-andres', 'token123');
+    assert.ok(url.startsWith('https://trenggli.github.io/MuzzaAPP/carta.html?'), `URL debe preservar subcarpeta para base ${c}: ${url}`);
+    assert.ok(url.includes('l=el-viejo-andres'));
+    assert.ok(url.includes('vista=carta'));
+    assert.ok(url.includes('qr=token123'));
+  }
 });
 
 

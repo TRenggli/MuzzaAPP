@@ -2287,10 +2287,17 @@ var qrcode = function() {
 }();
 
 (function (factory) {
+  var qr = factory();
   if (typeof define === 'function' && define.amd) {
       define([], factory);
   } else if (typeof exports === 'object') {
-      module.exports = factory();
+      module.exports = qr;
+  }
+  if (typeof window !== 'undefined') {
+      window.qrcode = qr;
+  }
+  if (typeof globalThis !== 'undefined') {
+      globalThis.qrcode = qr;
   }
 }(function () {
     return qrcode;

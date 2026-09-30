@@ -133,15 +133,90 @@
     if (b) b.onclick = () => location.reload();
   }
 
-  /* ---------------- carta ---------------- */
-  function render() {
+  /* ---------------- carta del salón (mesas) ---------------- */
+  function renderSalonView() {
     const m = /** @type {PZ.CartaMenu} */ (menu);
     const s = m.settings;
     const on = { ...C.defaults(), ...s.online };
     const salon = (on && on.salonMenu) || m.settings.printMenu || {};
     applyTheme(on);
     const b = s.business || {};
-    document.title = isCartaView ? `${b.name || m.branch.org} · Carta para mesas` : `${b.name || m.branch.org} · Carta online`;
+    const shopName = b.name ? (m.branch && m.branch.name && m.branch.name !== b.name ? `${b.name} · ${m.branch.name}` : b.name) : m.branch.org;
+    document.title = `${shopName} · Carta para mesas`;
+
+    const fontSizeStyle = salon.fontSize === 'sm' ? 'font-size:0.86em;' : salon.fontSize === 'lg' ? 'font-size:1.14em;' : 'font-size:1em;';
+
+    const q = query.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+    const match = (/** @type {PZ.Product} */ p) => !q || (p.name + ' ' + (p.desc || '')).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(q);
+    const visibleProducts = m.products.filter(match);
+
+    const cartaHtml = C.renderSalonHtml({
+      shop: { name: shopName, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, instagram: b.instagram, logo: s.logo },
+      categories: m.categories,
+      products: visibleProducts,
+      cfg: salon,
+      interactive: true,
+    });
+
+    root.innerHTML = `
+      ${preview ? '<div class="c-preview-tag">👀 Vista previa de la Carta del Salón · así la ven los clientes en sus mesas</div>' : ''}
+      <div class="c-salon-view">
+        <div class="c-salon-topbar">
+          <div class="c-salon-topbar-in">
+            <span>🍽️ <b>Carta para comensales en el salón</b> ${tableParam ? `· Mesa <b>${esc(tableParam)}</b>` : ''}</span>
+            ${on.enabled ? `<a href="?l=${encodeURIComponent(slug)}" class="c-salon-switch-btn">🛵 ¿Querés pedir a domicilio? Ir a pedidos online →</a>` : ''}
+          </div>
+        </div>
+
+        <div class="c-salon-card" style="${fontSizeStyle}">
+          <div class="c-salon-search-wrap">
+            <label class="c-salon-search">
+              <span aria-hidden="true">🔎</span>
+              <input type="search" placeholder="Buscar plato o ingrediente…" value="${esc(query)}" aria-label="Buscar en la carta">
+            </label>
+          </div>
+
+          <div class="c-salon-body">
+            ${cartaHtml}
+          </div>
+
+          <footer class="c-salon-footer">
+            <p class="c-muted small">Carta para comensales en el salón. Precios en pesos argentinos.</p>
+            ${b.phone ? `<p class="small">¿Dudas o pedidos especiales? Consultá con el mozo o llamanos al <a href="tel:${esc(b.phone.replace(/[^\d+]/g, ''))}">${esc(b.phone)}</a></p>` : ''}
+          </footer>
+        </div>
+      </div>
+    `;
+
+    const searchInp = inp('.c-salon-search input', root);
+    if (searchInp) {
+      searchInp.addEventListener('input', () => {
+        query = searchInp.value;
+        renderSalonView();
+      });
+    }
+
+    root.querySelectorAll('[data-p]').forEach((el) => {
+      const pid = el.getAttribute('data-p');
+      if (pid) {
+        (/** @type {HTMLElement} */ (el)).onclick = () => openProductInfo(pid);
+      }
+    });
+  }
+
+  /* ---------------- carta ---------------- */
+  function render() {
+    if (isCartaView) {
+      renderSalonView();
+      return;
+    }
+    const m = /** @type {PZ.CartaMenu} */ (menu);
+    const s = m.settings;
+    const on = { ...C.defaults(), ...s.online };
+    const salon = (on && on.salonMenu) || m.settings.printMenu || {};
+    applyTheme(on);
+    const b = s.business || {};
+    document.title = `${b.name || m.branch.org} · Carta online`;
     const open = C.isOpen(on) && m.open;
 
     const hasCatFilter = isCartaView && Array.isArray(salon.categories) && salon.categories.length > 0;

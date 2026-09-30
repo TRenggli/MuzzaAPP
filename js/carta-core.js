@@ -308,11 +308,186 @@
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/g, '');
   const validSlug = (/** @type {string} */ s) => /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/.test(String(s || ''));
 
+  const ensureBase = (base) => {
+    let s = String(base || '').trim();
+    if (!s) return './';
+    if (s.endsWith('.html')) s = s.replace(/[^/]*$/, '');
+    if (!s.endsWith('/')) s += '/';
+    return s;
+  };
+
   /** Dirección pública de la carta @param {string} base @param {string} slug */
-  const cartaUrl = (base, slug) => `${String(base).replace(/[^/]*$/, '')}carta.html?l=${encodeURIComponent(slug)}`;
+  const cartaUrl = (base, slug) => `${ensureBase(base)}carta.html?l=${encodeURIComponent(slug)}`;
 
   /** Dirección pública de la carta para mesas del salón @param {string} base @param {string} slug @param {string} [qrToken] */
-  const salonUrl = (base, slug, qrToken) => `${String(base).replace(/[^/]*$/, '')}carta.html?l=${encodeURIComponent(slug)}&vista=carta${qrToken ? `&qr=${encodeURIComponent(qrToken)}` : ''}`;
+  const salonUrl = (base, slug, qrToken) => `${ensureBase(base)}carta.html?l=${encodeURIComponent(slug)}&vista=carta${qrToken ? `&qr=${encodeURIComponent(qrToken)}` : ''}`;
+
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const KNOWN_RANKS = {
+    'u': 1, 'unidad': 1, 'porción': 1, 'porcion': 1, 'individual': 1, 'chica': 2,
+    'media': 3, 'mediana': 3, 'media docena': 4,
+    'grande': 5, 'docena': 6, 'familiar': 7, 'gigante': 8,
+  };
+
+  /**
+   * Determina las columnas de variantes para una lista de productos
+   * @param {PZ.Product[]} ps
+   * @param {PZ.Category} [c]
+   */
+  function getTableColumns(ps, c) {
+    if (!Array.isArray(ps) || !ps.length) return [];
+    const hasMultipleVariants = ps.some((p) => (p.variants || []).length > 1);
+    if (!hasMultipleVariants) {
+      return [];
+    }
+
+    const colMap = new Map();
+    ps.forEach((p) => {
+      const vars = p.variants || [];
+      vars.forEach((v) => {
+        const raw = String(v.name || '').trim();
+        if (!raw) return;
+        const key = norm(raw);
+        if (vars.length === 1 && norm(p.name) === key) return;
+
+        const price = Number(v.price) || 0;
+        if (!colMap.has(key)) {
+          const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+          colMap.set(key, { key, label, avgPrice: price, count: 1 });
+        } else {
+          const cur = colMap.get(key);
+          if (cur) {
+            cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
+            cur.count += 1;
+          }
+        }
+      });
+    });
+
+    const cols = Array.from(colMap.values()).filter((col) => {
+      if (KNOWN_RANKS[col.key]) return true;
+      if (col.count >= 2) return true;
+      return ps.some((p) => (p.variants || []).length > 1 && (p.variants || []).some((v) => norm(v.name) === col.key));
+    }).sort((x, y) => {
+      const rx = KNOWN_RANKS[x.key] || 99;
+      const ry = KNOWN_RANKS[y.key] || 99;
+      if (rx !== ry) return rx - ry;
+      return x.avgPrice - y.avgPrice;
+    });
+
+    return cols;
+  }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /**
+   * Genera la tabla HTML para una categoría o lista de productos de la carta del salón
+   * @param {PZ.Product[]} ps
+   * @param {PZ.Category} [c]
+   * @param {PZ.SalonMenuConfig} [cfg]
+   * @param {boolean} [interactive]
+   */
+  function renderSalonTable(ps, c, cfg = {}, interactive = false) {
+    const cols = getTableColumns(ps, c);
+    const multiCol = cols.length > 1;
+    const showBadges = cfg.showBadges !== false;
+    const showDesc = cfg.showDesc !== false;
+
+    return `
+      <table class="tbl carta-tbl" style="width:100%;table-layout:fixed;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding:8px 6px">Producto</th>
+            ${multiCol ? cols.map((col) => `<th class="right col-price" style="width:115px;text-align:right;padding:8px 6px">${esc(col.label)}</th>`).join('') : '<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'}
+          </tr>
+        </thead>
+        <tbody>
+          ${ps.map((p) => {
+            const vars = p.variants || [];
+            const soloEntera = c && c.allowHalf && p.allowHalf === false;
+            const clickAttr = interactive ? `data-p="${esc(p.id)}" style="cursor:pointer"` : '';
+            const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
+              <b style="color:var(--c-ink, #1d1b19);font-size:1.02em">${esc(p.name)}</b>
+              ${showBadges && soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
+              ${showDesc && p.desc ? `<div class="small muted" style="margin-top:2px;color:var(--c-muted, rgba(29,27,25,0.65));line-height:1.35">${esc(p.desc)}</div>` : ''}
+            </td>`;
+
+            if (!multiCol) {
+              const price = vars[0] ? vars[0].price : 0;
+              return `<tr ${clickAttr}>${nameCell}<td class="right nowrap col-price" style="width:120px;text-align:right;padding:10px 6px;font-weight:bold;color:var(--c-primary, #d7263d);font-size:1.05em">${money(price)}</td></tr>`;
+            }
+
+            const matchesAny = vars.some((v) => cols.some((col) => norm(v.name) === col.key));
+            if (vars.length === 1 && !matchesAny) {
+              return `<tr ${clickAttr}>${nameCell}<td colspan="${cols.length}" class="right nowrap col-price" style="text-align:right;padding:10px 6px"><b style="color:var(--c-primary, #d7263d)">${money(vars[0].price)}</b>${vars[0].name ? ` <small class="muted">(${esc(vars[0].name)})</small>` : ''}</td></tr>`;
+            }
+
+            const priceCells = cols.map((col) => {
+              const v = vars.find((x) => norm(x.name) === col.key);
+              return `<td class="right nowrap col-price" style="width:115px;text-align:right;padding:10px 6px">${v ? `<b style="color:var(--c-primary, #d7263d)">${money(v.price)}</b>` : '<span class="muted" style="opacity:0.4">—</span>'}</td>`;
+            }).join('');
+
+            return `<tr ${clickAttr}>${nameCell}${priceCells}</tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  /**
+   * Genera el HTML estructurado de la carta del salón
+   * @param {{
+   *   shop?: { name?: string, slogan?: string, phone?: string, address?: string, city?: string, instagram?: string, logo?: string },
+   *   categories: PZ.Category[],
+   *   products: PZ.Product[],
+   *   cfg?: PZ.SalonMenuConfig,
+   *   interactive?: boolean
+   * }} opts
+   */
+  function renderSalonHtml({ shop, categories, products, cfg = {}, interactive = false }) {
+    const prepared = prepareSalonCategories(categories, products, cfg.categories && cfg.categories.length > 0 ? cfg.categories : undefined, cfg.sortBy);
+
+    let contentHtml = '';
+    if (!prepared.length) {
+      contentHtml = '<div class="empty small" style="padding:32px;text-align:center;color:var(--c-muted, #777)">No hay productos disponibles en las categorías seleccionadas.</div>';
+    } else if (cfg.groupByCategory === false) {
+      const allProds = prepared.flatMap((x) => x.products);
+      const sortedProds = sortProducts(allProds, cfg.sortBy);
+      contentHtml = `<div style="margin-top:16px">${renderSalonTable(sortedProds, undefined, cfg, interactive)}</div>`;
+    } else {
+      contentHtml = prepared.map((item, idx) => {
+        const c = item.category;
+        const ps = item.products;
+        const pageBreakClass = cfg.pageBreakPerCat && idx > 0 ? 'carta-cat-section page-break' : 'carta-cat-section';
+        const pageBreakDivider = cfg.pageBreakPerCat && idx > 0
+          ? '<div class="page-break-indicator" style="margin:24px 0;text-align:center;border-top:2px dashed var(--c-line, #e2ded9);padding-top:6px;font-size:0.8em;color:var(--c-muted, #777);font-weight:bold"><span class="badge">📄 Salto de página para cartas de varias hojas</span></div>'
+          : '';
+
+        return `
+          ${pageBreakDivider}
+          <div class="${pageBreakClass}" style="margin-top:22px;page-break-inside:avoid;${cfg.pageBreakPerCat && idx > 0 ? 'page-break-before:always;' : ''}">
+            <h3 style="margin:0 0 8px;border-bottom:3px dotted var(--c-primary, #d7263d);padding-bottom:4px;display:flex;align-items:center;gap:8px;color:var(--c-ink, #1d1b19)">
+              <span>${esc(c.icon)}</span> <span>${esc(c.name)}</span>
+              ${cfg.showBadges !== false && c.allowHalf ? '<span class="badge" style="font-size:0.7em;font-weight:normal;margin-left:auto;background:color-mix(in srgb, var(--c-primary, #d7263d) 10%, transparent);color:var(--c-primary, #d7263d);padding:3px 8px;border-radius:6px">🍕 Permite mitad y mitad</span>' : ''}
+            </h3>
+            ${renderSalonTable(ps, c, cfg, interactive)}
+          </div>`;
+      }).join('');
+    }
+
+    const b = shop || {};
+    const logoHtml = b.logo
+      ? `<img src="${esc(b.logo)}" alt="" style="width:70px;height:70px;border-radius:50%;object-fit:cover;margin-bottom:6px">`
+      : `<div style="width:64px;height:64px;border-radius:50%;background:color-mix(in srgb, var(--c-primary, #d7263d) 12%, transparent);display:grid;place-items:center;font-size:32px;margin:0 auto 6px">🍕</div>`;
+
+    return `
+      <div style="text-align:center;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--c-line, #e5e2de)">
+        ${logoHtml}
+        <h1 style="color:var(--c-primary, #d7263d);margin:4px 0 2px;font-size:1.9em">${esc(b.name || 'Pizzería')}</h1>
+        ${b.slogan || b.phone ? `<div class="muted" style="color:var(--c-muted, rgba(29,27,25,0.7));font-size:0.95em">${[b.slogan && esc(b.slogan), b.phone && esc(b.phone)].filter(Boolean).join(' · ')}</div>` : ''}
+        ${b.address ? `<div class="muted small" style="margin-top:2px;color:var(--c-muted, rgba(29,27,25,0.6))">📍 ${esc(b.address)}${b.city ? ', ' + esc(b.city) : ''}</div>` : ''}
+      </div>
+      ${contentHtml}`;
+  }
 
   /**
    * Ordena productos según el criterio configurado
@@ -481,6 +656,7 @@
     waNumber, waLink, waMessage, shortDate,
     slugify, validSlug, cartaUrl, salonUrl,
     sortProducts, prepareSalonCategories,
+    getTableColumns, renderSalonTable, renderSalonHtml,
     haversineDistance, estimateDeliveryEta, repartoUrl,
     generateDriverCode, parseDriverCode, matchDriver,
   };

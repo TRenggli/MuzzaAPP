@@ -113,13 +113,44 @@ window.PZ.views = window.PZ.views || {};
     },
 
     qrSvg(text, cell = 4, margin = 2) {
-      if (!window.qrcode || !text) return '';
+      const qrFn = typeof qrcode !== 'undefined' ? qrcode : (typeof window !== 'undefined' && window.qrcode ? window.qrcode : (typeof globalThis !== 'undefined' ? globalThis.qrcode : null));
+      if (!qrFn || !text) return '';
       try {
-        qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
-        const qr = qrcode(0, 'M');
+        if (qrFn.stringToBytesFuncs && qrFn.stringToBytesFuncs['UTF-8']) {
+          qrFn.stringToBytes = qrFn.stringToBytesFuncs['UTF-8'];
+        }
+        const qr = qrFn(0, 'M');
         qr.addData(text);
         qr.make();
-        return qr.createSvgTag({ cellSize: cell, margin, scalable: false });
+        const svg = qr.createSvgTag({ cellSize: cell, margin, scalable: false });
+        if (svg) return svg;
+        const durl = qr.createDataURL(cell, margin);
+        return `<img src="${durl}" width="${cell * 41}" height="${cell * 41}" style="width:100%;height:auto;display:block" alt="Código QR">`;
+      } catch (e) {
+        console.error('[PZ.util.qrSvg error]', e);
+        try {
+          const qr = qrFn(0, 'M');
+          qr.addData(text);
+          qr.make();
+          const durl = qr.createDataURL(cell, margin);
+          return `<img src="${durl}" width="${cell * 41}" height="${cell * 41}" style="width:100%;height:auto;display:block" alt="Código QR">`;
+        } catch (e2) {
+          return '';
+        }
+      }
+    },
+
+    qrDataUrl(text, cell = 5, margin = 2) {
+      const qrFn = typeof qrcode !== 'undefined' ? qrcode : (typeof window !== 'undefined' && window.qrcode ? window.qrcode : (typeof globalThis !== 'undefined' ? globalThis.qrcode : null));
+      if (!qrFn || !text) return '';
+      try {
+        if (qrFn.stringToBytesFuncs && qrFn.stringToBytesFuncs['UTF-8']) {
+          qrFn.stringToBytes = qrFn.stringToBytesFuncs['UTF-8'];
+        }
+        const qr = qrFn(0, 'M');
+        qr.addData(text);
+        qr.make();
+        return qr.createDataURL(cell, margin);
       } catch (e) {
         return '';
       }

@@ -206,6 +206,21 @@
       d.users = S.ctx.members.map((m) => ({ id: m.user_id, name: m.name, username: m.username, role: m.role, active: m.active, branchIds: m.branch_ids || [], lastLogin: m.last_login }));
       d.demo = d.orders.some((o) => o.demo);
       d.settings.business = d.settings.business || {};
+      let patched = false;
+      (d.products || []).forEach((p) => {
+        if (p.variants && p.variants.length === 1) {
+          const v = p.variants[0];
+          const vNorm = String(v.name || '').trim().toLowerCase();
+          const pNorm = String(p.name || '').trim().toLowerCase();
+          if (vNorm === pNorm && (p.categoryId === 'c-piz' || p.categoryId === 'c-esp')) {
+            v.name = 'Grande';
+            patched = true;
+          }
+        }
+      });
+      if (patched) {
+        S.save();
+      }
     },
 
     rebuildShadow() {

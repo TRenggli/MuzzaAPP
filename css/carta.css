@@ -315,6 +315,104 @@ button { cursor: pointer; }
 .c-toast.warn { background: #b3261e; }
 
 /* ---------- carta del salón para comensales ---------- */
+.c-salon-view {
+  min-height: 100vh;
+  padding: 16px 12px 60px;
+  background: var(--c-bg);
+}
+.c-salon-topbar {
+  max-width: 840px;
+  margin: 0 auto 16px;
+  background: #1d1b19;
+  color: #fff;
+  border-radius: 14px;
+  padding: 10px 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+}
+.c-salon-topbar-in {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.9em;
+}
+.c-salon-switch-btn {
+  background: var(--c-primary);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.88em;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.c-salon-switch-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.c-salon-card {
+  max-width: 840px;
+  margin: 0 auto;
+  background: #fff;
+  color: #1d1b19;
+  border-radius: 24px;
+  padding: 28px 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.07);
+  border: 1px solid var(--c-line);
+}
+@media (max-width: 600px) {
+  .c-salon-card { padding: 18px 14px; border-radius: 18px; }
+}
+.c-salon-search-wrap {
+  margin: 0 auto 20px;
+  max-width: 460px;
+}
+.c-salon-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f7f5f2;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  padding: 8px 14px;
+}
+.c-salon-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 0.95em;
+  color: #1d1b19;
+}
+.c-salon-footer {
+  text-align: center;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--c-line);
+  color: var(--c-muted);
+}
+.carta-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.carta-tbl th {
+  border-bottom: 2px solid var(--c-line);
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-muted);
+  font-weight: 700;
+}
+.carta-tbl tr:not(:last-child) td {
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 60%, transparent);
+}
+.carta-tbl tr[data-p] {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.carta-tbl tr[data-p]:hover {
+  background: rgba(0,0,0,0.02);
+}
+
 .c-card-salon {
   text-align: left;
   display: flex;
