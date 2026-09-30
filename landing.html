@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es-AR" data-theme="margherita">
+<html lang="es-AR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -10,9 +10,13 @@
   <link rel="apple-touch-icon" href="img/icon.svg">
   <script>
     (function () {
-      const saved = localStorage.getItem('pz-theme');
+      const p = new URLSearchParams(location.search);
+      const urlTheme = p.get('theme');
+      const saved = urlTheme || localStorage.getItem('pz-theme');
       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      document.documentElement.dataset.theme = saved || (prefersDark ? 'horno' : 'margherita');
+      const theme = saved || (prefersDark ? 'horno' : 'margherita');
+      document.documentElement.dataset.theme = theme;
+      if (urlTheme) localStorage.setItem('pz-theme', urlTheme);
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,6 +26,7 @@
   <link rel="stylesheet" href="css/responsive.css">
   <style>
     :root {
+      --hero-grad: linear-gradient(135deg, rgba(215, 38, 61, 0.08) 0%, rgba(255, 209, 102, 0.15) 100%);
       --hero-grad: linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, transparent) 0%, color-mix(in srgb, var(--accent) 15%, transparent) 100%);
       --card-hover: 0 16px 36px -10px rgba(0, 0, 0, 0.35);
     }
@@ -41,6 +46,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      background: var(--bg);
       background: color-mix(in srgb, var(--bg) 92%, transparent);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--line);
