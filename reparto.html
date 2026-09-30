@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es-AR" data-theme="horno">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>MuzzaAPP · Reparto en Vivo</title>
+  <meta name="description" content="Panel del repartidor para entregas con seguimiento GPS en tiempo real.">
+  <meta name="theme-color" content="#17110e">
+  <link rel="icon" href="img/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="img/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <style>
+    body { background: var(--bg); color: var(--ink); font-family: 'Nunito', sans-serif; margin: 0; padding: 0; }
+    .reparto-container { max-width: 620px; margin: 0 auto; padding: 14px 16px 80px; }
+    .driver-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+    .gps-pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 0.82rem; padding: 5px 12px; border-radius: 999px; }
+    .gps-pill.on { background: rgba(127, 176, 105, 0.2); color: var(--ok); border: 1px solid var(--ok); }
+    .gps-pill.off { background: rgba(255, 93, 93, 0.15); color: var(--err); border: 1px solid var(--err); }
+    .gps-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: gpsPulse 1.2s infinite; }
+    @keyframes gpsPulse { 0% { opacity: 0.3; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0.3; transform: scale(0.9); } }
+    .delivery-card { background: var(--card); border: 2px solid var(--line); border-radius: 16px; padding: 16px; margin-top: 14px; box-shadow: var(--shadow); position: relative; }
+    .delivery-card.in-route { border-color: var(--primary); }
+    .del-badge { font-weight: 800; font-size: 0.78rem; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div id="reparto" class="reparto-container">
+    <div style="text-align:center;padding:50px 0;"><div class="spin-pizza" style="font-size:3rem">🛵</div><p>Cargando entregas…</p></div>
+  </div>
+
+  <script src="vendor/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/carta-core.js"></script>
+  <script src="js/reparto.js"></script>
+</body>
+</html>

@@ -299,6 +299,41 @@
   /** Dirección pública de la carta @param {string} base @param {string} slug */
   const cartaUrl = (base, slug) => `${String(base).replace(/[^/]*$/, '')}carta.html?l=${encodeURIComponent(slug)}`;
 
+  /**
+   * Distancia en kilómetros entre dos coordenadas GPS (Haversine)
+   * @param {number} lat1
+   * @param {number} lon1
+   * @param {number} lat2
+   * @param {number} lon2
+   */
+  function haversineDistance(lat1, lon1, lat2, lon2) {
+    if (lat1 === lat2 && lon1 === lon2) return 0;
+    const toRad = (/** @type {number} */ x) => (x * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c * 100) / 100;
+  }
+
+  /**
+   * Estimación de minutos de llegada según distancia y velocidad media
+   * @param {number} distanceKm
+   * @param {number} [speedKmh]
+   */
+  function estimateDeliveryEta(distanceKm, speedKmh = 25) {
+    if (!distanceKm || distanceKm <= 0) return 3;
+    const travelMins = Math.ceil((distanceKm / Math.max(10, speedKmh)) * 60) + 2;
+    return Math.max(2, travelMins);
+  }
+
+  /** Dirección pública para la app del repartidor @param {string} base @param {string} slug @param {string} [driver] */
+  const repartoUrl = (base, slug, driver = '') =>
+    `${String(base).replace(/[^/]*$/, '')}reparto.html?l=${encodeURIComponent(slug)}${driver ? `&d=${encodeURIComponent(driver)}` : ''}`;
+
   PZ.carta = {
     THEMES, FONTS, TYPE_LABEL, PAY_LABEL, DAYS,
     money, defaults, themeVars, contrast, inkOn,
@@ -306,5 +341,6 @@
     priceLine, totals, validLines, extraApplies,
     waNumber, waLink, waMessage, shortDate,
     slugify, validSlug, cartaUrl,
+    haversineDistance, estimateDeliveryEta, repartoUrl,
   };
 })((window.PZ = window.PZ || {}));

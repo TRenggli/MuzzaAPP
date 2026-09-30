@@ -666,6 +666,11 @@
     ['entregado', '🏁', 'Entregado', '¡Que lo disfrutes!'],
   ];
 
+  /** @type {any} */
+  let trackMap = null;
+  /** @type {any} */
+  let trackTimer = null;
+
   async function renderTrack() {
     const m = /** @type {PZ.CartaMenu} */ (menu);
     applyTheme({ ...C.defaults(), ...m.settings.online });
@@ -677,27 +682,55 @@
     const steps = STEPS.filter(([k]) => k !== 'en_camino' || info.type === 'delivery');
     const idx = steps.findIndex(([k]) => k === status);
     const on = { ...C.defaults(), ...m.settings.online };
+
+    /** @type {any} */
+    let liveLoc = null;
+    if (info.type === 'delivery' && status === 'en_camino') {
+      try {
+        liveLoc = await rpc('carta_delivery_location', { p_order_id: trackId });
+      } catch (e) {
+        liveLoc = null;
+      }
+    }
+
+    const hasLiveGps = !!(liveLoc && liveLoc.lat && liveLoc.lng);
+
     root.innerHTML = `
       <header class="c-hero small"><div class="c-hero-in"><h1>${esc(b.name || m.branch.org)}</h1><p class="c-slogan">Pedido W-${esc(String(info.number))}</p></div></header>
       <main class="c-main">
         ${status === 'rechazado' || status === 'cancelado' ? `<div class="c-warn">😔 El local no pudo tomar este pedido${info.reason ? `: ${esc(info.reason)}` : '.'}</div>` : `
         <ol class="c-track">${steps.map(([k, ico, title, sub], i) => `<li class="${i < idx ? 'done' : i === idx ? 'now' : ''}"><span class="t-ico" aria-hidden="true">${ico}</span><div><b>${title}</b><small>${i === idx ? sub : ''}</small></div></li>`).join('')}</ol>`}
-        ${(info.type === 'delivery' && info.address && status !== 'rechazado' && status !== 'cancelado') ? `
+        ${(info.type === 'delivery' && (info.address || hasLiveGps) && status !== 'rechazado' && status !== 'cancelado') ? `
           <div class="c-card-plain" style="margin-top:14px;padding:14px;text-align:left">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
               <b>🛵 Seguimiento del envío</b>
-              <span class="c-badge ${status === 'en_camino' ? 'open' : ''}">${status === 'en_camino' ? '🛵 En camino a tu casa' : status === 'listo' ? '🍕 Listo para salir' : '🔥 En preparación'}</span>
+              <span class="c-badge ${status === 'en_camino' ? 'open' : ''}">${status === 'en_camino' ? (hasLiveGps ? '🛵 Repartidor en viaje' : '🛵 En camino') : status === 'listo' ? '🍕 Listo para salir' : '🔥 En preparación'}</span>
             </div>
-            <p class="c-muted small" style="margin:0 0 10px">📍 Entrega en: <b>${esc(info.address)}</b></p>
-            <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);background:#f2efe9">
-              <iframe width="100%" height="220" style="border:0;display:block" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
-                src="https://maps.google.com/maps?q=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}&t=&z=15&ie=UTF8&iwloc=&output=embed"></iframe>
-              <div style="position:absolute;bottom:8px;right:8px;background:rgba(255,255,255,0.92);padding:4px 10px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.15)">
-                ${status === 'en_camino' ? `⏱️ Llegada estimada ~${Math.max(5, (on.deliveryMinutes || 40) - 20)} min` : `⏱️ Demora total estimada ~${on.deliveryMinutes || 40} min`}
+            ${info.address ? `<p class="c-muted small" style="margin:0 0 10px">📍 Entrega en: <b>${esc(info.address)}</b></p>` : ''}
+            ${hasLiveGps ? `
+              <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);background:#f2efe9">
+                <div id="live-delivery-map" style="width:100%;height:250px;"></div>
+                <div style="position:absolute;bottom:8px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:999">
+                  <div style="background:rgba(255,255,255,0.95);padding:5px 12px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.18);color:#1b4332;display:flex;align-items:center;gap:6px">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e7d32;animation:c-pulse 1.4s infinite"></span>
+                    GPS en vivo (${esc(liveLoc ? liveLoc.driver : 'Repartidor')})
+                  </div>
+                  <div style="background:rgba(255,255,255,0.95);padding:5px 12px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.18)">
+                    ⏱️ En viaje
+                  </div>
+                </div>
               </div>
-            </div>
+            ` : `
+              <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);background:#f2efe9">
+                <iframe width="100%" height="220" style="border:0;display:block" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+                  src="https://maps.google.com/maps?q=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}&t=&z=15&ie=UTF8&iwloc=&output=embed"></iframe>
+                <div style="position:absolute;bottom:8px;right:8px;background:rgba(255,255,255,0.92);padding:4px 10px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.15)">
+                  ${status === 'en_camino' ? `⏱️ Llegada estimada ~${Math.max(5, (on.deliveryMinutes || 40) - 20)} min` : `⏱️ Demora total estimada ~${on.deliveryMinutes || 40} min`}
+                </div>
+              </div>
+            `}
             <div style="margin-top:8px;text-align:right">
-              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}" target="_blank" rel="noopener" class="small" style="color:var(--pri, #d7263d);font-weight:600">Ver en Google Maps ↗</a>
+              <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(info.address + (b.city ? ', ' + b.city : ''))}" target="_blank" rel="noopener" class="small" style="color:var(--c-primary, #d7263d);font-weight:600">Ver en Google Maps ↗</a>
             </div>
           </div>` : ''}
         <div class="c-card-plain">
@@ -708,7 +741,32 @@
         <a class="c-btn ghost block" href="?l=${encodeURIComponent(slug)}">← Volver a la carta</a>
         <p class="c-muted small center">Esta pantalla se actualiza sola.</p>
       </main>`;
-    if (!['entregado', 'rechazado', 'cancelado'].includes(status)) setTimeout(renderTrack, 15000);
+
+    const Leaflet = /** @type {any} */ (window).L;
+    if (hasLiveGps && Leaflet && liveLoc) {
+      const mapEl = document.getElementById('live-delivery-map');
+      if (mapEl) {
+        try {
+          if (trackMap) {
+            trackMap.remove();
+            trackMap = null;
+          }
+          trackMap = Leaflet.map(mapEl, { zoomControl: false, attributionControl: false }).setView([liveLoc.lat, liveLoc.lng], 16);
+          Leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(trackMap);
+          const motoHtml = `<div style="background:#fff;border:2.5px solid var(--c-primary,#d7263d);border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-size:20px;transform:translate(-50%,-50%)">🛵</div>`;
+          const icon = Leaflet.divIcon({ className: 'c-moto-marker', html: motoHtml, iconSize: [0, 0] });
+          Leaflet.marker([liveLoc.lat, liveLoc.lng], { icon }).addTo(trackMap);
+        } catch (err) {
+          console.warn('Error inicializando mapa Leaflet:', err);
+        }
+      }
+    }
+
+    const pollInterval = (status === 'en_camino') ? 7000 : 15000;
+    if (!['entregado', 'rechazado', 'cancelado'].includes(status)) {
+      clearTimeout(trackTimer);
+      trackTimer = setTimeout(renderTrack, pollInterval);
+    }
   }
 
   boot();

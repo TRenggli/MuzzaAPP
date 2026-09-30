@@ -298,6 +298,7 @@ button { cursor: pointer; }
 .c-track small { color: var(--c-muted); }
 @keyframes c-pulse { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--c-primary) 20%, transparent); } }
 .c-card-plain { background: var(--c-card); border-radius: 16px; padding: 10px 14px; border: 1px solid var(--c-line); margin: 10px 0; }
+.c-moto-marker { background: transparent !important; border: none !important; }
 
 /* ---------- avisos ---------- */
 .c-toast {

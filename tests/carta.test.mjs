@@ -206,4 +206,26 @@ test('carta y mostrador: condimentos configurables con defaults y exclusiones/in
   assert.deepEqual(tags, ['Sin chimi', 'Con ají molido']);
 });
 
+test('tracking gps: distancia haversine y estimación de tiempo de llegada', () => {
+  // Coordenadas Obelisco de Buenos Aires: -34.6037, -58.3816
+  // Coordenadas Plaza de Mayo: -34.6083, -58.3712
+  const d = C.haversineDistance(-34.6037, -58.3816, -34.6083, -58.3712);
+  assert.ok(d >= 1.0 && d <= 1.2, `Distancia esperada ~1.1km, dio ${d}km`);
+
+  // Misma ubicación debe dar 0 km
+  assert.equal(C.haversineDistance(-34.6037, -58.3816, -34.6037, -58.3816), 0);
+
+  // Estimación de llegada para 1.1 km a 25 km/h: (1.1 / 25)*60 = ~2.64 min -> ceil 3 + 2 = 5 min
+  const eta5 = C.estimateDeliveryEta(1.1, 25);
+  assert.equal(eta5, 5);
+
+  // Sin distancia o negativa retorna margen mínimo de 3 minutos
+  assert.equal(C.estimateDeliveryEta(0), 3);
+  assert.equal(C.estimateDeliveryEta(-1), 3);
+
+  // URL del repartidor
+  const url = C.repartoUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'centro', 'Lucas');
+  assert.equal(url, 'https://trenggli.github.io/MuzzaAPP/reparto.html?l=centro&d=Lucas');
+});
+
 

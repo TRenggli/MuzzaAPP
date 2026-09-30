@@ -149,12 +149,26 @@
       return;
     }
     if (act === 'driver') {
-      const drivers = S.data.settings.drivers;
+      const drivers = S.data.settings.drivers || [];
+      const slug = (S.data.branch && S.data.branch.slug) || '';
+      const repUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '') : ('reparto.html?l=' + encodeURIComponent(slug));
       const m = PZ.modal({
         title: '🛵 Asignar repartidor', size: 'sm',
-        body: `<div class="opt-grid">${drivers.map((d) => `<button class="opt ${o.driver === d ? 'on' : ''}" data-d="${U.esc(d)}">${U.esc(d)}</button>`).join('')}</div>${drivers.length ? '' : '<p class="muted">Cargá repartidores en Configuración.</p>'}`,
+        body: `<div class="opt-grid">${drivers.map((d) => `<button class="opt ${o.driver === d ? 'on' : ''}" data-d="${U.esc(d)}">${U.esc(d)}</button>`).join('')}</div>${drivers.length ? '' : '<p class="muted">Cargá repartidores en Configuración.</p>'}<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><button class="btn ghost sm" data-act="copy-driver-link" style="justify-content:center">📲 Copiar link para el repartidor</button><a class="btn ghost sm" href="${U.esc(repUrl)}" target="_blank" rel="noopener" style="justify-content:center">📱 Abrir panel de repartidor ↗</a></div>`,
       });
       m.el.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => { o.driver = b.dataset.d; S.save(); m.close(); render(el); });
+      const copyBtn = m.el.querySelector('[data-act=copy-driver-link]');
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          try {
+            const currentRepUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '') : ('reparto.html?l=' + encodeURIComponent(slug));
+            await navigator.clipboard.writeText(currentRepUrl);
+            PZ.toast('Link copiado. Mandaselo por WhatsApp al repartidor 📲');
+          } catch (e) {
+            PZ.toast('No se pudo copiar el link', 'warn');
+          }
+        };
+      }
       return;
     }
     if (act === 'cancel') {
