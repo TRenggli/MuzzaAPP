@@ -330,9 +330,88 @@
     return Math.max(2, travelMins);
   }
 
-  /** Dirección pública para la app del repartidor @param {string} base @param {string} slug @param {string} [driver] @param {string} [branchId] */
-  const repartoUrl = (base, slug, driver = '', branchId = '') =>
-    `${String(base).replace(/[^/]*$/, '')}reparto.html?l=${encodeURIComponent(slug)}${branchId ? `&b=${encodeURIComponent(branchId)}` : ''}${driver ? `&d=${encodeURIComponent(driver)}` : ''}`;
+  /** Dirección pública para la app del repartidor @param {string} base @param {string} slug @param {string} [driver] @param {string} [branchId] @param {string} [code] */
+  const repartoUrl = (base, slug, driver = '', branchId = '', code = '') => {
+    let url = `${String(base).replace(/[^/]*$/, '')}reparto.html?l=${encodeURIComponent(slug)}`;
+    if (branchId) url += `&b=${encodeURIComponent(branchId)}`;
+    if (driver) url += `&d=${encodeURIComponent(driver)}`;
+    if (code) url += `&c=${encodeURIComponent(code)}`;
+    return url;
+  };
+
+  /**
+   * Genera un identificador único para repartidor (ej: "DEL-101", "DIEGO-005")
+   * @param {string} [prefix]
+   * @param {number} [num]
+   */
+  function generateDriverCode(prefix = 'DEL', num = 101) {
+    const p = String(prefix || 'DEL').replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || 'DEL';
+    const n = Math.max(1, Math.round(Number(num) || 1));
+    const pad = p === 'DEL' ? String(n) : String(n).padStart(3, '0');
+    return `${p}-${pad}`;
+  }
+
+  /**
+   * Parsea un código de repartidor ingresado o de URL
+   * @param {string} rawInput
+   * @param {string} [fallbackSlug]
+   */
+  function parseDriverCode(rawInput, fallbackSlug = '') {
+    const raw = String(rawInput || '').trim().toUpperCase();
+    if (!raw) return { slug: fallbackSlug || '', code: '', driverNum: '' };
+
+    if (raw.includes('-')) {
+      const parts = raw.split('-');
+      const p0 = parts[0];
+      const rest = parts.slice(1).join('-');
+      if (p0 === 'DEL') {
+        return { slug: fallbackSlug || '', code: raw, driverNum: rest };
+      }
+      return { slug: p0.toLowerCase(), code: raw, driverNum: rest };
+    }
+
+    if (/^\d+$/.test(raw)) {
+      return { slug: fallbackSlug || '', code: `DEL-${raw}`, driverNum: raw };
+    }
+
+    return { slug: fallbackSlug || '', code: raw, driverName: raw };
+  }
+
+  /**
+   * Busca un repartidor por código único o nombre en la lista configurada
+   * @param {Array<string | { name: string, code?: string, active?: boolean }>} driversList
+   * @param {string} codeOrName
+   * @returns {{ name: string, code: string } | null}
+   */
+  function matchDriver(driversList, codeOrName) {
+    if (!Array.isArray(driversList) || !codeOrName) return null;
+    const search = String(codeOrName).trim().toUpperCase();
+    if (!search) return null;
+
+    const parsed = parseDriverCode(search);
+
+    for (const item of driversList) {
+      if (!item) continue;
+      if (typeof item === 'string') {
+        const itemUpper = item.trim().toUpperCase();
+        if (itemUpper === search || (parsed.driverName && itemUpper === parsed.driverName) || itemUpper === parsed.code) {
+          return { name: item.trim(), code: itemUpper };
+        }
+      } else if (typeof item === 'object') {
+        const nameUpper = String(item.name || '').trim().toUpperCase();
+        const codeUpper = String(item.code || '').trim().toUpperCase();
+        if (
+          (codeUpper && codeUpper === search) ||
+          (codeUpper && codeUpper === parsed.code) ||
+          (nameUpper && nameUpper === search) ||
+          (nameUpper && parsed.driverName && nameUpper === parsed.driverName)
+        ) {
+          return { name: item.name.trim(), code: codeUpper || nameUpper };
+        }
+      }
+    }
+    return null;
+  }
 
   PZ.carta = {
     THEMES, FONTS, TYPE_LABEL, PAY_LABEL, DAYS,
@@ -342,5 +421,6 @@
     waNumber, waLink, waMessage, shortDate,
     slugify, validSlug, cartaUrl,
     haversineDistance, estimateDeliveryEta, repartoUrl,
+    generateDriverCode, parseDriverCode, matchDriver,
   };
 })((window.PZ = window.PZ || {}));

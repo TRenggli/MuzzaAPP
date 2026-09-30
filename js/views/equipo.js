@@ -100,6 +100,38 @@
     if (S.data) S.afterLoad();
   }
 
+  function shareDriverAccess(m) {
+    if (!m) return;
+    const bid = (m.branch_ids && m.branch_ids[0]) || S.ctx.branchId;
+    const branch = S.ctx.branches.find((b) => b.id === bid) || (S.data ? S.data.branch : null);
+    const slug = branch ? branch.slug : 'diego';
+    const drivers = (S.data && S.data.settings && S.data.settings.drivers) || [];
+    const matched = PZ.carta ? PZ.carta.matchDriver(drivers, m.name) : null;
+    const code = matched ? matched.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101) : 'DEL-101');
+    const url = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, m.name, '', code) : `reparto.html?c=${code}`;
+    const orgName = S.ctx.org ? S.ctx.org.name : 'la pizzería';
+    const text = `¡Hola ${m.name}! Te paso tu acceso a la App de Repartos de ${orgName} 🛵\n\nEntrá directo desde acá:\n${url}\n\nTu código único de repartidor: *${code}*`;
+
+    const modal = PZ.modal({
+      title: `🛵 Acceso para ${U.esc(m.name)}`,
+      size: 'sm',
+      body: `
+        <p class="muted" style="margin-top:0">El repartidor entra directo sin contraseña usando su código único:</p>
+        <div class="code-big" style="font-size:2rem;text-align:center;padding:12px;background:var(--bg);border-radius:10px;font-family:monospace;font-weight:900;color:var(--primary);margin-bottom:12px">${U.esc(code)}</div>
+        <div class="invite-link" style="display:flex;gap:6px"><input readonly value="${U.esc(url)}" style="font-size:0.85rem;flex:1"><button class="btn sm ghost" data-cp>Copiar</button></div>
+      `,
+      footer: `<button class="btn ghost" data-cp-txt>📋 Copiar mensaje</button><button class="btn primary" data-wa>💬 WhatsApp</button>`,
+    });
+
+    modal.el.querySelector('[data-cp]').onclick = async () => {
+      try { await navigator.clipboard.writeText(url); PZ.toast('Enlace copiado'); } catch (e) { modal.el.querySelector('input').select(); }
+    };
+    modal.el.querySelector('[data-cp-txt]').onclick = async () => {
+      try { await navigator.clipboard.writeText(text); PZ.toast('Mensaje copiado'); } catch (e) { PZ.toast(code, 'info', 5000); }
+    };
+    modal.el.querySelector('[data-wa]').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+  }
+
   function editUser(u, done, { fixedBranch = '' } = {}) {
     const R = A().ROLES;
     const owner = A().isOwner();
@@ -107,14 +139,26 @@
     const branches = PZ.app.allowedBranches();
     const ids = u ? u.branch_ids || [] : fixedBranch ? [fixedBranch] : [];
     const all = u ? !ids.length : false;
+    const drivers = (S.data && S.data.settings && S.data.settings.drivers) || [];
+    const matched = u ? (PZ.carta ? PZ.carta.matchDriver(drivers, u.name) : null) : null;
+    let initialDriverCode = matched ? matched.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101 + drivers.length) : `DEL-${101 + drivers.length}`);
+
     const m = PZ.modal({
       title: u ? '✏️ ' + U.esc(u.name) : '➕ Nueva persona',
       body: `
         <div class="grid-2">
           <label class="field"><span>Nombre</span><input name="name" value="${U.esc(u ? u.name : '')}" autofocus></label>
-          <label class="field"><span>Usuario para ingresar</span><input name="username" value="${U.esc(u ? u.username : '')}" autocapitalize="off" ${u ? 'disabled' : 'placeholder="ej: sofia.centro"'}></label>
+          <label class="field username-field"><span>Usuario para ingresar</span><input name="username" value="${U.esc(u ? u.username : '')}" autocapitalize="off" ${u ? 'disabled' : 'placeholder="ej: sofia.centro"'}></label>
           <label class="field"><span>Rol</span><select name="role">${roles.map((k) => `<option value="${k}" ${u && u.role === k ? 'selected' : !u && k === 'cajero' ? 'selected' : ''}>${R[k].label}</option>`).join('')}</select></label>
-          <label class="field"><span>${u ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña (mínimo 6)'}</span><input name="pass" type="password" autocomplete="new-password"></label>
+          <label class="field pass-field"><span>${u ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña (mínimo 6)'}</span><input name="pass" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="delivery-code-box ${u && u.role === 'delivery' ? '' : 'hidden'}" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--line);">
+          <div class="bold small" style="color:var(--primary);margin-bottom:4px">🛵 Identificador Único de Repartidor</div>
+          <p class="small muted" style="margin:0 0 8px">El repartidor <b>no necesita usuario ni contraseña</b>. Entrará a la app de entregas solo con este código único:</p>
+          <div class="row-flex" style="gap:6px">
+            <input name="driver_code" value="${U.esc(initialDriverCode)}" placeholder="EJ: DEL-101" style="flex:2;font-family:monospace;font-weight:800;text-transform:uppercase">
+            <button type="button" class="btn sm ghost" data-cp-code style="flex:1">📲 Copiar link</button>
+          </div>
         </div>
         <div class="opt-section">Sucursales donde trabaja</div>
         ${owner ? `<label class="check"><input type="checkbox" name="all" ${all ? 'checked' : ''}> Todas las sucursales</label>` : ''}
@@ -126,6 +170,34 @@
     const v = (n) => E.querySelector(`[name=${n}]`).value.trim();
     const allBox = E.querySelector('[name=all]');
     if (allBox) allBox.onchange = () => E.querySelector('.branch-checks').classList.toggle('hidden', allBox.checked);
+
+    const roleSel = E.querySelector('[name=role]');
+    const delBox = E.querySelector('.delivery-code-box');
+    const updateRoleUI = () => {
+      const isDel = roleSel.value === 'delivery';
+      if (delBox) delBox.classList.toggle('hidden', !isDel);
+      if (isDel && !E.querySelector('[name=username]').value && E.querySelector('[name=name]').value) {
+        E.querySelector('[name=username]').value = 'del.' + (PZ.carta ? PZ.carta.slugify(E.querySelector('[name=name]').value) : 'chofer');
+      }
+    };
+    if (roleSel) roleSel.onchange = updateRoleUI;
+
+    const cpCodeBtn = E.querySelector('[data-cp-code]');
+    if (cpCodeBtn) {
+      cpCodeBtn.onclick = async () => {
+        const codeInput = E.querySelector('[name=driver_code]');
+        const code = (codeInput ? codeInput.value.trim().toUpperCase() : '') || initialDriverCode;
+        const slug = (S.data && S.data.branch ? S.data.branch.slug : '') || 'diego';
+        const url = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, v('name'), '', code) : `reparto.html?c=${code}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          PZ.toast(`Link copiado: ${url}`);
+        } catch (e) {
+          PZ.toast(url, 'info', 5000);
+        }
+      };
+    }
+
     E.querySelector('[data-a=x]').onclick = () => m.close();
     const del = E.querySelector('[data-a=del]');
     if (del) del.onclick = async () => {
@@ -141,18 +213,37 @@
       const btn = E.querySelector('[data-a=ok]');
       btn.disabled = true;
       try {
-        const pass = E.querySelector('[name=pass]').value;
+        let pass = E.querySelector('[name=pass]').value;
+        const isDel = v('role') === 'delivery';
+        let uname = v('username');
+        if (isDel && !uname) uname = 'del.' + (PZ.carta ? PZ.carta.slugify(v('name')) : 'chofer');
+        if (isDel && !pass && !u) pass = 'MuzzaReparto!' + Math.floor(1000 + Math.random() * 9000);
+
         if (!u) {
           if (pass.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres');
-          await PZ.cloud.staff('create', { name: v('name'), username: v('username'), password: pass, role: v('role'), branch_ids: branchIds });
+          await PZ.cloud.staff('create', { name: v('name'), username: uname, password: pass, role: v('role'), branch_ids: branchIds });
         } else {
           const { error } = await PZ.cloud.sb.from('members').update({ name: v('name'), role: v('role'), branch_ids: branchIds, active: E.querySelector('[name=active]').checked }).eq('org_id', S.ctx.orgId).eq('user_id', u.user_id);
           if (error) throw error;
           if (pass) await PZ.cloud.staff('password', { user_id: u.user_id, password: pass });
         }
+
+        // Sincronizar en la sucursal actual si es delivery
+        if (isDel && S.data && S.data.settings) {
+          const dCode = (E.querySelector('[name=driver_code]') ? E.querySelector('[name=driver_code]').value.trim().toUpperCase() : '') || initialDriverCode;
+          S.data.settings.drivers = S.data.settings.drivers || [];
+          const exIdx = S.data.settings.drivers.findIndex((d) => (typeof d === 'object' ? d.name.toLowerCase() === v('name').toLowerCase() : d.toLowerCase() === v('name').toLowerCase()));
+          if (exIdx >= 0) {
+            S.data.settings.drivers[exIdx] = { name: v('name'), code: dCode, active: true };
+          } else {
+            S.data.settings.drivers.push({ name: v('name'), code: dCode, active: true });
+          }
+          S.save();
+        }
+
         await reloadMembers();
         m.close();
-        PZ.toast(u ? 'Guardado' : `Listo. Ingresa con “${v('username').toLowerCase()}”`, 'ok', 4000);
+        PZ.toast(u ? 'Guardado' : (isDel ? `Listo. Repartidor creado con código ${initialDriverCode}` : `Listo. Ingresa con “${uname.toLowerCase()}”`), 'ok', 4000);
         done();
       } catch (e) {
         PZ.toast(e.message || 'No se pudo guardar', 'err', 5000);
@@ -172,7 +263,7 @@
       ${rows.map(({ m, s }) => `<tr class="${m.active ? '' : 'voided'}">
         <td><div class="person">${PZ.profile.avatar(profiles[m.user_id], m.name, 36)}<div><b>${m.user_id === top ? '🏆 ' : ''}${U.esc(m.name)}</b><div class="small muted">${U.esc(m.username)}${m.last_login ? ' · últ. ingreso ' + U.date(m.last_login) : ''}</div>
           ${profiles[m.user_id] ? `<div class="small">${profiles[m.user_id].phone ? `📞 <a href="https://wa.me/${U.phoneForWa(profiles[m.user_id].phone)}" target="_blank" rel="noopener">${U.esc(profiles[m.user_id].phone)}</a>` : ''}${profiles[m.user_id].cuil ? ` · CUIL ${U.formatCuil(profiles[m.user_id].cuil)}` : ''}</div>` : '<div class="small muted">⚠️ Perfil sin completar</div>'}</div></div></td>
-        <td>${roleBadge(m.role)}</td>
+        <td>${m.role === 'delivery' ? '<span class="badge pri">🛵 Repartidor</span>' : roleBadge(m.role)}</td>
         <td class="right"><b>${U.money(s.sales || 0)}</b></td>
         <td class="right">${s.tickets || 0}</td>
         <td class="right">${U.money(s.tickets ? s.sales / s.tickets : 0)}</td>
@@ -181,7 +272,10 @@
         <td class="right">${s.closes ? `<span class="badge ${s.absDiff ? 'err' : 'ok'}">${s.absDiff ? U.money(s.diff) : 'Sin dif.'}</span> <span class="small muted">${s.closes} cierre(s)</span>` : '—'}</td>
         <td class="right">${s.salary ? U.money(s.salary) : '—'}</td>
         <td class="right">${s.salary && s.sales ? '$' + U.num(Math.round((s.sales / s.salary) * 10) / 10) : '—'}</td>
-        <td class="actions">${m.role !== 'owner' && (A().isOwner() || m.role !== 'admin') && m.user_id !== A().current.id ? `<button class="btn sm ghost" data-e="${m.user_id}">✏️</button>` : ''}</td>
+        <td class="actions">
+          ${m.role === 'delivery' ? `<button class="btn sm ghost" data-share-driver="${m.user_id}" title="Acceso para el repartidor">🛵</button>` : ''}
+          ${m.role !== 'owner' && (A().isOwner() || m.role !== 'admin') && m.user_id !== A().current.id ? `<button class="btn sm ghost" data-e="${m.user_id}">✏️</button>` : ''}
+        </td>
       </tr>`).join('')}
     </tbody></table></div>`;
   }
@@ -204,8 +298,10 @@
     el.querySelectorAll('[data-range]').forEach((b) => b.onclick = () => { range = b.dataset.range; branchView(el); });
     el.querySelector('[data-a=code]').onclick = () => PZ.invites.create(bid, null, () => branchView(el));
     el.querySelector('[data-a=new]').onclick = () => editUser(null, () => branchView(el), { fixedBranch: bid });
-    const bindEdit = () => el.querySelectorAll('[data-e]').forEach((b) => b.onclick = () => editUser(S.ctx.members.find((m) => m.user_id === b.dataset.e), () => branchView(el)));
-    bindEdit();
+    const bindEdit = () => {
+      el.querySelectorAll('[data-e]').forEach((b) => b.onclick = () => editUser(S.ctx.members.find((m) => m.user_id === b.dataset.e), () => branchView(el)));
+      el.querySelectorAll('[data-share-driver]').forEach((b) => b.onclick = () => shareDriverAccess(S.ctx.members.find((m) => m.user_id === b.dataset.shareDriver)));
+    };
     PZ.cloud.profiles(people.map((m) => m.user_id)).then((profs) => {
       const box = el.querySelector('.perf');
       if (!box) return;
@@ -271,6 +367,7 @@
       ${perfTable(people, stats, profs)}
       <p class="small muted"><b>Sucursales:</b> ${people.map((m) => `${U.esc(m.name)} → ${U.esc(m.role === 'owner' ? 'Todas' : branchNames(m.branch_ids))}`).join(' · ')}</p>${help}</div>`;
     box.querySelectorAll('[data-e]').forEach((b) => b.onclick = () => editUser(S.ctx.members.find((m) => m.user_id === b.dataset.e), () => orgView(el)));
+    box.querySelectorAll('[data-share-driver]').forEach((b) => b.onclick = () => shareDriverAccess(S.ctx.members.find((m) => m.user_id === b.dataset.shareDriver)));
   }
 
   PZ.views.equipo = { title: 'Equipo de la sucursal', render: branchView };

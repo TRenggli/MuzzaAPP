@@ -349,7 +349,7 @@
             <label class="field"><span>Zona de envío</span><select name="zone"><option value="">Sin cargo</option>${zones.map((z) => `<option value="${z.id}" ${cart.zoneId === z.id ? 'selected' : ''}>${U.esc(z.name)} · ${U.money(z.fee)}</option>`).join('')}</select></label>
             <label class="field"><span>Costo de envío</span><input name="fee" value="${cart.deliveryFee || 0}" inputmode="numeric"></label>
           </div>
-          <label class="field"><span>Repartidor</span><select name="driver"><option value="">Sin asignar</option>${S.data.settings.drivers.map((d) => `<option ${cart.driver === d ? 'selected' : ''}>${U.esc(d)}</option>`).join('')}</select></label>` : ''}
+          <label class="field"><span>Repartidor</span><select name="driver"><option value="">Sin asignar</option>${S.data.settings.drivers.map((d) => { const name = typeof d === 'object' ? d.name : d; const code = typeof d === 'object' && d.code ? ' (' + d.code + ')' : ''; return `<option value="${U.esc(name)}" ${cart.driver === name ? 'selected' : ''}>${U.esc(name + code)}</option>`; }).join('')}</select></label>` : ''}
         ${cart.type !== 'mesa' ? `<label class="field"><span>Hora de entrega / retiro (opcional)</span><input name="eta" type="time" value="${U.esc(cart.eta)}"></label>` : ''}
         <input type="hidden" name="cid" value="${cart.customerId || ''}">`,
       footer: `<button class="btn ghost" data-a="x">Cancelar</button><button class="btn primary" data-a="ok">Listo</button>`,

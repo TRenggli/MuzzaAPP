@@ -151,19 +151,40 @@
     if (act === 'driver') {
       const drivers = S.data.settings.drivers || [];
       const slug = (S.data.branch && S.data.branch.slug) || '';
-      const repUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '') : ('reparto.html?l=' + encodeURIComponent(slug));
+      const matched = PZ.carta ? PZ.carta.matchDriver(drivers, o.driver || '') : null;
+      const driverCode = matched ? matched.code : '';
+      const repUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '', '', driverCode) : ('reparto.html?l=' + encodeURIComponent(slug));
       const m = PZ.modal({
         title: '🛵 Asignar repartidor', size: 'sm',
-        body: `<div class="opt-grid">${drivers.map((d) => `<button class="opt ${o.driver === d ? 'on' : ''}" data-d="${U.esc(d)}">${U.esc(d)}</button>`).join('')}</div>${drivers.length ? '' : '<p class="muted">Cargá repartidores en Configuración.</p>'}<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px"><button class="btn ghost sm" data-act="copy-driver-link" style="justify-content:center">📲 Copiar link para el repartidor</button><a class="btn ghost sm" href="${U.esc(repUrl)}" target="_blank" rel="noopener" style="justify-content:center">📱 Abrir panel de repartidor ↗</a></div>`,
+        body: `<div class="opt-grid">${drivers.map((d) => {
+          const name = typeof d === 'object' ? d.name : d;
+          const code = typeof d === 'object' && d.code ? d.code : '';
+          return `<button class="opt ${o.driver === name ? 'on' : ''}" data-d="${U.esc(name)}" data-c="${U.esc(code)}" style="display:flex;align-items:center;justify-content:space-between">
+            <span>🛵 <b>${U.esc(name)}</b></span>
+            ${code ? `<span class="badge pri" style="font-family:monospace;font-size:0.75rem">${U.esc(code)}</span>` : ''}
+          </button>`;
+        }).join('')}</div>${drivers.length ? '' : '<p class="muted">Cargá repartidores en Configuración o en Equipo.</p>'}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+          <button class="btn ghost sm" data-act="copy-driver-link" style="justify-content:center">📲 Copiar link para el repartidor</button>
+          <a class="btn ghost sm" href="${U.esc(repUrl)}" target="_blank" rel="noopener" style="justify-content:center">📱 Abrir panel de repartidor ↗</a>
+        </div>`,
       });
-      m.el.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => { o.driver = b.dataset.d; S.save(); m.close(); render(el); });
+      m.el.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => {
+        const btn = /** @type {HTMLElement} */ (b);
+        o.driver = btn.dataset.d || '';
+        S.save();
+        m.close();
+        render(el);
+      });
       const copyBtn = m.el.querySelector('[data-act=copy-driver-link]');
       if (copyBtn) {
         copyBtn.onclick = async () => {
           try {
-            const currentRepUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '') : ('reparto.html?l=' + encodeURIComponent(slug));
+            const curMatched = PZ.carta ? PZ.carta.matchDriver(drivers, o.driver || '') : null;
+            const curCode = curMatched ? curMatched.code : '';
+            const currentRepUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '', '', curCode) : ('reparto.html?l=' + encodeURIComponent(slug));
             await navigator.clipboard.writeText(currentRepUrl);
-            PZ.toast('Link copiado. Mandaselo por WhatsApp al repartidor 📲');
+            PZ.toast(`Link copiado para ${o.driver || 'el repartidor'} 📲`);
           } catch (e) {
             PZ.toast('No se pudo copiar el link', 'warn');
           }

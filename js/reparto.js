@@ -1,8 +1,9 @@
 // @ts-check
 /* ==========================================================================
    MuzzaAPP · Interfaz de Reparto y Tracking GPS en Vivo
-   Permite al repartidor ver sus entregas, activar el GPS y compartir su
-   ubicación en tiempo real con el cliente.
+   Permite al repartidor ingresar con su Código Único (sin contraseñas),
+   ver sus entregas asignadas, activar el GPS y compartir su ubicación
+   en tiempo real con el cliente.
    ========================================================================== */
 (function () {
   const root = /** @type {HTMLElement} */ (document.getElementById('reparto'));
@@ -11,9 +12,11 @@
   const U = window.PZ ? window.PZ.util : null;
 
   const params = new URLSearchParams(location.search);
-  const slug = (params.get('l') || '').toLowerCase();
+  let slug = (params.get('l') || localStorage.getItem('muzza-branch-slug') || '').toLowerCase();
   const branchIdParam = params.get('b') || '';
+  let driverCodeParam = (params.get('c') || localStorage.getItem('muzza-driver-code') || '').toUpperCase().trim();
   let currentDriver = params.get('d') || localStorage.getItem('muzza-driver') || '';
+  let currentDriverCode = driverCodeParam;
 
   /** @type {any} */
   let sb = null;
@@ -34,34 +37,112 @@
   const esc = (/** @type {any} */ s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   async function init() {
-    if (!slug) {
-      root.innerHTML = `<div class="card" style="text-align:center;padding:30px">
-        <h2>Falta la sucursal</h2>
-        <p class="muted">Abrí este link desde el comandero de la pizzería o pedile el link a tu encargado.</p>
-      </div>`;
+    // Si viene un código en el parámetro 'c' o ya está guardado
+    if (driverCodeParam) {
+      const parsed = C ? C.parseDriverCode(driverCodeParam, slug || 'diego') : { slug: slug || 'diego', code: driverCodeParam };
+      if (parsed.slug) slug = parsed.slug;
+      await authenticateWithCode(driverCodeParam, true);
       return;
+    }
+
+    // Si ya teníamos un chofer y slug guardados pero sin código formal
+    if (currentDriver && slug) {
+      await authenticateWithCode(currentDriver, true);
+      return;
+    }
+
+    // Si no hay datos de acceso, mostrar la pantalla de inicio con código único
+    renderCodeLoginScreen();
+  }
+
+  function getSupabase() {
+    if (!sb && window.supabase && CFG) {
+      try {
+        sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey);
+      } catch (e) {
+        console.warn('Error conectando con Supabase:', e);
+      }
+    }
+    return sb;
+  }
+
+  async function fetchBranchData(targetSlug) {
+    const s = targetSlug || slug || 'diego';
+    const client = getSupabase();
+    if (!client) {
+      branchData = makeFallbackBranch(s);
+      return branchData;
     }
 
     try {
-      sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey);
-      const { data } = await sb.rpc('carta_menu', { p_slug: slug });
-      branchData = data || {
-        branch: { id: branchIdParam, name: slug.replace(/-/g, ' ').toUpperCase(), slug },
-        settings: { business: { name: slug.replace(/-/g, ' ').toUpperCase() }, drivers: ['Repartidor 1', 'Repartidor 2'] }
-      };
-      if (branchIdParam && branchData && branchData.branch) branchData.branch.id = branchIdParam;
+      const { data, error } = await client.rpc('reparto_init', { p_slug: s });
+      if (!error && data && data.branch) {
+        branchData = data;
+        return branchData;
+      }
     } catch (e) {
-      branchData = {
-        branch: { id: branchIdParam, name: slug.replace(/-/g, ' ').toUpperCase(), slug },
-        settings: { business: { name: 'MuzzaAPP Reparto' }, drivers: ['Repartidor 1', 'Repartidor 2'] }
-      };
+      // Ignorar e intentar con carta_menu
     }
 
-    // Si no hay conductor seleccionado, mostrar selector
-    if (!currentDriver) {
-      renderDriverPicker();
+    try {
+      const { data } = await client.rpc('carta_menu', { p_slug: s });
+      if (data && data.branch) {
+        branchData = data;
+        return branchData;
+      }
+    } catch (e) {
+      // Ignorar y usar fallback
+    }
+
+    branchData = makeFallbackBranch(s);
+    return branchData;
+  }
+
+  function makeFallbackBranch(s) {
+    const name = s.replace(/-/g, ' ').toUpperCase();
+    return {
+      branch: { id: branchIdParam, name, slug: s },
+      settings: {
+        business: { name, city: '' },
+        drivers: [
+          { name: 'Lucas', code: 'DEL-101' },
+          { name: 'Carlos', code: 'DEL-102' }
+        ]
+      }
+    };
+  }
+
+  async function authenticateWithCode(rawInput, isAuto = false) {
+    const raw = String(rawInput || '').trim().toUpperCase();
+    if (!raw) {
+      renderCodeLoginScreen('Por favor ingresá tu código de repartidor.');
       return;
     }
+
+    if (!isAuto) {
+      root.innerHTML = `<div style="text-align:center;padding:50px 0;"><div class="spin-pizza" style="font-size:3rem">🛵</div><p>Verificando código <b>${esc(raw)}</b>…</p></div>`;
+    }
+
+    const parsed = C ? C.parseDriverCode(raw, slug || 'diego') : { slug: slug || 'diego', code: raw, driverNum: '', driverName: '' };
+    slug = parsed.slug || slug || 'diego';
+
+    await fetchBranchData(slug);
+
+    const driversList = (branchData && branchData.settings && branchData.settings.drivers) || [];
+    const matched = C ? C.matchDriver(driversList, raw) : null;
+
+    if (matched) {
+      currentDriver = matched.name;
+      currentDriverCode = matched.code || raw;
+    } else {
+      // Permitir continuar con el código o nombre para no dejar varado al repartidor
+      currentDriver = parsed.driverName || raw;
+      currentDriverCode = parsed.code || raw;
+    }
+
+    localStorage.setItem('muzza-driver', currentDriver);
+    localStorage.setItem('muzza-driver-code', currentDriverCode);
+    localStorage.setItem('muzza-branch-slug', slug);
 
     await loadDeliveries();
     renderApp();
@@ -69,59 +150,75 @@
 
     // Auto-actualizar lista de entregas cada 15s si no está en pleno streaming
     setInterval(() => {
-      if (!isStreamingGps) {
+      if (!isStreamingGps && currentDriver) {
         loadDeliveries().then(renderApp);
       }
     }, 15000);
   }
 
-  function renderDriverPicker() {
-    const drivers = (branchData && branchData.settings && branchData.settings.drivers) || ['Repartidor 1', 'Repartidor 2'];
-    const bName = (branchData && branchData.settings && branchData.settings.business && branchData.settings.business.name) || (branchData && branchData.branch ? branchData.branch.name : 'Pizzería');
-
+  function renderCodeLoginScreen(errMsg = '') {
     root.innerHTML = `
-      <div style="text-align:center;padding:24px 0 16px;">
-        <span style="font-size:2.8rem">🛵</span>
-        <h2 style="margin:8px 0 4px">${esc(bName)}</h2>
-        <p class="muted">Seleccioná tu nombre para ver tus pedidos:</p>
+      <div style="text-align:center;padding:36px 0 20px;">
+        <span style="font-size:3.5rem">🛵</span>
+        <h1 style="margin:12px 0 6px;font-size:1.8rem">MuzzaAPP · Reparto</h1>
+        <p class="muted" style="margin:0 auto;max-width:400px;font-size:0.95rem">
+          Ingresá tu código único de repartidor para acceder a tus pedidos y activar tu GPS en vivo.
+        </p>
       </div>
-      <div class="card">
-        <div style="display:grid;gap:10px;">
-          ${drivers.map((/** @type {string} */ d) => `<button class="btn lg ghost block driver-sel" data-name="${esc(d)}">🛵 ${esc(d)}</button>`).join('')}
-        </div>
-        <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px;">
-          <label class="field"><span>O escribí tu nombre:</span>
-            <input type="text" id="custom-driver" placeholder="Ej: Lucas" />
+
+      <div class="card" style="padding:24px 20px;">
+        <form id="driver-code-form">
+          <label style="display:block;margin-bottom:12px;font-weight:700;font-size:0.9rem">
+            Código de Repartidor:
           </label>
-          <button class="btn primary block mt-xs" id="custom-driver-btn">Continuar</button>
+          <input
+            type="text"
+            id="driver-code-input"
+            class="driver-code-input"
+            placeholder="EJ: DEL-101"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            maxlength="20"
+            required
+            value="${esc(currentDriverCode || '')}"
+          />
+
+          ${errMsg ? `<div class="badge err block" style="margin-top:12px;text-align:center;padding:8px">${esc(errMsg)}</div>` : ''}
+
+          <button type="submit" class="btn primary lg block" style="margin-top:18px;font-size:1.1rem">
+            Ingresar a mis entregas 🛵
+          </button>
+        </form>
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);text-align:center;">
+          <p class="small muted" style="margin:0">
+            ¿No sabés cuál es tu código? Pedíselo al encargado o cajero de tu sucursal. Te lo pueden enviar por WhatsApp en un clic.
+          </p>
         </div>
       </div>
     `;
 
-    root.querySelectorAll('.driver-sel').forEach((b) => {
-      /** @type {HTMLElement} */ (b).onclick = () => selectDriver(/** @type {HTMLElement} */ (b).dataset.name || '');
-    });
-
-    const customBtn = document.getElementById('custom-driver-btn');
-    const customInp = /** @type {HTMLInputElement | null} */ (document.getElementById('custom-driver'));
-    if (customBtn && customInp) {
-      customBtn.onclick = () => {
-        const val = customInp.value.trim();
-        if (val) selectDriver(val);
+    const form = document.getElementById('driver-code-form');
+    const input = /** @type {HTMLInputElement | null} */ (document.getElementById('driver-code-input'));
+    if (form && input) {
+      input.focus();
+      input.oninput = () => { input.value = input.value.toUpperCase(); };
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const rawCode = input.value.trim().toUpperCase();
+        if (!rawCode) return;
+        await authenticateWithCode(rawCode);
       };
     }
   }
 
-  function selectDriver(/** @type {string} */ name) {
-    currentDriver = name;
-    localStorage.setItem('muzza-driver', name);
-    loadDeliveries().then(renderApp);
-  }
-
   async function loadDeliveries() {
-    if (!sb) return;
+    const client = getSupabase();
+    if (!client) return;
     try {
-      const { data, error } = await sb.rpc('reparto_active_orders', {
+      const { data, error } = await client.rpc('reparto_active_orders', {
         p_slug: slug,
         p_driver: currentDriver,
       });
@@ -157,7 +254,11 @@
       <div class="driver-top">
         <div>
           <div class="small muted">${esc(bName)}</div>
-          <div class="bold" style="font-size:1.15rem">🛵 ${esc(currentDriver)} <button class="btn sm ghost" id="change-driver" style="padding:2px 8px;font-size:0.75rem;margin-left:6px">Cambiar</button></div>
+          <div class="bold" style="font-size:1.15rem;display:flex;align-items:center;flex-wrap:wrap;gap:4px">
+            <span>🛵 ${esc(currentDriver)}</span>
+            ${currentDriverCode ? `<span class="driver-code-badge" title="Identificador único">${esc(currentDriverCode)}</span>` : ''}
+            <button class="btn sm ghost" id="change-driver" style="padding:2px 8px;font-size:0.75rem;margin-left:4px">Cerrar turno</button>
+          </div>
         </div>
         <div class="gps-pill ${isStreamingGps ? 'on' : 'off'}" id="gps-indicator">
           <i class="gps-dot"></i>
@@ -181,7 +282,7 @@
         <div class="card" style="text-align:center;padding:40px 16px;margin-top:14px;">
           <span style="font-size:2.4rem">✨</span>
           <p class="bold" style="margin:8px 0 4px">No tenés pedidos pendientes</p>
-          <p class="muted small">Los pedidos que te asignen en caja aparecerán acá automáticamente.</p>
+          <p class="muted small">Los pedidos que te asignen en caja para el código <b>${esc(currentDriverCode || currentDriver)}</b> aparecerán acá automáticamente.</p>
         </div>
       ` : activeDeliveries.map((d) => renderDeliveryCard(d, city)).join('')}
     `;
@@ -191,8 +292,10 @@
       changeBtn.onclick = () => {
         stopGps();
         currentDriver = '';
+        currentDriverCode = '';
         localStorage.removeItem('muzza-driver');
-        renderDriverPicker();
+        localStorage.removeItem('muzza-driver-code');
+        renderCodeLoginScreen();
       };
     }
 
@@ -259,14 +362,16 @@
     const o = activeDeliveries.find((x) => x.id === orderId);
     if (!o) return;
 
+    const client = getSupabase();
+
     if (action === 'start') {
       o.status = 'en_camino';
       activeRouteOrderId = orderId;
       startGps(orderId);
       renderApp();
-      if (sb) {
+      if (client) {
         try {
-          await sb.rpc('reparto_update_status', {
+          await client.rpc('reparto_update_status', {
             p_slug: slug,
             p_order_id: String(orderId),
             p_driver: currentDriver,
@@ -281,9 +386,9 @@
       activeRouteOrderId = null;
       activeDeliveries = activeDeliveries.filter((x) => x.id !== orderId);
       renderApp();
-      if (sb) {
+      if (client) {
         try {
-          await sb.rpc('reparto_update_status', {
+          await client.rpc('reparto_update_status', {
             p_slug: slug,
             p_order_id: String(orderId),
             p_driver: currentDriver,
@@ -312,8 +417,9 @@
         lastGps = pos.coords;
         updateGpsPill(true);
         // Transmitir al servidor
-        if (sb && branchData && activeOrderId) {
-          sb.rpc('report_delivery_location', {
+        const client = getSupabase();
+        if (client && branchData && branchData.branch && activeOrderId) {
+          client.rpc('report_delivery_location', {
             p_branch_id: branchData.branch.id,
             p_order_id: String(activeOrderId),
             p_driver: currentDriver,

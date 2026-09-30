@@ -198,8 +198,18 @@
           ${st.zones.map((z, i) => `<div class="row-flex" style="margin-bottom:8px"><input data-zn="${i}" value="${U.esc(z.name)}" style="flex:2"><input data-zf="${i}" value="${z.fee}" inputmode="numeric" style="flex:1"><button class="icon-btn" data-zd="${i}">🗑️</button></div>`).join('')}
           <button class="btn ghost sm" data-a="addz">➕ Agregar zona</button>
         </div>
-        <div class="card"><h3>🛵 Repartidores</h3>
-          ${st.drivers.map((d, i) => `<div class="row-flex" style="margin-bottom:8px"><input data-dn="${i}" value="${U.esc(d)}" class="grow"><button class="icon-btn" data-dd="${i}">🗑️</button></div>`).join('')}
+        <div class="card"><h3>🛵 Repartidores y Códigos de Acceso</h3>
+          <p class="muted small" style="margin-top:0">Cada repartidor tiene un nombre y un código único para entrar a la app de entregas sin contraseñas.</p>
+          ${st.drivers.map((d, i) => {
+            const name = typeof d === 'object' ? d.name : d;
+            const code = typeof d === 'object' && d.code ? d.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101 + i) : `DEL-${101 + i}`);
+            return `<div class="row-flex" style="margin-bottom:8px;gap:6px">
+              <input data-dn="${i}" value="${U.esc(name)}" placeholder="Nombre" style="flex:2">
+              <input data-dc="${i}" value="${U.esc(code)}" placeholder="Código" style="flex:1.2;font-family:monospace;font-weight:700;text-transform:uppercase">
+              <button class="btn sm ghost" data-cpd="${i}" title="Copiar enlace directo">📲</button>
+              <button class="icon-btn" data-dd="${i}" title="Eliminar">🗑️</button>
+            </div>`;
+          }).join('')}
           <button class="btn ghost sm" data-a="addd">➕ Agregar repartidor</button>
         </div>
       </div>
@@ -222,10 +232,43 @@
       b.querySelectorAll('[data-zn]').forEach((i) => i.onchange = () => { st.zones[i.dataset.zn].name = i.value; save(); });
       b.querySelectorAll('[data-zf]').forEach((i) => i.onchange = () => { st.zones[i.dataset.zf].fee = U.parseMoney(i.value); save(); });
       b.querySelectorAll('[data-zd]').forEach((i) => i.onclick = () => { st.zones.splice(Number(i.dataset.zd), 1); save(); render(el); });
-      b.querySelectorAll('[data-dn]').forEach((i) => i.onchange = () => { st.drivers[i.dataset.dn] = i.value.trim(); save(); });
+      b.querySelectorAll('[data-dn]').forEach((i) => i.onchange = () => {
+        const idx = Number(i.dataset.dn);
+        const cur = st.drivers[idx];
+        const code = typeof cur === 'object' && cur.code ? cur.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101 + idx) : `DEL-${101 + idx}`);
+        st.drivers[idx] = { name: i.value.trim(), code };
+        save();
+      });
+      b.querySelectorAll('[data-dc]').forEach((i) => i.onchange = () => {
+        const idx = Number(i.dataset.dc);
+        const cur = st.drivers[idx];
+        const name = typeof cur === 'object' ? cur.name : String(cur);
+        st.drivers[idx] = { name, code: i.value.trim().toUpperCase() };
+        save();
+      });
+      b.querySelectorAll('[data-cpd]').forEach((i) => i.onclick = async () => {
+        const idx = Number(i.dataset.cpd);
+        const cur = st.drivers[idx];
+        const name = typeof cur === 'object' ? cur.name : String(cur);
+        const code = typeof cur === 'object' && cur.code ? cur.code : `DEL-${101 + idx}`;
+        const slug = (S.data.branch && S.data.branch.slug) || '';
+        const url = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, name, '', code) : `reparto.html?c=${code}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          PZ.toast(`Link copiado para ${name} (${code})`);
+        } catch (e) {
+          PZ.toast(url, 'info', 5000);
+        }
+      });
       b.querySelectorAll('[data-dd]').forEach((i) => i.onclick = () => { st.drivers.splice(Number(i.dataset.dd), 1); save(); render(el); });
       b.querySelector('[data-a=addz]').onclick = () => { st.zones.push({ id: U.uid('z'), name: 'Nueva zona', fee: 0 }); save(); render(el); };
-      b.querySelector('[data-a=addd]').onclick = () => { st.drivers.push('Nuevo repartidor'); save(); render(el); };
+      b.querySelector('[data-a=addd]').onclick = () => {
+        const nextNum = 101 + st.drivers.length;
+        const code = PZ.carta ? PZ.carta.generateDriverCode('DEL', nextNum) : `DEL-${nextNum}`;
+        st.drivers.push({ name: `Repartidor ${st.drivers.length + 1}`, code });
+        save();
+        render(el);
+      };
     },
 
     categorias(b, el) {
