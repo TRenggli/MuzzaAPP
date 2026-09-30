@@ -363,5 +363,63 @@ test('carta imprimible: normalización de variantes (evita duplicar "Media docen
   assert.deepEqual(row2, [2500, 15000, 30000]);
 });
 
+test('carta del salón: ordenamiento de productos por menor precio, mayor precio y alfabético', () => {
+  const p1 = { id: 'p1', name: 'Muzzarella', categoryId: 'c1', active: true, _i: 0, variants: [{ id: 'g', name: 'Grande', price: 10000 }] };
+  const p2 = { id: 'p2', name: 'Fugazzeta Rellena', categoryId: 'c1', active: true, _i: 1, variants: [{ id: 'g', name: 'Grande', price: 14000 }] };
+  const p3 = { id: 'p3', name: 'Calabresa', categoryId: 'c1', active: true, _i: 2, variants: [{ id: 'ch', name: 'Chica', price: 8000 }, { id: 'g', name: 'Grande', price: 12000 }] };
+
+  // Menor precio primero (p3 menor precio es 8000, luego p1 es 10000, luego p2 es 14000)
+  const asc = C.sortProducts([p1, p2, p3], 'price_asc');
+  assert.deepEqual(plain(asc.map((x) => x.id)), ['p3', 'p1', 'p2'], 'Menor precio primero debe ordenar por precio mínimo de variante');
+
+  // Mayor precio primero (p2 con 14000, p1 con 10000, p3 con 8000)
+  const desc = C.sortProducts([p1, p2, p3], 'price_desc');
+  assert.deepEqual(plain(desc.map((x) => x.id)), ['p2', 'p1', 'p3'], 'Mayor precio primero');
+
+  // Alfabético (Calabresa -> Fugazzeta Rellena -> Muzzarella)
+  const alf = C.sortProducts([p1, p2, p3], 'name');
+  assert.deepEqual(plain(alf.map((x) => x.name)), ['Calabresa', 'Fugazzeta Rellena', 'Muzzarella'], 'Alfabético por nombre');
+
+  // Orden catálogo original (_i)
+  const cat = C.sortProducts([p3, p1, p2], 'cat');
+  assert.deepEqual(plain(cat.map((x) => x.id)), ['p1', 'p2', 'p3'], 'Orden del catálogo');
+});
+
+test('carta del salón: filtrado y preparación de categorías seleccionadas', () => {
+  const cats = [
+    { id: 'c-piz', name: 'Pizzas', icon: '🍕', allowHalf: true },
+    { id: 'c-emp', name: 'Empanadas', icon: '🥟', allowHalf: false },
+    { id: 'c-beb', name: 'Bebidas', icon: '🥤', allowHalf: false },
+  ];
+  const prods = [
+    { id: 'p1', categoryId: 'c-piz', name: 'Muzza', active: true, variants: [{ id: 'u', name: 'Grande', price: 10000 }] },
+    { id: 'p2', categoryId: 'c-piz', name: 'Fugazza', active: true, variants: [{ id: 'u', name: 'Grande', price: 9000 }] },
+    { id: 'p3', categoryId: 'c-emp', name: 'Carne', active: true, variants: [{ id: 'u', name: 'Unidad', price: 1500 }] },
+    { id: 'p4', categoryId: 'c-beb', name: 'Agua', active: true, variants: [{ id: 'u', name: '500ml', price: 1200 }] },
+  ];
+
+  // Si el dueño solo seleccionó Pizzas y Bebidas
+  const prep = C.prepareSalonCategories(cats, prods, ['c-piz', 'c-beb'], 'price_asc');
+  assert.equal(prep.length, 2, 'Deben quedar exactamente 2 categorías');
+  assert.deepEqual(plain(prep.map((x) => x.category.id)), ['c-piz', 'c-beb'], 'Solo categorías seleccionadas');
+
+  // En pizzas, Fugazza (9000) debe estar antes que Muzza (10000) por price_asc
+  assert.deepEqual(plain(prep[0].products.map((p) => p.name)), ['Fugazza', 'Muzza'], 'Productos ordenados por menor precio');
+
+  // Si no se pasa filtro (o vacío), se incluyen todas las que tienen productos activos
+  const prepAll = C.prepareSalonCategories(cats, prods, [], 'cat');
+  assert.equal(prepAll.length, 3, 'Todas las categorías disponibles');
+});
+
+test('carta del salón: generación de URL pública y persistencia del código QR', () => {
+  const base = 'https://trenggli.github.io/MuzzaAPP/index.html';
+  const url = C.salonUrl(base, 'pizzeria-diego-centro', 'qr_token_permanente_999');
+
+  assert.ok(url.includes('carta.html'), 'Debe apuntar a carta.html');
+  assert.ok(url.includes('l=pizzeria-diego-centro'), 'Debe incluir el slug de la sucursal');
+  assert.ok(url.includes('vista=carta'), 'Debe incluir vista=carta para abrir la carta del salón sin carrito de delivery');
+  assert.ok(url.includes('qr=qr_token_permanente_999'), 'Debe incluir el token persistente de la mesa');
+});
+
 
 

@@ -32,6 +32,7 @@ declare namespace PZ {
     recipe?: { ingredientId: string; qty: number }[];
     /** permite pedir mitad y mitad (por defecto hereda de la categoría si es true) */
     allowHalf?: boolean;
+    _i?: number;
   }
   interface Extra {
     id: string;
@@ -195,6 +196,17 @@ declare namespace PZ {
       notes?: boolean;
     };
     condiments?: Condiment[];
+    salonMenu?: SalonMenuConfig;
+  }
+  interface SalonMenuConfig {
+    categories?: string[];
+    sortBy?: 'cat' | 'price_asc' | 'price_desc' | 'name';
+    groupByCategory?: boolean;
+    pageBreakPerCat?: boolean;
+    fontSize?: 'sm' | 'md' | 'lg';
+    showDesc?: boolean;
+    showBadges?: boolean;
+    qrToken?: string;
   }
   interface Condiment {
     id: string;
@@ -213,6 +225,7 @@ declare namespace PZ {
     settings: {
       business: { name?: string; slogan?: string; address?: string; city?: string; phone?: string; instagram?: string };
       online: CartaSettings;
+      printMenu?: SalonMenuConfig;
       halfPricing: 'max' | 'avg';
       zones: Zone[];
       transfer: { alias?: string; cbu?: string; holder?: string; bank?: string } | null;

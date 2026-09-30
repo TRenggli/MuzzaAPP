@@ -20,6 +20,7 @@
   const tableParam = (params.get('mesa') || '').slice(0, 10);
   const trackId = params.get('pedido') || '';
   const preview = params.has('preview');
+  const isCartaView = params.get('vista') === 'carta' || params.get('modo') === 'carta';
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /** @type {PZ.CartaMenu | null} */
@@ -137,15 +138,36 @@
     const m = /** @type {PZ.CartaMenu} */ (menu);
     const s = m.settings;
     const on = { ...C.defaults(), ...s.online };
+    const salon = (on && on.salonMenu) || m.settings.printMenu || {};
     applyTheme(on);
     const b = s.business || {};
-    document.title = `${b.name || m.branch.org} · Carta online`;
+    document.title = isCartaView ? `${b.name || m.branch.org} · Carta para mesas` : `${b.name || m.branch.org} · Carta online`;
     const open = C.isOpen(on) && m.open;
-    const cats = m.categories.filter((c) => m.products.some((p) => p.categoryId === c.id));
+
+    const hasCatFilter = isCartaView && Array.isArray(salon.categories) && salon.categories.length > 0;
+    const cats = m.categories.filter((c) => {
+      if (hasCatFilter && !salon.categories.includes(c.id)) return false;
+      return m.products.some((p) => p.categoryId === c.id);
+    });
     const logo = s.logo || '';
     const recent = load(`pz-carta-orders-${slug}`, /** @type {{id:string,number:number,at:number}[]} */ ([]));
     const last = Array.isArray(recent) ? recent.filter((r) => Date.now() - r.at < 864e5).slice(-1)[0] : null;
     const types = /** @type {PZ.WebOrderType[]} */ (['retiro', 'delivery', 'mesa']).filter((t) => on.types[t]);
+
+    const badgesHtml = isCartaView
+      ? `<div class="c-badges">
+          <span class="c-badge open">🍽️ Carta para mesas del local</span>
+          ${tableParam ? `<span class="c-badge">🍽️ Mesa ${esc(tableParam)}</span>` : ''}
+          ${on.hours.mode === 'schedule' ? `<span class="c-badge">🕒 ${esc(C.hoursText(on.hours))}</span>` : ''}
+          ${on.enabled ? `<a class="c-badge" href="?l=${encodeURIComponent(slug)}" style="text-decoration:none">🛵 Hacer pedido delivery →</a>` : ''}
+        </div>`
+      : `<div class="c-badges">
+          <span class="c-badge ${open ? 'open' : 'closed'}">${open ? '● Abierto · tomando pedidos' : on.paused ? '● Pedidos pausados' : '● Cerrado ahora'}</span>
+          ${on.hours.mode === 'schedule' ? `<span class="c-badge">🕒 ${esc(C.hoursText(on.hours))}</span>` : ''}
+          ${types.includes('delivery') ? `<span class="c-badge">🛵 Delivery ~${on.deliveryMinutes || 40} min</span>` : ''}
+          ${types.includes('retiro') ? `<span class="c-badge">🥡 Retiro ~${on.pickupMinutes || 15} min</span>` : ''}
+          <a class="c-badge" href="?l=${encodeURIComponent(slug)}&vista=carta" style="text-decoration:none">📜 Ver carta del salón</a>
+        </div>`;
 
     root.innerHTML = `
       ${preview ? '<div class="c-preview-tag">👀 Vista previa · así ven la carta tus clientes</div>' : ''}
@@ -154,12 +176,7 @@
           <div class="c-logo">${logo ? `<img src="${esc(logo)}" alt="">` : '<span aria-hidden="true">🍕</span>'}</div>
           <h1>${esc(b.name ? (m.branch && m.branch.name && m.branch.name !== b.name ? `${b.name} · ${m.branch.name}` : b.name) : m.branch.org)}</h1>
           ${b.slogan ? `<p class="c-slogan">${esc(b.slogan)}</p>` : ''}
-          <div class="c-badges">
-            <span class="c-badge ${open ? 'open' : 'closed'}">${open ? '● Abierto · tomando pedidos' : on.paused ? '● Pedidos pausados' : '● Cerrado ahora'}</span>
-            ${on.hours.mode === 'schedule' ? `<span class="c-badge">🕒 ${esc(C.hoursText(on.hours))}</span>` : ''}
-            ${types.includes('delivery') ? `<span class="c-badge">🛵 Delivery ~${on.deliveryMinutes || 40} min</span>` : ''}
-            ${types.includes('retiro') ? `<span class="c-badge">🥡 Retiro ~${on.pickupMinutes || 15} min</span>` : ''}
-          </div>
+          ${badgesHtml}
           <div class="c-info">
             ${b.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address + (b.city ? ', ' + b.city : ''))}" target="_blank" rel="noopener">📍 ${esc(b.address)}${b.city ? ', ' + esc(b.city) : ''}</a>` : ''}
             ${b.instagram ? `<a href="https://instagram.com/${esc(b.instagram.replace(/^@/, ''))}" target="_blank" rel="noopener">📷 ${esc(b.instagram)}</a>` : ''}
@@ -168,9 +185,9 @@
       </header>
       <main class="c-main">
         ${on.welcome ? `<p class="c-welcome">${esc(on.welcome)}</p>` : ''}
-        ${!open ? `<div class="c-closed">${on.paused ? '⏸️ En este momento no estamos tomando pedidos online. ¡Volvé en un rato!' : `🌙 Ahora estamos cerrados. Podés mirar la carta; los pedidos se toman ${esc(C.hoursText(on.hours))}.`}</div>` : ''}
-        ${tableParam && on.types.mesa ? `<div class="c-table-tag">🍽️ Estás pidiendo desde la <b>mesa ${esc(tableParam)}</b></div>` : ''}
-        ${last ? `<a class="c-last" href="?l=${encodeURIComponent(slug)}&pedido=${encodeURIComponent(last.id)}">📦 Ver mi pedido W-${last.number} →</a>` : ''}
+        ${!isCartaView && !open ? `<div class="c-closed">${on.paused ? '⏸️ En este momento no estamos tomando pedidos online. ¡Volvé en un rato!' : `🌙 Ahora estamos cerrados. Podés mirar la carta; los pedidos se toman ${esc(C.hoursText(on.hours))}.`}</div>` : ''}
+        ${tableParam && on.types.mesa ? `<div class="c-table-tag">🍽️ Estás en la <b>mesa ${esc(tableParam)}</b></div>` : ''}
+        ${!isCartaView && last ? `<a class="c-last" href="?l=${encodeURIComponent(slug)}&pedido=${encodeURIComponent(last.id)}">📦 Ver mi pedido W-${last.number} →</a>` : ''}
         <div class="c-sticky">
           <label class="c-search"><span aria-hidden="true">🔎</span><input type="search" placeholder="Buscar en la carta…" value="${esc(query)}" aria-label="Buscar"></label>
           <nav class="c-cats" aria-label="Categorías">${cats.map((c) => `<a href="#cat-${esc(c.id)}" data-cat="${esc(c.id)}">${esc(c.icon)} ${esc(c.name)}</a>`).join('')}</nav>
@@ -178,36 +195,126 @@
         <div class="c-list"></div>
         <footer class="c-foot">
           ${b.phone ? `<p>¿Dudas? Llamanos al <a href="tel:${esc(b.phone.replace(/[^\d+]/g, ''))}">${esc(b.phone)}</a></p>` : ''}
-          <p class="c-muted small">Precios en pesos. Pueden cambiar sin aviso.</p>
+          <p class="c-muted small">${isCartaView ? 'Carta para comensales en el salón. Precios en pesos argentinos.' : 'Precios en pesos. Pueden cambiar sin aviso.'}</p>
+          ${isCartaView && on.enabled ? `<p class="small" style="margin-top:8px"><a href="?l=${encodeURIComponent(slug)}">🛵 ¿Querés hacer un pedido para delivery o retiro a domicilio? Abrir tienda online →</a></p>` : ''}
         </footer>
       </main>
-      <button class="c-cartbar hidden" data-a="cart" aria-label="Ver mi pedido"></button>`;
+      ${!isCartaView ? '<button class="c-cartbar hidden" data-a="cart" aria-label="Ver mi pedido"></button>' : ''}`;
 
     const search = inp('.c-search input', root);
     search.addEventListener('input', () => { query = search.value; drawList(); });
     drawList();
-    drawCartBar();
+    if (!isCartaView) {
+      drawCartBar();
+      const cartBtn = $('[data-a=cart]', root);
+      if (cartBtn) cartBtn.onclick = () => openCart();
+    }
     spyCategories();
-    $('[data-a=cart]', root).onclick = () => openCart();
   }
 
   function drawList() {
     const m = /** @type {PZ.CartaMenu} */ (menu);
     const on = { ...C.defaults(), ...m.settings.online };
+    const salon = (on && on.salonMenu) || m.settings.printMenu || {};
     const q = query.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
     const match = (/** @type {PZ.Product} */ p) => !q || (p.name + ' ' + (p.desc || '')).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(q);
-    const html = m.categories.map((c) => {
-      const ps = m.products.filter((p) => p.categoryId === c.id && match(p));
+
+    const hasCatFilter = isCartaView && Array.isArray(salon.categories) && salon.categories.length > 0;
+    const cats = m.categories.filter((c) => {
+      if (hasCatFilter && !salon.categories.includes(c.id)) return false;
+      return true;
+    });
+
+    const html = cats.map((c) => {
+      let ps = m.products.filter((p) => p.categoryId === c.id && match(p));
       if (!ps.length) return '';
+      if (isCartaView && salon.sortBy) {
+        ps = C.sortProducts(ps, salon.sortBy);
+      }
       return `<section class="c-sec" id="cat-${esc(c.id)}" data-sec="${esc(c.id)}">
         <h2><span aria-hidden="true">${esc(c.icon)}</span> ${esc(c.name)}</h2>
         ${c.allowHalf ? '<p class="c-muted small c-sec-hint">Podés pedirla mitad y mitad 🍕</p>' : ''}
-        <div class="c-grid">${ps.map((p) => card(p, c, on.showPhotos)).join('')}</div>
+        <div class="c-grid">${ps.map((p) => isCartaView ? cardSalon(p, c, on.showPhotos, salon) : card(p, c, on.showPhotos)).join('')}</div>
       </section>`;
     }).join('');
     const list = $('.c-list', root);
     list.innerHTML = html || `<div class="c-none">No encontramos “${esc(query)}” en la carta.</div>`;
-    $$('[data-p]', list).forEach((el) => el.onclick = () => openProduct(el.dataset.p || ''));
+    $$('[data-p]', list).forEach((el) => {
+      const pid = el.dataset.p || '';
+      el.onclick = () => isCartaView ? openProductInfo(pid) : openProduct(pid);
+    });
+  }
+
+  /**
+   * Tarjeta de producto adaptada a la carta del salón
+   * @param {PZ.Product} p
+   * @param {PZ.Category} c
+   * @param {boolean} photos
+   * @param {PZ.SalonMenuConfig} [salonCfg]
+   */
+  function cardSalon(p, c, photos, salonCfg = {}) {
+    const pic = photos && p.photo
+      ? `<img src="${esc(p.photo)}" alt="" loading="lazy">`
+      : c.allowHalf ? `<span class="c-disc" style="--pc:${esc(p.color || '#ffd166')}" aria-hidden="true"></span>` : `<span class="c-emoji" aria-hidden="true">${esc(c.icon)}</span>`;
+    const showDesc = salonCfg.showDesc !== false;
+    const showBadges = salonCfg.showBadges !== false;
+    const soloEntera = c.allowHalf && p.allowHalf === false;
+
+    return `<button class="c-card c-card-salon" data-p="${esc(p.id)}">
+      <div class="c-pic">${pic}</div>
+      <div class="c-body">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+          <b class="c-name" style="font-size:1.05em">${esc(p.name)}</b>
+          ${showBadges && soloEntera ? '<span class="badge muted" style="font-size:0.75em;flex:none;margin-left:4px">Solo entera</span>' : ''}
+        </div>
+        ${showDesc && p.desc ? `<span class="c-desc" style="margin:4px 0 6px">${esc(p.desc)}</span>` : ''}
+        <div class="c-vars-row">
+          ${p.variants.map((v) => `<span class="c-price-tag"><b>${money(v.price)}</b>${p.variants.length > 1 ? ` <small class="c-muted">${esc(v.name)}</small>` : ''}</span>`).join(' ')}
+        </div>
+      </div>
+      <span class="c-add" aria-hidden="true" style="font-size:1.05em;opacity:0.7">🔍</span>
+    </button>`;
+  }
+
+  /**
+   * Modal informativo para comensales en el salón (sin carrito ni delivery)
+   * @param {string} id
+   */
+  function openProductInfo(id) {
+    const m = /** @type {PZ.CartaMenu} */ (menu);
+    const p = m.products.find((x) => x.id === id);
+    if (!p) return;
+    const cat = m.categories.find((c) => c.id === p.categoryId);
+    const isPizza = !!(cat && cat.allowHalf);
+    const on = { ...C.defaults(), ...m.settings.online };
+    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo"><img src="${esc(p.photo)}" alt=""></div>` : '';
+
+    const s = sheet(`
+      ${photo}
+      <h3>${esc(p.name)}</h3>
+      ${p.desc ? `<p class="c-muted" style="margin:8px 0 16px;line-height:1.4">${esc(p.desc)}</p>` : ''}
+      <div class="c-opt-title" style="margin-top:12px">Variedades y Precios</div>
+      <div class="table-wrap" style="margin-top:8px">
+        <table class="tbl" style="width:100%;border-collapse:collapse">
+          <tbody>
+            ${p.variants.map((v) => `<tr>
+              <td style="padding:10px 0;font-weight:600">${esc(v.name)}</td>
+              <td style="padding:10px 0;text-align:right;font-weight:bold;color:var(--c-primary)">${money(v.price)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      ${isPizza ? `
+        <div style="margin-top:16px;padding:10px 12px;background:rgba(0,0,0,0.04);border-radius:10px;font-size:0.9em" class="c-muted">
+          ${p.allowHalf !== false ? '🍕 Esta pizza <b>permite mitad y mitad</b> con otras variedades de nuestra carta.' : 'ℹ️ Esta variedad <b>se vende solo entera</b>.'}
+        </div>` : ''}
+      <div class="c-sheet-foot" style="margin-top:20px">
+        <button class="c-btn primary grow" data-a="close-info">Entendido</button>
+      </div>
+    `);
+
+    const btn = /** @type {HTMLElement | null} */ (s.el.querySelector('[data-a=close-info]'));
+    if (btn) btn.onclick = () => s.close();
   }
 
   /** @param {PZ.Product} p @param {PZ.Category} c @param {boolean} photos */
@@ -247,6 +354,7 @@
   }
 
   function drawCartBar() {
+    if (isCartaView) return;
     const m = /** @type {PZ.CartaMenu} */ (menu);
     const bar = $('.c-cartbar', root);
     if (!bar) return;

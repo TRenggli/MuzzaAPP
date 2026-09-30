@@ -321,109 +321,441 @@
     }
   }
 
-  /* ---------------- Carta imprimible / para compartir ---------------- */
-  function carta(body) {
-    const b = S.data.settings.business;
-    const norm = (s) => String(s || '').trim().toLowerCase();
+  /* ---------------- Carta imprimible / para compartir y mesas ---------------- */
+  function carta(body, el) {
+    const b = S.data.settings.business || {};
+    const st = S.data.settings;
 
-    // Ranks comunes para ordenar columnas de menor a mayor
+    // Configuración persistente de la carta del salón
+    if (!st.printMenu) {
+      st.printMenu = {
+        categories: [],
+        sortBy: 'cat',
+        groupByCategory: true,
+        pageBreakPerCat: false,
+        fontSize: 'md',
+        showDesc: true,
+        showBadges: true,
+        qrToken: U.uid('qr_'),
+      };
+    }
+    const cfg = st.printMenu;
+    if (!cfg.qrToken) cfg.qrToken = U.uid('qr_');
+    if (!st.online) st.online = PZ.carta.defaults();
+    st.online.salonMenu = cfg;
+
+    const norm = (s) => String(s || '').trim().toLowerCase();
     const KNOWN_RANKS = {
       'u': 1, 'unidad': 1, 'porción': 1, 'porcion': 1, 'individual': 1, 'chica': 2,
       'media': 3, 'mediana': 3, 'media docena': 4,
       'grande': 5, 'docena': 6, 'familiar': 7, 'gigante': 8,
     };
 
-    const html = `
-      <div style="text-align:center;margin-bottom:14px">${PZ.brandLogo(70)}<h1 style="color:var(--primary);margin:6px 0 2px">${U.esc(b.name)}</h1><div class="muted">${U.esc(b.slogan)} · ${U.esc(b.phone)}</div></div>
-      ${S.data.categories.map((c) => {
-        const ps = S.data.products.filter((p) => p.categoryId === c.id && p.active);
-        if (!ps.length) return '';
+    // Categorías disponibles en el sistema
+    const allSystemCats = S.data.categories || [];
+    const isCatSelected = (id) => !cfg.categories || cfg.categories.length === 0 || cfg.categories.includes(id);
 
-        // Recolectar columnas agrupadas por nombre normalizado (evita duplicar "Media docena" y "Media Docena")
-        /** @type {Map<string, { key: string, label: string, avgPrice: number, count: number }>} */
-        const colMap = new Map();
-        ps.forEach((p) => {
-          (p.variants || []).forEach((v) => {
-            const raw = String(v.name || '').trim();
-            if (!raw) return;
-            const key = norm(raw);
-            const price = Number(v.price) || 0;
-            if (!colMap.has(key)) {
-              const label = raw.charAt(0).toUpperCase() + raw.slice(1);
-              colMap.set(key, { key, label, avgPrice: price, count: 1 });
-            } else {
-              const cur = colMap.get(key);
-              if (cur) {
-                cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
-                cur.count += 1;
-              }
+    // Filtrar y preparar categorías y productos según la configuración
+    const prepared = PZ.carta.prepareSalonCategories(allSystemCats, S.data.products, cfg.categories && cfg.categories.length > 0 ? cfg.categories : undefined, cfg.sortBy);
+
+    // Toolbar de configuración
+    const toolbarHtml = `
+      <div class="card mb carta-toolbar" style="padding:16px">
+        <div class="row-flex space-between wrap" style="gap:12px;margin-bottom:14px">
+          <div>
+            <h3 style="margin:0 0 4px">📜 Carta para clientes y mesas del salón</h3>
+            <div class="muted small">Personalizá las categorías, el orden de precios, el formato multi-página y generá el código QR permanente para las mesas.</div>
+          </div>
+          <div class="row-flex" style="gap:8px">
+            <button class="btn accent" data-a="qr-salon">📱 Código QR para mesas</button>
+            <button class="btn primary" data-a="print-carta">🖨️ Imprimir / guardar PDF</button>
+          </div>
+        </div>
+
+        <div class="grid-3" style="gap:12px;margin-bottom:12px">
+          <label class="field">
+            <span>Ordenar productos</span>
+            <select name="sortBy">
+              <option value="cat" ${cfg.sortBy === 'cat' ? 'selected' : ''}>Orden original de categorías</option>
+              <option value="price_asc" ${cfg.sortBy === 'price_asc' ? 'selected' : ''}>Menor precio primero (más accesible)</option>
+              <option value="price_desc" ${cfg.sortBy === 'price_desc' ? 'selected' : ''}>Mayor precio primero</option>
+              <option value="name" ${cfg.sortBy === 'name' ? 'selected' : ''}>Alfabético por nombre (A - Z)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Agrupamiento</span>
+            <select name="groupByCategory">
+              <option value="true" ${cfg.groupByCategory !== false ? 'selected' : ''}>Agrupar por categoría (con títulos e íconos)</option>
+              <option value="false" ${cfg.groupByCategory === false ? 'selected' : ''}>Listado continuo (sin separación)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Tamaño de letra / densidad</span>
+            <select name="fontSize">
+              <option value="sm" ${cfg.fontSize === 'sm' ? 'selected' : ''}>Compacta (entran más productos por hoja)</option>
+              <option value="md" ${cfg.fontSize === 'md' ? 'selected' : ''}>Estándar (lectura óptima)</option>
+              <option value="lg" ${cfg.fontSize === 'lg' ? 'selected' : ''}>Grande (muy legible)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row-flex wrap" style="gap:18px;margin-bottom:12px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+          <label class="check" style="margin:0">
+            <input type="checkbox" name="pageBreakPerCat" ${cfg.pageBreakPerCat ? 'checked' : ''}> 📄 Salto de página entre categorías (para cartas de varias hojas)
+          </label>
+          <label class="check" style="margin:0">
+            <input type="checkbox" name="showDesc" ${cfg.showDesc !== false ? 'checked' : ''}> Mostrar descripciones de ingredientes
+          </label>
+          <label class="check" style="margin:0">
+            <input type="checkbox" name="showBadges" ${cfg.showBadges !== false ? 'checked' : ''}> Mostrar distintivos (Solo entera / Permite mitad)
+          </label>
+        </div>
+
+        <div>
+          <div class="row-flex space-between mb-sm" style="font-size:0.9em">
+            <span style="font-weight:600">Categorías visibles en la carta:</span>
+            <div class="row-flex" style="gap:6px">
+              <button class="btn sm ghost" data-a="cat-all">Seleccionar todas</button>
+              <button class="btn sm ghost" data-a="cat-none">Limpiar</button>
+            </div>
+          </div>
+          <div class="row-flex wrap" style="gap:8px">
+            ${allSystemCats.map((c) => `
+              <label class="check" style="background:var(--bg-2);padding:4px 10px;border-radius:12px;margin:0;font-size:0.88em">
+                <input type="checkbox" data-cat-id="${U.esc(c.id)}" ${isCatSelected(c.id) ? 'checked' : ''}>
+                <span>${U.esc(c.icon)} ${U.esc(c.name)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      </div>`;
+
+    // Generar tabla de productos para una lista de productos
+    const renderTable = (ps, c) => {
+      const colMap = new Map();
+      ps.forEach((p) => {
+        (p.variants || []).forEach((v) => {
+          const raw = String(v.name || '').trim();
+          if (!raw) return;
+          const key = norm(raw);
+          const price = Number(v.price) || 0;
+          if (!colMap.has(key)) {
+            const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+            colMap.set(key, { key, label, avgPrice: price, count: 1 });
+          } else {
+            const cur = colMap.get(key);
+            if (cur) {
+              cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
+              cur.count += 1;
             }
-          });
+          }
         });
+      });
 
-        // Ordenar columnas de forma natural: menor porción/tamaño primero, o por precio promedio ascendente
-        const cols = Array.from(colMap.values()).sort((x, y) => {
-          const rx = KNOWN_RANKS[x.key] || 99;
-          const ry = KNOWN_RANKS[y.key] || 99;
-          if (rx !== ry) return rx - ry;
-          return x.avgPrice - y.avgPrice;
-        });
+      const cols = Array.from(colMap.values()).sort((x, y) => {
+        const rx = KNOWN_RANKS[x.key] || 99;
+        const ry = KNOWN_RANKS[y.key] || 99;
+        if (rx !== ry) return rx - ry;
+        return x.avgPrice - y.avgPrice;
+      });
 
-        const multiCol = cols.length > 1;
+      const multiCol = cols.length > 1;
+
+      return `
+        <table class="tbl carta-tbl" style="width:100%;table-layout:fixed;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px 6px">Producto</th>
+              ${multiCol ? cols.map((col) => `<th class="right col-price" style="width:115px;text-align:right;padding:8px 6px">${U.esc(col.label)}</th>`).join('') : '<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'}
+            </tr>
+          </thead>
+          <tbody>
+            ${ps.map((p) => {
+              const vars = p.variants || [];
+              const soloEntera = c && c.allowHalf && p.allowHalf === false;
+              const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
+                <b>${U.esc(p.name)}</b>
+                ${cfg.showBadges !== false && soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
+                ${cfg.showDesc !== false && p.desc ? `<div class="small muted" style="margin-top:2px">${U.esc(p.desc)}</div>` : ''}
+              </td>`;
+
+              if (!multiCol) {
+                const price = vars[0] ? vars[0].price : 0;
+                return `<tr>${nameCell}<td class="right nowrap col-price" style="width:120px;text-align:right;padding:10px 6px;font-weight:bold">${U.money(price)}</td></tr>`;
+              }
+
+              const matchesAny = vars.some((v) => cols.some((col) => norm(v.name) === col.key));
+              if (vars.length === 1 && !matchesAny) {
+                return `<tr>${nameCell}<td colspan="${cols.length}" class="right nowrap col-price" style="text-align:right;padding:10px 6px"><b>${U.money(vars[0].price)}</b>${vars[0].name ? ` <small class="muted">(${U.esc(vars[0].name)})</small>` : ''}</td></tr>`;
+              }
+
+              const priceCells = cols.map((col) => {
+                const v = vars.find((x) => norm(x.name) === col.key);
+                return `<td class="right nowrap col-price" style="width:115px;text-align:right;padding:10px 6px">${v ? `<b>${U.money(v.price)}</b>` : '<span class="muted" style="opacity:0.4">—</span>'}</td>`;
+              }).join('');
+
+              return `<tr>${nameCell}${priceCells}</tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    };
+
+    let previewContent = '';
+    if (!prepared.length) {
+      previewContent = '<div class="empty small" style="padding:32px;text-align:center">No hay productos disponibles en las categorías seleccionadas.</div>';
+    } else if (cfg.groupByCategory === false) {
+      // Listado continuo
+      const allProds = prepared.flatMap((x) => x.products);
+      const sortedProds = PZ.carta.sortProducts(allProds, cfg.sortBy);
+      previewContent = `
+        <div style="margin-top:16px">
+          ${renderTable(sortedProds, null)}
+        </div>`;
+    } else {
+      // Agrupado por categorías
+      previewContent = prepared.map((item, idx) => {
+        const c = item.category;
+        const ps = item.products;
+        const pageBreakClass = cfg.pageBreakPerCat && idx > 0 ? 'carta-cat-section page-break' : 'carta-cat-section';
+        const pageBreakDivider = cfg.pageBreakPerCat && idx > 0
+          ? '<div class="page-break-indicator" style="margin:24px 0;text-align:center;border-top:2px dashed var(--line);padding-top:6px;font-size:0.8em;color:var(--muted);font-weight:bold"><span class="badge">📄 Salto de página para cartas de varias hojas</span></div>'
+          : '';
 
         return `
-          <div style="margin-top:22px;page-break-inside:avoid">
+          ${pageBreakDivider}
+          <div class="${pageBreakClass}" style="margin-top:22px;page-break-inside:avoid;${cfg.pageBreakPerCat && idx > 0 ? 'page-break-before:always;' : ''}">
             <h3 style="margin:0 0 8px;border-bottom:3px dotted var(--primary);padding-bottom:4px;display:flex;align-items:center;gap:8px">
               <span>${c.icon}</span> <span>${U.esc(c.name)}</span>
-              ${c.allowHalf ? '<span class="badge" style="font-size:0.7em;font-weight:normal;margin-left:auto">🍕 Permite mitad y mitad</span>' : ''}
+              ${cfg.showBadges !== false && c.allowHalf ? '<span class="badge" style="font-size:0.7em;font-weight:normal;margin-left:auto">🍕 Permite mitad y mitad</span>' : ''}
             </h3>
-            <table class="tbl carta-tbl" style="width:100%;table-layout:fixed;border-collapse:collapse">
-              <thead>
-                <tr>
-                  <th style="text-align:left;padding:8px 6px">Producto</th>
-                  ${multiCol ? cols.map((col) => `<th class="right col-price" style="width:115px;text-align:right;padding:8px 6px">${U.esc(col.label)}</th>`).join('') : '<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'}
-                </tr>
-              </thead>
-              <tbody>
-                ${ps.map((p) => {
-                  const vars = p.variants || [];
-                  const soloEntera = c.allowHalf && p.allowHalf === false;
-                  const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
-                    <b>${U.esc(p.name)}</b>
-                    ${soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
-                    ${p.desc ? `<div class="small muted" style="margin-top:2px">${U.esc(p.desc)}</div>` : ''}
-                  </td>`;
-
-                  if (!multiCol) {
-                    const price = vars[0] ? vars[0].price : 0;
-                    return `<tr>${nameCell}<td class="right nowrap col-price" style="width:120px;text-align:right;padding:10px 6px;font-weight:bold">${U.money(price)}</td></tr>`;
-                  }
-
-                  // Si la categoría tiene múltiples columnas pero este producto solo tiene 1 variante que no coincide con las columnas
-                  const matchesAny = vars.some((v) => cols.some((col) => norm(v.name) === col.key));
-                  if (vars.length === 1 && !matchesAny) {
-                    return `<tr>${nameCell}<td colspan="${cols.length}" class="right nowrap col-price" style="text-align:right;padding:10px 6px"><b>${U.money(vars[0].price)}</b>${vars[0].name ? ` <small class="muted">(${U.esc(vars[0].name)})</small>` : ''}</td></tr>`;
-                  }
-
-                  const priceCells = cols.map((col) => {
-                    const v = vars.find((x) => norm(x.name) === col.key);
-                    return `<td class="right nowrap col-price" style="width:115px;text-align:right;padding:10px 6px">${v ? `<b>${U.money(v.price)}</b>` : '<span class="muted" style="opacity:0.4">—</span>'}</td>`;
-                  }).join('');
-
-                  return `<tr>${nameCell}${priceCells}</tr>`;
-                }).join('')}
-              </tbody>
-            </table>
+            ${renderTable(ps, c)}
           </div>`;
-      }).join('')}`;
+      }).join('');
+    }
+
+    const fontSizeStyle = cfg.fontSize === 'sm' ? 'font-size:0.86em;' : cfg.fontSize === 'lg' ? 'font-size:1.14em;' : 'font-size:1em;';
+
+    const cartaHtml = `
+      <div style="text-align:center;margin-bottom:14px">
+        ${PZ.brandLogo(70)}
+        <h1 style="color:var(--primary);margin:6px 0 2px">${U.esc(b.name || 'Pizzería')}</h1>
+        <div class="muted">${U.esc(b.slogan || '')} · ${U.esc(b.phone || '')}</div>
+        ${b.address ? `<div class="muted small">📍 ${U.esc(b.address)}${b.city ? ', ' + U.esc(b.city) : ''}</div>` : ''}
+      </div>
+      ${previewContent}`;
+
     body.innerHTML = `
-      <div class="row-flex mb"><button class="btn primary" data-a="print">🖨️ Imprimir / guardar PDF</button><span class="muted small">Ideal para pegar en el local o mandar por WhatsApp como PDF.</span></div>
-      <div class="card carta">${html}</div>`;
-    body.querySelector('[data-a=print]').onclick = () => {
+      ${toolbarHtml}
+      <div class="card carta carta-preview" style="${fontSizeStyle}">${cartaHtml}</div>`;
+
+    // Handlers del toolbar
+    const saveAndRefresh = () => {
+      st.online.salonMenu = cfg;
+      S.save();
+      carta(body, el);
+    };
+
+    body.querySelector('[name=sortBy]').onchange = (e) => {
+      cfg.sortBy = /** @type {any} */ (e.target.value);
+      saveAndRefresh();
+    };
+
+    body.querySelector('[name=groupByCategory]').onchange = (e) => {
+      cfg.groupByCategory = e.target.value === 'true';
+      saveAndRefresh();
+    };
+
+    body.querySelector('[name=fontSize]').onchange = (e) => {
+      cfg.fontSize = /** @type {any} */ (e.target.value);
+      saveAndRefresh();
+    };
+
+    body.querySelector('[name=pageBreakPerCat]').onchange = (e) => {
+      cfg.pageBreakPerCat = e.target.checked;
+      saveAndRefresh();
+    };
+
+    body.querySelector('[name=showDesc]').onchange = (e) => {
+      cfg.showDesc = e.target.checked;
+      saveAndRefresh();
+    };
+
+    body.querySelector('[name=showBadges]').onchange = (e) => {
+      cfg.showBadges = e.target.checked;
+      saveAndRefresh();
+    };
+
+    body.querySelectorAll('[data-cat-id]').forEach((inp) => {
+      inp.onchange = () => {
+        const id = inp.dataset.catId;
+        if (!cfg.categories) cfg.categories = allSystemCats.map((c) => c.id);
+        if (inp.checked) {
+          if (!cfg.categories.includes(id)) cfg.categories.push(id);
+        } else {
+          cfg.categories = cfg.categories.filter((x) => x !== id);
+        }
+        saveAndRefresh();
+      };
+    });
+
+    body.querySelector('[data-a=cat-all]').onclick = () => {
+      cfg.categories = [];
+      saveAndRefresh();
+    };
+
+    body.querySelector('[data-a=cat-none]').onclick = () => {
+      cfg.categories = ['__none__'];
+      saveAndRefresh();
+    };
+
+    // Modal de Código QR para mesas
+    body.querySelector('[data-a=qr-salon]').onclick = () => {
+      const branch = S.branch() || {};
+      const slug = branch.slug || '';
+      const origin = location.origin + location.pathname.replace(/index\.html$/, '');
+      const qrUrl = slug ? PZ.carta.salonUrl(origin, slug, cfg.qrToken) : `${origin}carta.html?preview=carta`;
+
+      const m = PZ.modal({
+        title: '📱 Código QR permanente para mesas del local',
+        size: 'lg',
+        body: `
+          <div style="text-align:center;padding:10px 0">
+            ${!slug ? `<div class="banner warn mb" style="text-align:left">
+              <b>Aviso:</b> Tu sucursal aún no tiene asignada una dirección pública (slug). El código QR funcionará con la dirección completa, pero te recomendamos configurar un slug amigable en <i>Carta online</i> o <i>Ajustes</i>.
+            </div>` : ''}
+            <div style="background:#fff;padding:16px;border-radius:16px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,0.08);margin-bottom:12px">
+              ${PZ.util.qrSvg(qrUrl, 7, 2)}
+            </div>
+            <h3 style="margin:4px 0 2px;color:var(--primary)">${U.esc(b.name || 'Nuestra Carta')}</h3>
+            <p class="muted small" style="max-width:440px;margin:0 auto 14px">
+              Este código QR está pensado para colocar en las mesas de tu salón. Cuando los comensales lo escaneen con la cámara de su celular, accederán directamente a la <b>Carta del Salón</b> (sin tener que cargar datos de delivery ni pasar por un carrito obligatorio).
+            </p>
+            <div class="row-flex" style="max-width:460px;margin:0 auto 16px;gap:8px">
+              <input type="text" readonly value="${U.esc(qrUrl)}" id="qr-salon-url" style="font-size:0.85em;padding:8px 10px" class="grow">
+              <button class="btn ghost sm" data-a="copy-qr">📋 Copiar enlace</button>
+            </div>
+            <div style="background:var(--bg-2);border-radius:12px;padding:12px;text-align:left;font-size:0.88em;max-width:480px;margin:0 auto">
+              <div style="font-weight:bold;margin-bottom:4px">💡 Información sobre este código QR:</div>
+              <ul style="margin:0;padding-left:18px;line-height:1.4" class="muted">
+                <li>Es <b>permanente</b>: podés imprimirlo e instalarlo en tus mesas todo el tiempo que quieras.</li>
+                <li>Si cambiás los precios o agregás platos, los comensales verán los cambios actualizados automáticamente sin necesidad de reimprimir.</li>
+                <li>Si alguna vez necesitás invalidar o renovar el código, podés hacer clic en <i>Regenerar nuevo QR</i>.</li>
+              </ul>
+            </div>
+          </div>
+        `,
+        footer: `
+          <button class="btn sm danger-outline" data-a="renew-qr">🔄 Regenerar nuevo QR</button>
+          <span class="grow"></span>
+          <button class="btn ghost" data-a="x">Cerrar</button>
+          <button class="btn primary" data-a="print-flyer">🖨️ Imprimir cartel para mesa</button>
+        `,
+      });
+
+      const copyBtn = m.el.querySelector('[data-a=copy-qr]');
+      if (copyBtn) {
+        copyBtn.onclick = () => {
+          const inp = m.el.querySelector('#qr-salon-url');
+          if (inp && navigator.clipboard) {
+            navigator.clipboard.writeText(inp.value).then(() => PZ.toast('Enlace copiado al portapapeles', 'ok'));
+          }
+        };
+      }
+
+      const renewBtn = m.el.querySelector('[data-a=renew-qr]');
+      if (renewBtn) {
+        renewBtn.onclick = () => {
+          if (confirm('¿Querés generar un nuevo código QR? El enlace anterior dejará de ser el oficial. Hacelo solo si necesitás reemplazar los carteles de tus mesas.')) {
+            cfg.qrToken = U.uid('qr_');
+            st.online.salonMenu = cfg;
+            S.save();
+            m.close();
+            PZ.toast('Código QR regenerado exitosamente', 'ok');
+            carta(body, el);
+          }
+        };
+      }
+
+      const flyerBtn = m.el.querySelector('[data-a=print-flyer]');
+      if (flyerBtn) {
+        flyerBtn.onclick = () => {
+          const w = window.open('', '_blank');
+          if (!w) return PZ.toast('Permití las ventanas emergentes para imprimir', 'warn');
+          const flyerSvg = PZ.util.qrSvg(qrUrl, 8, 2);
+          w.document.write(`<!doctype html>
+            <html lang="es">
+            <head>
+              <meta charset="utf-8">
+              <title>Cartel Mesa · ${U.esc(b.name || 'Pizzería')}</title>
+              <style>
+                @page { size: A5 portrait; margin: 10mm; }
+                body {
+                  margin: 0; padding: 20px; font-family: system-ui, -apple-system, sans-serif;
+                  background: #fff; color: #1d1b19; text-align: center;
+                  display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 90vh;
+                }
+                .stand {
+                  border: 3px solid #1d1b19; border-radius: 24px; padding: 32px 24px; max-width: 380px; width: 100%;
+                  box-sizing: border-box; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                }
+                .logo { margin-bottom: 8px; }
+                h1 { margin: 6px 0 2px; font-size: 26px; color: #d7263d; text-transform: uppercase; letter-spacing: 0.04em; }
+                .slogan { font-size: 14px; color: #666; margin-bottom: 16px; }
+                .qr-wrap { background: #fff; padding: 16px; border-radius: 18px; display: inline-block; border: 2px solid #eee; margin: 8px 0 16px; }
+                .cta { font-size: 19px; font-weight: 800; margin: 8px 0 4px; line-height: 1.25; }
+                .sub-cta { font-size: 13px; color: #555; max-width: 300px; margin: 0 auto 16px; }
+                .wifi-box { background: #fdf6e3; border: 1px dashed #b7791f; border-radius: 12px; padding: 8px 12px; font-size: 12px; color: #85550c; margin-top: 12px; font-weight: 600; }
+                .footer { margin-top: 20px; font-size: 12px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
+                @media print {
+                  body { padding: 0; min-height: auto; }
+                  .stand { border-width: 2px; }
+                }
+              </style>
+            </head>
+            <body>
+              <div class="stand">
+                <div class="logo">${PZ.brandLogo(64)}</div>
+                <h1>${U.esc(b.name || 'Pizzería')}</h1>
+                ${b.slogan ? `<div class="slogan">${U.esc(b.slogan)}</div>` : ''}
+                <div class="cta">📱 Escaneá con tu celular para ver la carta</div>
+                <div class="sub-cta">Variedades, pizzas mitad y mitad y precios actualizados en tu mesa.</div>
+                <div class="qr-wrap">${flyerSvg}</div>
+                <div class="wifi-box">📡 Wi-Fi del local: Consultá la clave a nuestro personal</div>
+                <div class="footer">
+                  ${b.address ? `📍 ${U.esc(b.address)}${b.city ? ', ' + U.esc(b.city) : ''} · ` : ''}
+                  ${b.phone ? `📞 ${U.esc(b.phone)}` : ''}
+                </div>
+              </div>
+            </body>
+            </html>`);
+          w.document.close();
+          setTimeout(() => w.print(), 350);
+        };
+      }
+    };
+
+    // Botón de imprimir carta completa / PDF
+    body.querySelector('[data-a=print-carta]').onclick = () => {
       const w = window.open('', '_blank');
       if (!w) return PZ.toast('Permití las ventanas emergentes para imprimir', 'warn');
       const css = Array.from(document.styleSheets).map((s) => { try { return Array.from(s.cssRules).map((r) => r.cssText).join('\n'); } catch (e) { return ''; } }).join('\n');
-      w.document.write(`<!doctype html><html data-theme="${PZ.app.theme()}"><head><meta charset="utf-8"><title>Carta ${U.esc(b.name)}</title><style>${css} body{padding:24px;background:#fff} .card{box-shadow:none;border:0}</style></head><body><div class="card">${html}</div></body></html>`);
+      const printFontSize = cfg.fontSize === 'sm' ? '12px' : cfg.fontSize === 'lg' ? '16px' : '14px';
+      const printPadding = cfg.fontSize === 'sm' ? '4px 6px' : cfg.fontSize === 'lg' ? '10px 8px' : '7px 6px';
+
+      w.document.write(`<!doctype html><html data-theme="${PZ.app.theme()}"><head><meta charset="utf-8"><title>Carta ${U.esc(b.name || 'Pizzería')}</title>
+        <style>
+          ${css}
+          @page { size: auto; margin: 12mm 14mm; }
+          body { padding: 18px; background: #fff; font-size: ${printFontSize} !important; }
+          .card { box-shadow: none; border: 0; padding: 0 !important; }
+          .tbl td, .tbl th { padding: ${printPadding} !important; }
+          .page-break-indicator { display: none !important; }
+          .carta-cat-section { break-inside: avoid; }
+          ${cfg.pageBreakPerCat ? '.carta-cat-section:not(:first-of-type) { break-before: page; page-break-before: always; }' : ''}
+        </style>
+      </head><body><div class="card">${cartaHtml}</div></body></html>`);
       w.document.close();
       setTimeout(() => w.print(), 400);
     };

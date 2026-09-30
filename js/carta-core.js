@@ -54,6 +54,16 @@
         { id: 'oregano', name: 'Orégano', default: true },
         { id: 'chimi', name: 'Chimi', default: true },
       ],
+      salonMenu: {
+        categories: [],
+        sortBy: 'cat',
+        groupByCategory: true,
+        pageBreakPerCat: false,
+        fontSize: 'md',
+        showDesc: true,
+        showBadges: true,
+        qrToken: '',
+      },
     };
   }
 
@@ -301,6 +311,54 @@
   /** Dirección pública de la carta @param {string} base @param {string} slug */
   const cartaUrl = (base, slug) => `${String(base).replace(/[^/]*$/, '')}carta.html?l=${encodeURIComponent(slug)}`;
 
+  /** Dirección pública de la carta para mesas del salón @param {string} base @param {string} slug @param {string} [qrToken] */
+  const salonUrl = (base, slug, qrToken) => `${String(base).replace(/[^/]*$/, '')}carta.html?l=${encodeURIComponent(slug)}&vista=carta${qrToken ? `&qr=${encodeURIComponent(qrToken)}` : ''}`;
+
+  /**
+   * Ordena productos según el criterio configurado
+   * @param {PZ.Product[]} prods
+   * @param {'cat' | 'price_asc' | 'price_desc' | 'name'} [sortBy]
+   */
+  function sortProducts(prods, sortBy = 'cat') {
+    const minPrice = (/** @type {PZ.Product} */ p) => {
+      const vars = p.variants || [];
+      if (!vars.length) return 0;
+      return Math.min(...vars.map((v) => Number(v.price) || 0));
+    };
+    const copy = [...prods];
+    if (sortBy === 'price_asc') {
+      return copy.sort((a, b) => minPrice(a) - minPrice(b) || a.name.localeCompare(b.name, 'es'));
+    }
+    if (sortBy === 'price_desc') {
+      return copy.sort((a, b) => minPrice(b) - minPrice(a) || a.name.localeCompare(b.name, 'es'));
+    }
+    if (sortBy === 'name') {
+      return copy.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }
+    return copy.sort((a, b) => (Number(a._i) || 0) - (Number(b._i) || 0));
+  }
+
+  /**
+   * Filtra y prepara las categorías para la carta del salón
+   * @param {PZ.Category[]} categories
+   * @param {PZ.Product[]} products
+   * @param {string[]} [selectedCatIds]
+   * @param {'cat' | 'price_asc' | 'price_desc' | 'name'} [sortBy]
+   */
+  function prepareSalonCategories(categories, products, selectedCatIds, sortBy = 'cat') {
+    const hasFilter = Array.isArray(selectedCatIds) && selectedCatIds.length > 0;
+    const catList = categories.filter((c) => {
+      if (hasFilter && !selectedCatIds.includes(c.id)) return false;
+      return products.some((p) => p.categoryId === c.id && p.active);
+    });
+
+    return catList.map((c) => {
+      const ps = products.filter((p) => p.categoryId === c.id && p.active);
+      const sorted = sortProducts(ps, sortBy);
+      return { category: c, products: sorted };
+    });
+  }
+
   /**
    * Distancia en kilómetros entre dos coordenadas GPS (Haversine)
    * @param {number} lat1
@@ -421,7 +479,8 @@
     isOpen, hoursText, localTime,
     priceLine, totals, validLines, extraApplies,
     waNumber, waLink, waMessage, shortDate,
-    slugify, validSlug, cartaUrl,
+    slugify, validSlug, cartaUrl, salonUrl,
+    sortProducts, prepareSalonCategories,
     haversineDistance, estimateDeliveryEta, repartoUrl,
     generateDriverCode, parseDriverCode, matchDriver,
   };
