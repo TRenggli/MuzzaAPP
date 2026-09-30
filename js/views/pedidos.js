@@ -14,6 +14,7 @@
   ];
   let mobileCol = 'pendiente';
   let lastPending = null;
+  let lastWebPending = null;
 
   function beep() {
     try {
@@ -41,14 +42,31 @@
     const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime()).slice().reverse();
     const web = PZ.web && PZ.auth.can('vender') ? PZ.web.pending() : [];
 
+    if (lastWebPending !== null && web.length > lastWebPending) {
+      beep();
+      if (PZ.notify) {
+        const first = web[0];
+        PZ.notify(`📲 ¡Nuevo pedido online #W-${first.number}!`, {
+          body: `${first.name} · ${U.money(first.total)} (${PZ.labels.type[first.type] || first.type})\n${first.address || ''}`,
+          notes: [784, 1046, 1318],
+          vibrate: [200, 100, 200, 100, 300],
+          tag: `pz-web-${first.id}`,
+        });
+      }
+    }
+    lastWebPending = web.length;
+
     el.innerHTML = `
       <div class="row-flex space-between mb">
         <div class="muted">Los pedidos avanzan de izquierda a derecha. Se marcan en rojo los que pasan los ${prep} minutos.</div>
         ${PZ.auth.can('vender') ? '<a class="btn primary" href="#/vender">🍕 Nuevo pedido</a>' : ''}
       </div>
       ${web.length ? `<div class="card web-inbox mb">
-        <h3>📲 Pedidos de la carta online por confirmar <span class="badge pri">${web.length}</span></h3>
-        <p class="muted small" style="margin-top:0">Al aceptarlo pasa a <b>Recibidos</b> con todos los productos cargados. Se cobra al entregar, como cualquier pedido.</p>
+        <div class="row-flex space-between">
+          <h3 style="margin:0">📲 Pedidos de la carta online por confirmar <span class="badge pri">${web.length}</span></h3>
+          ${typeof Notification !== 'undefined' && Notification.permission !== 'granted' ? `<button class="btn sm ghost" id="btn-pedidos-notifs" style="padding:2px 8px;font-size:0.75rem;">🔔 Activar avisos de escritorio</button>` : ''}
+        </div>
+        <p class="muted small" style="margin-top:6px">Al aceptarlo pasa a <b>Recibidos</b> con todos los productos cargados. Se cobra al entregar, como cualquier pedido.</p>
         <div class="web-grid">${web.map((w) => PZ.web.cardHTML(w)).join('')}</div>
       </div>` : ''}
       <div class="seg board-tabs">${COLS.map((c) => `<button data-mc="${c.id}" class="${mobileCol === c.id ? 'on' : ''}">${c.label} (${active.filter((o) => o.status === c.id || (c.id === 'horno' && o.status === 'preparando')).length})</button>`).join('')}</div>
@@ -67,6 +85,18 @@
 
     el.querySelectorAll('[data-mc]').forEach((b) => b.onclick = () => { mobileCol = b.dataset.mc; render(el); });
     el.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => action(el, b.dataset.id, b.dataset.act));
+    const btnPedNotifs = el.querySelector('#btn-pedidos-notifs');
+    if (btnPedNotifs) {
+      btnPedNotifs.onclick = async () => {
+        if (PZ.requestNotificationPermission) {
+          const res = await PZ.requestNotificationPermission();
+          if (res === 'granted') {
+            if (PZ.notify) PZ.notify('🔔 ¡Avisos activados!', { body: 'Te avisaremos con sonido y notificación cuando entren pedidos de la carta online.' });
+            render(el);
+          }
+        }
+      };
+    }
     if (web.length) PZ.web.bind(el, () => render(el));
   }
 

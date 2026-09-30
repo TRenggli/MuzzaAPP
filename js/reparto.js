@@ -214,6 +214,27 @@
     }
   }
 
+  let knownDeliveryIds = new Set();
+  let isFirstDeliveriesLoad = true;
+  /** @type {any} */
+  let titleFlashTimer = null;
+
+  function flashTabTitle(msg) {
+    if (document.hidden) {
+      clearInterval(titleFlashTimer);
+      const orig = document.title;
+      let on = false;
+      titleFlashTimer = setInterval(() => {
+        if (!document.hidden) {
+          clearInterval(titleFlashTimer);
+          document.title = orig;
+          return;
+        }
+        document.title = (on = !on) ? msg : orig;
+      }, 1000);
+    }
+  }
+
   async function loadDeliveries() {
     const client = getSupabase();
     if (!client) return;
@@ -224,7 +245,7 @@
       });
 
       if (!error && Array.isArray(data)) {
-        activeDeliveries = data.map((o) => ({
+        const mapped = data.map((o) => ({
           id: o.id,
           number: o.number,
           type: 'delivery',
@@ -240,6 +261,27 @@
           driver: o.driver || currentDriver,
           onlineOrderId: o.onlineOrderId || o.id,
         }));
+
+        if (!isFirstDeliveriesLoad) {
+          const newOrders = mapped.filter((d) => !knownDeliveryIds.has(d.id));
+          if (newOrders.length > 0) {
+            const first = newOrders[0];
+            const pz = /** @type {any} */ (window).PZ;
+            if (pz && pz.notify) {
+              pz.notify(`🛵 ¡Nuevo pedido asignado! (#${first.number})`, {
+                body: `📍 ${first.address} · ${first.customerName || 'Cliente'}\n💵 Total: $${first.total}`,
+                vibrate: [250, 100, 250, 100, 400],
+                notes: [784, 1046, 1318],
+                tag: `muzza-delivery-${first.id}`,
+              });
+            }
+            flashTabTitle(`(¡NUEVO!) 🛵 Pedido #${first.number}`);
+          }
+        }
+
+        isFirstDeliveriesLoad = false;
+        knownDeliveryIds = new Set(mapped.map((d) => d.id));
+        activeDeliveries = mapped;
       }
     } catch (e) {
       console.warn('Error cargando entregas remotas:', e);
@@ -249,6 +291,7 @@
   function renderApp() {
     const bName = (branchData && branchData.settings && branchData.settings.business && branchData.settings.business.name) || (branchData && branchData.branch ? branchData.branch.name : 'Pizzería');
     const city = (branchData && branchData.settings && branchData.settings.business && branchData.settings.business.city) || '';
+    const hasNotifs = typeof Notification !== 'undefined' && Notification.permission === 'granted';
 
     root.innerHTML = `
       <div class="driver-top">
@@ -258,6 +301,11 @@
             <span>🛵 ${esc(currentDriver)}</span>
             ${currentDriverCode ? `<span class="driver-code-badge" title="Identificador único">${esc(currentDriverCode)}</span>` : ''}
             <button class="btn sm ghost" id="change-driver" style="padding:2px 8px;font-size:0.75rem;margin-left:4px">Cerrar turno</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+            ${hasNotifs
+              ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:700;color:var(--ok);background:rgba(127,176,105,0.15);padding:3px 8px;border-radius:6px;border:1px solid var(--ok);" title="Avisos sonoros y notificaciones de nuevos pedidos activos">🔔 Avisos activos</span>`
+              : `<button class="btn sm ghost" id="enable-notifs-btn" style="padding:2px 8px;font-size:0.75rem;" title="Activar avisos sonoros y notificaciones de nuevos pedidos">🔔 Activar avisos</button>`}
           </div>
         </div>
         <div class="gps-pill ${isStreamingGps ? 'on' : 'off'}" id="gps-indicator">
@@ -303,6 +351,25 @@
     if (refreshBtn) {
       refreshBtn.onclick = () => {
         loadDeliveries().then(renderApp);
+      };
+    }
+
+    const notifsBtn = document.getElementById('enable-notifs-btn');
+    if (notifsBtn) {
+      notifsBtn.onclick = async () => {
+        const pz = /** @type {any} */ (window).PZ;
+        if (pz && pz.requestNotificationPermission) {
+          const res = await pz.requestNotificationPermission();
+          if (res === 'granted') {
+            pz.notify('🔔 ¡Avisos sonoros y notificaciones activados!', {
+              body: 'Vas a recibir alertas con sonido y vibración cada vez que te asignen un pedido.',
+              notes: [784, 1046, 1318],
+            });
+            renderApp();
+          } else {
+            alert('Las notificaciones están bloqueadas en tu navegador. Podés habilitarlas desde el icono del candado arriba en la barra de direcciones.');
+          }
+        }
       };
     }
 

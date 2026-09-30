@@ -283,6 +283,60 @@ window.PZ.views = window.PZ.views || {};
     } catch (e) { /* sin audio */ }
   };
 
+  /* ---------- Notificaciones nativas del navegador (100% gratuitas) ---------- */
+  PZ.requestNotificationPermission = async function () {
+    if (!('Notification' in window)) return 'unsupported';
+    if (Notification.permission === 'granted') return 'granted';
+    try {
+      return await Notification.requestPermission();
+    } catch (_) {
+      return 'denied';
+    }
+  };
+
+  PZ.notify = async function (title, options = {}) {
+    // 1. Audio chime gratuito sintetizado
+    if (PZ.beep) PZ.beep(options.notes || [784, 1046]);
+
+    // 2. Vibración háptica en celulares
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate(options.vibrate || [200, 100, 200]); } catch (_) {}
+    }
+
+    // 3. Notificación nativa de escritorio o móvil si está autorizada
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const notif = new Notification(title, {
+          icon: 'img/icon.svg',
+          badge: 'img/icon.svg',
+          ...options,
+        });
+        if (options.onClick) {
+          notif.onclick = () => {
+            window.focus();
+            options.onClick();
+          };
+        }
+        return notif;
+      } catch (err) {
+        // En Android Chrome se puede invocar via Service Worker si está registrado
+        try {
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.ready;
+            if (reg && reg.showNotification) {
+              await reg.showNotification(title, {
+                icon: 'img/icon.svg',
+                badge: 'img/icon.svg',
+                ...options,
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return null;
+  };
+
   /* ---------- Confeti de pepperoni / albahaca al cobrar ---------- */
   PZ.celebrate = function () {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;

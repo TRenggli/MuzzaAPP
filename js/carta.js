@@ -676,6 +676,42 @@
   let lastTrackStatus = null;
   /** @type {boolean} */
   let lastHadGps = false;
+  /** @type {string|null} */
+  let notifiedStatus = null;
+
+  function playCustomerChime(notes = [784, 1046]) {
+    try {
+      const ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
+      notes.forEach((f, i) => {
+        const t = i * 0.18;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.frequency.value = f;
+        g.gain.setValueAtTime(0.25, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.28);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.29);
+      });
+    } catch (_) {}
+  }
+
+  function notifyCustomer(title, body, notes = [784, 1046]) {
+    playCustomerChime(notes);
+    if ('vibrate' in navigator) {
+      try { navigator.vibrate([200, 100, 200]); } catch (_) {}
+    }
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body,
+          icon: 'img/icon.svg',
+          badge: 'img/icon.svg',
+          tag: 'muzza-order-tracking',
+        });
+      } catch (_) {}
+    }
+  }
 
   async function renderTrack() {
     const m = /** @type {PZ.CartaMenu} */ (menu);
@@ -701,6 +737,17 @@
 
     const hasLiveGps = !!(liveLoc && liveLoc.lat && liveLoc.lng);
 
+    if (notifiedStatus !== null && notifiedStatus !== status) {
+      if (status === 'en_camino') {
+        notifyCustomer('🛵 ¡Tu pedido va en camino!', 'El repartidor ya salió para tu casa. Podés ver el mapa en vivo en la pantalla.', [659, 880, 1046]);
+      } else if (status === 'listo') {
+        notifyCustomer('🍕 ¡Tu pedido está listo!', 'Tu pedido ya salió del horno y está listo para entrega.', [784, 1046]);
+      } else if (status === 'entregado') {
+        notifyCustomer('🏁 ¡Pedido entregado!', '¡Que disfrutes tu pizza! Gracias por elegirnos.', [523, 659, 784, 1046]);
+      }
+    }
+    notifiedStatus = status;
+
     // Si el mapa ya está en pantalla y seguimos en camino con GPS, movemos la moto suavemente sin destruir el mapa ni recargar
     const existingMapEl = document.getElementById('live-delivery-map');
     if (trackMap && trackMotoMarker && hasLiveGps && existingMapEl && lastTrackStatus === status && lastHadGps === hasLiveGps) {
@@ -722,11 +769,20 @@
     lastTrackStatus = status;
     lastHadGps = hasLiveGps;
 
+    const canAskNotifs = typeof Notification !== 'undefined' && Notification.permission !== 'granted' && !['entregado', 'rechazado', 'cancelado'].includes(status);
+
     root.innerHTML = `
       <header class="c-hero small"><div class="c-hero-in"><h1>${esc(b.name || m.branch.org)}</h1><p class="c-slogan">Pedido W-${esc(String(info.number))}</p></div></header>
       <main class="c-main">
         ${status === 'rechazado' || status === 'cancelado' ? `<div class="c-warn">😔 El local no pudo tomar este pedido${info.reason ? `: ${esc(info.reason)}` : '.'}</div>` : `
         <ol class="c-track">${steps.map(([k, ico, title, sub], i) => `<li class="${i < idx ? 'done' : i === idx ? 'now' : ''}"><span class="t-ico" aria-hidden="true">${ico}</span><div><b>${title}</b><small>${i === idx ? sub : ''}</small></div></li>`).join('')}</ol>`}
+        ${canAskNotifs ? `
+          <div style="text-align:center;margin:6px 0 10px;">
+            <button id="btn-carta-notifs" class="c-btn ghost sm" style="display:inline-flex;align-items:center;gap:6px;font-size:0.82em;padding:6px 14px;border:1px dashed var(--c-primary,#d7263d);border-radius:20px;cursor:pointer;background:transparent;">
+              🔔 Avisarme con sonido cuando salga la moto
+            </button>
+          </div>
+        ` : ''}
         ${(info.type === 'delivery' && (info.address || hasLiveGps) && status !== 'rechazado' && status !== 'cancelado') ? `
           <div class="c-card-plain" style="margin-top:14px;padding:14px;text-align:left">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -792,6 +848,21 @@
       trackMap.remove();
       trackMap = null;
       trackMotoMarker = null;
+    }
+
+    const btnCartaNotifs = document.getElementById('btn-carta-notifs');
+    if (btnCartaNotifs) {
+      btnCartaNotifs.onclick = async () => {
+        try {
+          const res = await Notification.requestPermission();
+          if (res === 'granted') {
+            notifyCustomer('🔔 ¡Avisos activados!', 'Te avisaremos con sonido y en pantalla cuando la moto salga.');
+            btnCartaNotifs.textContent = '✅ Avisos activados';
+            btnCartaNotifs.style.borderStyle = 'solid';
+            btnCartaNotifs.style.color = '#2e7d32';
+          }
+        } catch (_) {}
+      };
     }
 
     const pollInterval = (status === 'en_camino') ? 7000 : 15000;
