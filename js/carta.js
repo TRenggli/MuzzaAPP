@@ -669,7 +669,13 @@
   /** @type {any} */
   let trackMap = null;
   /** @type {any} */
+  let trackMotoMarker = null;
+  /** @type {any} */
   let trackTimer = null;
+  /** @type {string|null} */
+  let lastTrackStatus = null;
+  /** @type {boolean} */
+  let lastHadGps = false;
 
   async function renderTrack() {
     const m = /** @type {PZ.CartaMenu} */ (menu);
@@ -695,6 +701,27 @@
 
     const hasLiveGps = !!(liveLoc && liveLoc.lat && liveLoc.lng);
 
+    // Si el mapa ya está en pantalla y seguimos en camino con GPS, movemos la moto suavemente sin destruir el mapa ni recargar
+    const existingMapEl = document.getElementById('live-delivery-map');
+    if (trackMap && trackMotoMarker && hasLiveGps && existingMapEl && lastTrackStatus === status && lastHadGps === hasLiveGps) {
+      try {
+        trackMotoMarker.setLatLng([liveLoc.lat, liveLoc.lng]);
+        trackMap.panTo([liveLoc.lat, liveLoc.lng], { animate: true, duration: 1.5 });
+      } catch (err) {
+        console.warn('Error actualizando posición de moto:', err);
+      }
+      const pill = document.getElementById('live-gps-pill');
+      if (pill) {
+        pill.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e7d32;animation:c-pulse 1.4s infinite"></span> GPS en vivo (${esc(liveLoc ? liveLoc.driver : 'Repartidor')})`;
+      }
+      clearTimeout(trackTimer);
+      trackTimer = setTimeout(renderTrack, 7000);
+      return;
+    }
+
+    lastTrackStatus = status;
+    lastHadGps = hasLiveGps;
+
     root.innerHTML = `
       <header class="c-hero small"><div class="c-hero-in"><h1>${esc(b.name || m.branch.org)}</h1><p class="c-slogan">Pedido W-${esc(String(info.number))}</p></div></header>
       <main class="c-main">
@@ -711,7 +738,7 @@
               <div style="position:relative;border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,0.08);background:#f2efe9">
                 <div id="live-delivery-map" style="width:100%;height:250px;"></div>
                 <div style="position:absolute;bottom:8px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;z-index:999">
-                  <div style="background:rgba(255,255,255,0.95);padding:5px 12px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.18);color:#1b4332;display:flex;align-items:center;gap:6px">
+                  <div id="live-gps-pill" style="background:rgba(255,255,255,0.95);padding:5px 12px;border-radius:20px;font-size:0.8em;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.18);color:#1b4332;display:flex;align-items:center;gap:6px">
                     <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#2e7d32;animation:c-pulse 1.4s infinite"></span>
                     GPS en vivo (${esc(liveLoc ? liveLoc.driver : 'Repartidor')})
                   </div>
@@ -750,16 +777,21 @@
           if (trackMap) {
             trackMap.remove();
             trackMap = null;
+            trackMotoMarker = null;
           }
           trackMap = Leaflet.map(mapEl, { zoomControl: false, attributionControl: false }).setView([liveLoc.lat, liveLoc.lng], 16);
           Leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(trackMap);
           const motoHtml = `<div style="background:#fff;border:2.5px solid var(--c-primary,#d7263d);border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-size:20px;transform:translate(-50%,-50%)">🛵</div>`;
           const icon = Leaflet.divIcon({ className: 'c-moto-marker', html: motoHtml, iconSize: [0, 0] });
-          Leaflet.marker([liveLoc.lat, liveLoc.lng], { icon }).addTo(trackMap);
+          trackMotoMarker = Leaflet.marker([liveLoc.lat, liveLoc.lng], { icon }).addTo(trackMap);
         } catch (err) {
           console.warn('Error inicializando mapa Leaflet:', err);
         }
       }
+    } else if (trackMap) {
+      trackMap.remove();
+      trackMap = null;
+      trackMotoMarker = null;
     }
 
     const pollInterval = (status === 'en_camino') ? 7000 : 15000;
