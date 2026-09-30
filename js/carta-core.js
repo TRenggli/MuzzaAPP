@@ -165,15 +165,17 @@
     let unit = Number(v.price) || 0;
     /** @type {PZ.Product | null} */
     let half = null;
-    if (line.halfId && cat && cat.allowHalf) {
-      half = menu.products.find((x) => x.id === line.halfId) || null;
+    const isPizza = !!(cat && cat.allowHalf);
+    const allowHalf = isPizza && p.allowHalf !== false;
+    if (line.halfId && allowHalf) {
+      half = menu.products.find((x) => x.id === line.halfId && x.allowHalf !== false) || null;
       if (half) {
         const hv = half.variants.find((x) => x.id === v.id) || half.variants[0];
         const p2 = Number(hv.price) || 0;
         unit = menu.settings.halfPricing === 'avg' ? Math.round((unit + p2) / 2) : Math.max(unit, p2);
       }
     }
-    const extras = cat && cat.allowHalf ? menu.extras.filter((x) => (line.extras || []).includes(x.id) && extraApplies(x, p, half)) : [];
+    const extras = isPizza ? menu.extras.filter((x) => (line.extras || []).includes(x.id) && extraApplies(x, p, half)) : [];
     unit += extras.reduce((a, x) => a + (Number(x.price) || 0), 0);
     return {
       product: p,

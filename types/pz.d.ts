@@ -30,6 +30,8 @@ declare namespace PZ {
     photo?: string;
     variants: Variant[];
     recipe?: { ingredientId: string; qty: number }[];
+    /** permite pedir mitad y mitad (por defecto hereda de la categoría si es true) */
+    allowHalf?: boolean;
   }
   interface Extra {
     id: string;

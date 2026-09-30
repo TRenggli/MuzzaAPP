@@ -31,7 +31,7 @@
         return `<div class="card mb"><h3>${c.icon} ${U.esc(c.name)} <span class="badge">${ps.length}</span></h3>
           ${ps.length ? `<div class="table-wrap"><table class="tbl"><tbody>${ps.map((p) => `<tr>
             <td style="width:34px">${c.allowHalf ? `<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:${p.color || 'var(--accent)'};border:3px solid var(--crust)"></span>` : c.icon}</td>
-            <td><b>${U.esc(p.name)}</b><div class="small muted">${U.esc(p.desc || '')}</div></td>
+            <td><b>${U.esc(p.name)}</b>${c.allowHalf && p.allowHalf === false ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}<div class="small muted">${U.esc(p.desc || '')}</div></td>
             <td class="nowrap">${p.variants.map((v) => `<span class="badge">${U.esc(v.name)} ${U.money(v.price)}</span>`).join(' ')}</td>
             <td><label class="check" style="margin:0"><input type="checkbox" data-av="${p.id}" ${p.active ? 'checked' : ''}> ${p.active ? 'Disponible' : 'Agotado'}</label></td>
             <td class="actions"><button class="btn sm ghost" data-e="${p.id}">✏️</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">Sin productos</div>'}
@@ -61,6 +61,10 @@
             <div class="img-slot"><div class="thumb photo-prev">${draft.photo ? `<img src="${U.esc(draft.photo)}" alt="">` : '📷'}</div>
               <label class="btn ghost sm">Foto<input type="file" accept="image/*" name="photo" hidden></label>
               <label class="check" style="margin:0"><input type="checkbox" name="online" ${draft.online !== false ? 'checked' : ''}> Se ve en la carta</label></div></div>` : ''}
+        </div>
+        <div class="half-opt-wrap" style="margin: 6px 0 12px">
+          <label class="check" style="margin:0"><input type="checkbox" name="allowHalf" ${draft.allowHalf !== false ? 'checked' : ''}> 🍕 Permitir mitad y mitad con otras pizzas</label>
+          <div class="small muted" style="margin-left:24px">Desmarcalo si es una pizza especial, calzón o rellena que solo se vende entera.</div>
         </div>
         <div class="opt-section">Tamaños y precios</div>
         <div class="vars"></div>
@@ -108,6 +112,15 @@
         E.querySelector('.photo-prev').innerHTML = `<img src="${U.esc(draft.photo)}" alt="">`;
       } catch (e) { PZ.toast('No se pudo subir: ' + e.message, 'err', 5000); }
     };
+    const catSelect = /** @type {HTMLSelectElement | null} */ (E.querySelector('[name=cat]'));
+    const halfWrap = /** @type {HTMLElement | null} */ (E.querySelector('.half-opt-wrap'));
+    const syncHalfOpt = () => {
+      const c = catSelect ? S.category(catSelect.value) : null;
+      if (halfWrap) halfWrap.style.display = c && c.allowHalf ? '' : 'none';
+    };
+    if (catSelect) catSelect.onchange = syncHalfOpt;
+    syncHalfOpt();
+
     E.querySelector('[data-a=addv]').onclick = () => { draft.variants.push({ id: U.uid('v'), name: '', price: 0, factor: 1 }); drawVars(); };
     E.querySelector('[data-a=addr]').onclick = () => { if (!ings.length) return PZ.toast('Primero cargá ingredientes en Stock', 'warn'); draft.recipe.push({ ingredientId: ings[0].id, qty: 0 }); drawRec(); };
     E.querySelector('[data-a=x]').onclick = () => m.close();
@@ -124,6 +137,8 @@
       draft.color = E.querySelector('[name=color]').value;
       const onl = E.querySelector('[name=online]');
       if (onl) draft.online = onl.checked;
+      const hfIn = /** @type {HTMLInputElement | null} */ (E.querySelector('[name=allowHalf]'));
+      if (hfIn) draft.allowHalf = hfIn.checked;
       draft.variants = draft.variants.filter((v) => v.name.trim() || draft.variants.length === 1);
       draft.recipe = draft.recipe.filter((r) => r.qty > 0);
       if (!draft.name) return PZ.toast('Falta el nombre', 'warn');
@@ -309,17 +324,97 @@
   /* ---------------- Carta imprimible / para compartir ---------------- */
   function carta(body) {
     const b = S.data.settings.business;
+    const norm = (s) => String(s || '').trim().toLowerCase();
+
+    // Ranks comunes para ordenar columnas de menor a mayor
+    const KNOWN_RANKS = {
+      'u': 1, 'unidad': 1, 'porción': 1, 'porcion': 1, 'individual': 1, 'chica': 2,
+      'media': 3, 'mediana': 3, 'media docena': 4,
+      'grande': 5, 'docena': 6, 'familiar': 7, 'gigante': 8,
+    };
+
     const html = `
-      <div style="text-align:center;margin-bottom:10px">${PZ.brandLogo(70)}<h1 style="color:var(--primary)">${U.esc(b.name)}</h1><div class="muted">${U.esc(b.slogan)} · ${U.esc(b.phone)}</div></div>
+      <div style="text-align:center;margin-bottom:14px">${PZ.brandLogo(70)}<h1 style="color:var(--primary);margin:6px 0 2px">${U.esc(b.name)}</h1><div class="muted">${U.esc(b.slogan)} · ${U.esc(b.phone)}</div></div>
       ${S.data.categories.map((c) => {
         const ps = S.data.products.filter((p) => p.categoryId === c.id && p.active);
         if (!ps.length) return '';
-        const cols = [...new Set(ps.flatMap((p) => p.variants.map((v) => v.name)))];
-        return `<h3 style="margin:18px 0 8px;border-bottom:3px dotted var(--primary);padding-bottom:4px">${c.icon} ${U.esc(c.name)}</h3>
-          <table class="tbl"><thead><tr><th></th>${cols.length > 1 ? cols.map((n) => `<th class="right">${U.esc(n)}</th>`).join('') : '<th></th>'}</tr></thead><tbody>
-          ${ps.map((p) => `<tr><td><b>${U.esc(p.name)}</b><div class="small muted">${U.esc(p.desc || '')}</div></td>
-            ${cols.length > 1 ? cols.map((n) => { const v = p.variants.find((x) => x.name === n); return `<td class="right nowrap">${v ? U.money(v.price) : '—'}</td>`; }).join('') : `<td class="right nowrap"><b>${U.money(p.variants[0].price)}</b></td>`}</tr>`).join('')}
-          </tbody></table>`;
+
+        // Recolectar columnas agrupadas por nombre normalizado (evita duplicar "Media docena" y "Media Docena")
+        /** @type {Map<string, { key: string, label: string, avgPrice: number, count: number }>} */
+        const colMap = new Map();
+        ps.forEach((p) => {
+          (p.variants || []).forEach((v) => {
+            const raw = String(v.name || '').trim();
+            if (!raw) return;
+            const key = norm(raw);
+            const price = Number(v.price) || 0;
+            if (!colMap.has(key)) {
+              const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+              colMap.set(key, { key, label, avgPrice: price, count: 1 });
+            } else {
+              const cur = colMap.get(key);
+              if (cur) {
+                cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
+                cur.count += 1;
+              }
+            }
+          });
+        });
+
+        // Ordenar columnas de forma natural: menor porción/tamaño primero, o por precio promedio ascendente
+        const cols = Array.from(colMap.values()).sort((x, y) => {
+          const rx = KNOWN_RANKS[x.key] || 99;
+          const ry = KNOWN_RANKS[y.key] || 99;
+          if (rx !== ry) return rx - ry;
+          return x.avgPrice - y.avgPrice;
+        });
+
+        const multiCol = cols.length > 1;
+
+        return `
+          <div style="margin-top:22px;page-break-inside:avoid">
+            <h3 style="margin:0 0 8px;border-bottom:3px dotted var(--primary);padding-bottom:4px;display:flex;align-items:center;gap:8px">
+              <span>${c.icon}</span> <span>${U.esc(c.name)}</span>
+              ${c.allowHalf ? '<span class="badge" style="font-size:0.7em;font-weight:normal;margin-left:auto">🍕 Permite mitad y mitad</span>' : ''}
+            </h3>
+            <table class="tbl carta-tbl" style="width:100%;table-layout:fixed;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:8px 6px">Producto</th>
+                  ${multiCol ? cols.map((col) => `<th class="right col-price" style="width:115px;text-align:right;padding:8px 6px">${U.esc(col.label)}</th>`).join('') : '<th class="right col-price" style="width:120px;text-align:right;padding:8px 6px">Precio</th>'}
+                </tr>
+              </thead>
+              <tbody>
+                ${ps.map((p) => {
+                  const vars = p.variants || [];
+                  const soloEntera = c.allowHalf && p.allowHalf === false;
+                  const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
+                    <b>${U.esc(p.name)}</b>
+                    ${soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
+                    ${p.desc ? `<div class="small muted" style="margin-top:2px">${U.esc(p.desc)}</div>` : ''}
+                  </td>`;
+
+                  if (!multiCol) {
+                    const price = vars[0] ? vars[0].price : 0;
+                    return `<tr>${nameCell}<td class="right nowrap col-price" style="width:120px;text-align:right;padding:10px 6px;font-weight:bold">${U.money(price)}</td></tr>`;
+                  }
+
+                  // Si la categoría tiene múltiples columnas pero este producto solo tiene 1 variante que no coincide con las columnas
+                  const matchesAny = vars.some((v) => cols.some((col) => norm(v.name) === col.key));
+                  if (vars.length === 1 && !matchesAny) {
+                    return `<tr>${nameCell}<td colspan="${cols.length}" class="right nowrap col-price" style="text-align:right;padding:10px 6px"><b>${U.money(vars[0].price)}</b>${vars[0].name ? ` <small class="muted">(${U.esc(vars[0].name)})</small>` : ''}</td></tr>`;
+                  }
+
+                  const priceCells = cols.map((col) => {
+                    const v = vars.find((x) => norm(x.name) === col.key);
+                    return `<td class="right nowrap col-price" style="width:115px;text-align:right;padding:10px 6px">${v ? `<b>${U.money(v.price)}</b>` : '<span class="muted" style="opacity:0.4">—</span>'}</td>`;
+                  }).join('');
+
+                  return `<tr>${nameCell}${priceCells}</tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
       }).join('')}`;
     body.innerHTML = `
       <div class="row-flex mb"><button class="btn primary" data-a="print">🖨️ Imprimir / guardar PDF</button><span class="muted small">Ideal para pegar en el local o mandar por WhatsApp como PDF.</span></div>

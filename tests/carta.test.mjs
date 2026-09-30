@@ -262,4 +262,106 @@ test('repartidor: identificador único, parseo y matching de chofer', () => {
   assert.equal(url, 'https://trenggli.github.io/MuzzaAPP/reparto.html?l=diego&d=Lucas&c=DIEGO-101');
 });
 
+test('pizzas: opción individual allowHalf=false impide mitad y mitad y no puede ser elegida como segunda mitad', () => {
+  const m = menu();
+  const calzone = {
+    id: 'p-calzone',
+    categoryId: 'c-piz',
+    name: 'Calzón relleno',
+    desc: 'Solo se vende entero',
+    active: true,
+    allowHalf: false, // desmarcado por el usuario
+    variants: [{ id: 'grande', name: 'Grande', price: 16000, factor: 1 }],
+  };
+  m.products.push(calzone);
+
+  const muzza = m.products.find((p) => p.id === 'p-muz');
+
+  // Caso 1: Intentar pedir el calzone con mitad de muzzarella debe ser ignorado y cobrar solo el calzone entero
+  const lineCalzone = { productId: 'p-calzone', variantId: 'grande', halfId: 'p-muz', extras: [], qty: 1 };
+  const plCalzone = C.priceLine(m, lineCalzone);
+  assert.equal(plCalzone.half, null, 'Calzón con allowHalf=false no admite mitad');
+  assert.equal(plCalzone.name, 'Calzón relleno');
+  assert.equal(plCalzone.unit, 16000);
+
+  // Caso 2: Intentar pedir Muzzarella con mitad de Calzone debe ser ignorado porque Calzone tiene allowHalf=false
+  const lineMuzzaConCalzone = { productId: 'p-muz', variantId: 'grande', halfId: 'p-calzone', extras: [], qty: 1 };
+  const plMuzza = C.priceLine(m, lineMuzzaConCalzone);
+  assert.equal(plMuzza.half, null, 'Calzón no puede ser seleccionado como segunda mitad de otra pizza');
+  assert.equal(plMuzza.name, 'Muzzarella');
+  assert.equal(plMuzza.unit, 10000);
+});
+
+test('carta imprimible: normalización de variantes (evita duplicar "Media docena" y "Media Docena") y orden natural', () => {
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const KNOWN_RANKS = {
+    'u': 1, 'unidad': 1, 'porción': 1, 'porcion': 1, 'individual': 1, 'chica': 2,
+    'media': 3, 'mediana': 3, 'media docena': 4,
+    'grande': 5, 'docena': 6, 'familiar': 7, 'gigante': 8,
+  };
+
+  // Simulación de productos en la categoría Empanadas cargados con inconsistencias de tipeo
+  const ps = [
+    {
+      name: 'Empanada de carne suave',
+      variants: [
+        { name: 'Unidad', price: 2500 },
+        { name: 'Media docena', price: 15000 },
+        { name: 'Docena', price: 30000 }
+      ]
+    },
+    {
+      name: 'Empanada jamón y queso',
+      variants: [
+        { name: 'UNIDAD', price: 2500 },
+        { name: 'Docena', price: 30000 },
+        { name: 'Media Docena ', price: 15000 } // Tipeo con mayúsculas y espacio al final
+      ]
+    }
+  ];
+
+  const colMap = new Map();
+  ps.forEach((p) => {
+    p.variants.forEach((v) => {
+      const raw = String(v.name || '').trim();
+      if (!raw) return;
+      const key = norm(raw);
+      const price = Number(v.price) || 0;
+      if (!colMap.has(key)) {
+        const label = raw.charAt(0).toUpperCase() + raw.slice(1);
+        colMap.set(key, { key, label, avgPrice: price, count: 1 });
+      } else {
+        const cur = colMap.get(key);
+        cur.avgPrice = (cur.avgPrice * cur.count + price) / (cur.count + 1);
+        cur.count += 1;
+      }
+    });
+  });
+
+  const cols = Array.from(colMap.values()).sort((x, y) => {
+    const rx = KNOWN_RANKS[x.key] || 99;
+    const ry = KNOWN_RANKS[y.key] || 99;
+    if (rx !== ry) return rx - ry;
+    return x.avgPrice - y.avgPrice;
+  });
+
+  // Debe haber EXACTAMENTE 3 columnas, sin repetir Media docena
+  assert.equal(cols.length, 3, 'Debe haber exactamente 3 columnas');
+  assert.deepEqual(cols.map((c) => c.key), ['unidad', 'media docena', 'docena']);
+
+  // Ambos productos deben mapear sus precios al 100% en las 3 columnas sin ningún guion '—'
+  const row1 = cols.map((c) => {
+    const v = ps[0].variants.find((x) => norm(x.name) === c.key);
+    return v ? v.price : null;
+  });
+  const row2 = cols.map((c) => {
+    const v = ps[1].variants.find((x) => norm(x.name) === c.key);
+    return v ? v.price : null;
+  });
+
+  assert.deepEqual(row1, [2500, 15000, 30000]);
+  assert.deepEqual(row2, [2500, 15000, 30000]);
+});
+
+
 

@@ -104,8 +104,9 @@
   /* ======================= Modal de producto ======================= */
   function productModal(p, onAdd) {
     const cat = S.category(p.categoryId);
-    const allowHalf = cat && cat.allowHalf;
-    const halfCandidates = S.data.products.filter((x) => x.active && x.id !== p.id && S.category(x.categoryId) && S.category(x.categoryId).allowHalf);
+    const isPizza = !!(cat && cat.allowHalf);
+    const allowHalf = isPizza && p.allowHalf !== false;
+    const halfCandidates = S.data.products.filter((x) => x.active && x.id !== p.id && x.allowHalf !== false && S.category(x.categoryId) && S.category(x.categoryId).allowHalf);
     let variant = p.variants[0];
     /** @type {PZ.Product | null} */
     let half = null;
@@ -133,12 +134,12 @@
           <div class="half-preview"><div class="half-pizza"><div class="h1"></div><div class="h2"></div></div><div class="half-txt grow"></div></div>
           <select class="half-sel"><option value="">— Entera (sin mitad) —</option>${halfCandidates.map((x) => `<option value="${x.id}">½ ${U.esc(x.name)}</option>`).join('')}</select>
           <p class="small muted">Precio de la mitad y mitad: ${S.data.settings.halfPricing === 'avg' ? 'promedio de ambas' : 'se cobra la más cara'}.</p>` : ''}
-        ${allowHalf && condiments.length ? `
+        ${isPizza && condiments.length ? `
           <div class="opt-section">Condimentos de la casa</div>
           <div class="opt-grid cond-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-bottom: 8px;">
             ${condiments.map((c) => `<button type="button" class="opt ${condState[c.id] ? 'on' : ''}" data-cid="${U.esc(c.id)}"></button>`).join('')}
           </div>` : ''}
-        ${allowHalf && S.data.extras.length ? `<div class="opt-section">Agregados</div><div class="opt-grid x-grid"></div>` : ''}
+        ${isPizza && S.data.extras.length ? `<div class="opt-section">Agregados</div><div class="opt-grid x-grid"></div>` : ''}
         <div class="opt-section">Aclaraciones</div>
         <input class="notes" placeholder="Ej: bien cocida, sin aceitunas…">
         <div class="opt-section">Cantidad</div>
@@ -147,7 +148,7 @@
     });
     const E = m.el;
     const renderConds = () => {
-      if (!allowHalf) return;
+      if (!isPizza) return;
       condiments.forEach((c) => {
         const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
         if (!btn) return;
@@ -163,7 +164,7 @@
         }
       });
     };
-    if (allowHalf) {
+    if (isPizza) {
       condiments.forEach((c) => {
         const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
         if (btn) {
@@ -181,7 +182,7 @@
       const hv = half ? { product: half, variant: half.variants.find((v) => v.id === variant.id) || half.variants[0] } : null;
       let finalNotes = E.querySelector('.notes').value.trim();
       const tags = [];
-      if (allowHalf) {
+      if (isPizza) {
         condiments.forEach((c) => {
           const isDefault = c.default !== false;
           const isSelected = !!condState[c.id];
@@ -206,7 +207,7 @@
         E.querySelector('.half-pizza').style.transform = half ? 'rotate(-20deg)' : 'none';
         E.querySelector('.half-txt').innerHTML = half ? `<b>½ ${U.esc(p.name)}</b><br><b>½ ${U.esc(half.name)}</b>` : `<b>${U.esc(p.name)}</b> entera`;
       }
-      if (allowHalf && S.data.extras.length) {
+      if (isPizza && S.data.extras.length) {
         const xg = E.querySelector('.x-grid');
         if (xg) {
           const visibleExtras = S.data.extras.filter((e) => extraApplies(e));

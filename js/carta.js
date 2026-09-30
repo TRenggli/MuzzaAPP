@@ -294,8 +294,9 @@
     const p = m.products.find((x) => x.id === id);
     if (!p) return;
     const cat = m.categories.find((c) => c.id === p.categoryId);
-    const allowHalf = !!(cat && cat.allowHalf);
-    const halves = allowHalf ? m.products.filter((x) => x.id !== p.id && m.categories.some((c) => c.id === x.categoryId && c.allowHalf)) : [];
+    const isPizza = !!(cat && cat.allowHalf);
+    const allowHalf = isPizza && p.allowHalf !== false;
+    const halves = allowHalf ? m.products.filter((x) => x.id !== p.id && x.allowHalf !== false && m.categories.some((c) => c.id === x.categoryId && c.allowHalf)) : [];
     const on = { ...C.defaults(), ...m.settings.online };
     /** @type {PZ.Condiment[]} */
     const condiments = Array.isArray(on.condiments) && on.condiments.length
@@ -319,12 +320,12 @@
         <div class="c-half"><span class="c-half-pz" aria-hidden="true"><i class="h1" style="background:${esc(p.color || '#ffd166')}"></i><i class="h2"></i></span>
           <select class="c-select" data-g="h" aria-label="Otra mitad"><option value="">Entera de ${esc(p.name)}</option>${halves.map((h) => `<option value="${esc(h.id)}">½ ${esc(p.name)} + ½ ${esc(h.name)}</option>`).join('')}</select></div>
         <p class="c-muted small">${m.settings.halfPricing === 'avg' ? 'Se cobra el promedio de las dos mitades.' : 'Se cobra la mitad de mayor precio.'}</p>` : ''}
-      ${allowHalf && condiments.length ? `
+      ${isPizza && condiments.length ? `
         <div class="c-opt-title">Condimentos <small class="c-muted" style="font-weight:normal">(tocá para elegir o quitar)</small></div>
         <div class="c-opts c-conds" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:12px;">
           ${condiments.map((c) => `<button type="button" class="c-opt ${condState[c.id] ? 'on' : ''}" data-cid="${esc(c.id)}"></button>`).join('')}
         </div>` : ''}
-      ${allowHalf && m.extras.length ? `<div class="c-extras-wrap"><div class="c-opt-title">Agregados</div><div class="c-opts" data-g="x"></div></div>` : ''}
+      ${isPizza && m.extras.length ? `<div class="c-extras-wrap"><div class="c-opt-title">Agregados</div><div class="c-opts" data-g="x"></div></div>` : ''}
       <div class="c-opt-title">Aclaraciones</div>
       <input class="c-input" data-g="n" maxlength="140" placeholder="Ej: bien cocida, sin aceitunas…">
       <div class="c-sheet-foot">
@@ -334,7 +335,7 @@
     const E = s.el;
 
     const renderConds = () => {
-      if (!allowHalf) return;
+      if (!isPizza) return;
       condiments.forEach((c) => {
         const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
         if (!btn) return;
@@ -350,7 +351,7 @@
         }
       });
     };
-    if (allowHalf) {
+    if (isPizza) {
       condiments.forEach((c) => {
         const btn = /** @type {HTMLElement | null} */ (E.querySelector(`[data-cid="${c.id}"]`));
         if (btn) {
@@ -371,7 +372,7 @@
         /** @type {HTMLElement} */ (h2).style.background = half ? (half.color || '#ffd166') : (p.color || '#ffd166');
         /** @type {HTMLElement} */ (E.querySelector('.c-half-pz')).classList.toggle('split', !!half);
       }
-      if (allowHalf && m.extras.length) {
+      if (isPizza && m.extras.length) {
         const wrap = /** @type {HTMLElement | null} */ (E.querySelector('.c-extras-wrap'));
         const xg = E.querySelector('[data-g=x]');
         if (xg && wrap) {
@@ -397,7 +398,7 @@
     $('[data-a=add]', E).onclick = () => {
       let userNotes = inp('[data-g=n]', E).value.trim().slice(0, 140);
       const tags = [];
-      if (allowHalf) {
+      if (isPizza) {
         condiments.forEach((c) => {
           const isDefault = c.default !== false;
           const isSelected = !!condState[c.id];
