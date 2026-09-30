@@ -1,9 +1,9 @@
 // @ts-check
 /* Service worker: la app funciona sin internet una vez cargada. */
-const CACHE = 'pizzeria-v7';
+const CACHE = 'pizzeria-v8';
 const ASSETS = [
-  './', './index.html', './manifest.webmanifest', './css/styles.css', './css/responsive.css', './img/icon.svg', './vendor/qrcode.js', './vendor/supabase.js', './js/config.js', './js/cloud.js', './js/seed.js', './js/views/negocio.js', './js/views/equipo.js', './js/views/gastos.js', './js/views/plataforma.js', './js/views/perfil.js',
-  './js/core.js', './js/carta-core.js', './js/mp.js', './js/online.js', './js/views/online.js', './js/store.js', './js/auth.js', './js/ticket.js', './js/charts.js', './js/help.js', './js/app.js',
+  './', './index.html', './landing.html', './reparto.html', './carta.html', './manifest.webmanifest', './css/styles.css', './css/responsive.css', './css/carta.css', './img/icon.svg', './vendor/qrcode.js', './vendor/supabase.js', './vendor/leaflet.js', './vendor/leaflet.css', './js/config.js', './js/cloud.js', './js/seed.js', './js/views/negocio.js', './js/views/equipo.js', './js/views/gastos.js', './js/views/plataforma.js', './js/views/perfil.js',
+  './js/core.js', './js/carta-core.js', './js/carta.js', './js/reparto.js', './js/mp.js', './js/online.js', './js/views/online.js', './js/store.js', './js/auth.js', './js/ticket.js', './js/charts.js', './js/help.js', './js/app.js',
   './js/views/inicio.js', './js/views/vender.js', './js/views/pedidos.js', './js/views/caja.js', './js/views/historial.js',
   './js/views/clientes.js', './js/views/menu.js', './js/views/stock.js', './js/views/reportes.js', './js/views/config.js',
 ];
