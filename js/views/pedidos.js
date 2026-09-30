@@ -18,7 +18,9 @@
 
   function beep() {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
       [0, 0.18].forEach((t, i) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();

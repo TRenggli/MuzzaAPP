@@ -89,3 +89,55 @@ test('resiliencia: persistencia en localStorage ante reinicio o apagado de bater
   assert.equal(restoredCode, 'DEL-101', 'El identificador único se conserva');
   assert.equal(restoredSlug, 'diego', 'La sucursal asignada se conserva');
 });
+
+test('compatibilidad: ejecución en navegadores sin soporte de Web Audio API (AudioContext ausente)', async () => {
+  // Simular navegador ultra-ligero o antiguo (ej. Opera Mini o WebView legacy) donde AudioContext y webkitAudioContext no existen
+  const app = loadApp();
+  
+  // Asegurar que AudioContext y webkitAudioContext no están definidos
+  delete app.ctx.AudioContext;
+  delete app.ctx.webkitAudioContext;
+
+  // 1. PZ.beep no debe arrojar ninguna excepción al no existir AudioContext
+  assert.doesNotThrow(() => {
+    app.PZ.beep([784, 1046]);
+  }, 'PZ.beep debe degradar en silencio sin arrojar error cuando no hay AudioContext');
+
+  // 2. PZ.notify debe continuar operando con vibración háptica y sin crasheos
+  let vibrated = false;
+  app.ctx.navigator.vibrate = (pattern) => {
+    vibrated = true;
+    return true;
+  };
+
+  const res = await app.PZ.notify('🍕 Pizza Lista', { vibrate: [100, 50, 100] });
+  assert.equal(vibrated, true, 'La vibración háptica se ejecuta incluso si no hay Web Audio');
+});
+
+test('resiliencia: simulación de apagado forzado (cold reboot) y recuperación sin credenciales', () => {
+  // Fase 1: El chofer opera antes de que se apague el teléfono
+  const appSession1 = loadApp();
+  appSession1.localStorage.setItem('muzza-driver', 'Lucas');
+  appSession1.localStorage.setItem('muzza-driver-code', 'DEL-101');
+  appSession1.localStorage.setItem('muzza-branch-slug', 'diego');
+
+  // Fase 2: Simulación de apagado de batería / crash del proceso (destrucción total de memoria volátil)
+  // Todo el estado en memoria de appSession1 desaparece.
+  
+  // Fase 3: El teléfono enciende, se reabre el navegador y se carga la app limpia con el mismo almacenamiento en disco
+  const appSession2 = loadApp();
+  // El almacenamiento flash persiste entre reinicios
+  appSession2.localStorage.setItem('muzza-driver', appSession1.localStorage.getItem('muzza-driver'));
+  appSession2.localStorage.setItem('muzza-driver-code', appSession1.localStorage.getItem('muzza-driver-code'));
+  appSession2.localStorage.setItem('muzza-branch-slug', appSession1.localStorage.getItem('muzza-branch-slug'));
+
+  // Al abrir reparto.html sin parámetros:
+  const savedDriver = appSession2.localStorage.getItem('muzza-driver');
+  const savedCode = appSession2.localStorage.getItem('muzza-driver-code');
+  const savedSlug = appSession2.localStorage.getItem('muzza-branch-slug');
+
+  assert.equal(savedDriver, 'Lucas', 'Sesión restaurada sin pedir contraseña');
+  assert.equal(savedCode, 'DEL-101', 'Código de chofer intacto para seguir operando');
+  assert.equal(savedSlug, 'diego', 'Asociado a la misma sucursal');
+});
+

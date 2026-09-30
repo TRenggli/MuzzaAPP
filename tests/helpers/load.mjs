@@ -60,7 +60,7 @@ export function loadApp({ online = true, Notification = undefined } = {}) {
 
   const plain = (x) => JSON.parse(JSON.stringify(x));
   const setOnline = (v) => { ctx.navigator.onLine = v; };
-  return { PZ, S, U: PZ.util, sent, plain, localStorage, setOnline };
+  return { PZ, S, U: PZ.util, sent, plain, localStorage, setOnline, ctx };
 }
 
 /** Menú mínimo con receta, para probar precios y costos */

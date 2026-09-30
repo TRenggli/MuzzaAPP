@@ -268,7 +268,9 @@ window.PZ.views = window.PZ.views || {};
   /* ---------- Aviso sonoro (pedido nuevo) ---------- */
   PZ.beep = function (notes = [784, 1046]) {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
       }

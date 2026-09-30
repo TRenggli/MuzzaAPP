@@ -681,7 +681,9 @@
 
   function playCustomerChime(notes = [784, 1046]) {
     try {
-      const ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
+      const AudioCtx = window.AudioContext || /** @type {any} */ (window).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
       }
