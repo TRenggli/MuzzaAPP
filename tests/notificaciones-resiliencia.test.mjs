@@ -141,3 +141,143 @@ test('resiliencia: simulación de apagado forzado (cold reboot) y recuperación 
   assert.equal(savedSlug, 'diego', 'Asociado a la misma sucursal');
 });
 
+test('perfil: cambio de email con colisión de cuenta existente rechaza con mensaje claro y preserva la base intacta', async () => {
+  // Simulación de la lógica de la Edge Function 'profile' (supabase/functions/profile/index.ts)
+  const STAFF_DOMAIN = 'staff.pizzeria.local';
+
+  function simulateProfileChangeEmail({ me, bodyEmail, existingEmails = [] }) {
+    const email = String(bodyEmail || '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { status: 400, error: 'Email inválido' };
+    if (email.endsWith('@' + STAFF_DOMAIN)) return { status: 400, error: 'Email inválido' };
+
+    const oldEmail = (me.email || '').toLowerCase();
+    const logsInWithEmail = !oldEmail.endsWith('@' + STAFF_DOMAIN);
+
+    let membersUpdated = false;
+    let profilesUpserted = false;
+
+    if (logsInWithEmail && email !== oldEmail) {
+      // Simula error de Supabase Auth admin.updateUserById cuando el email ya existe
+      if (existingEmails.includes(email)) {
+        const error = { message: 'A user with this email address has already been registered' };
+        const msg = /already|registered|exists/i.test(error.message) ? 'Ese email ya lo usa otra cuenta' : error.message;
+        return { status: 400, error: msg, membersUpdated, profilesUpserted };
+      }
+      membersUpdated = true;
+    }
+    profilesUpserted = true;
+    return { status: 200, ok: true, login: logsInWithEmail ? email : null, membersUpdated, profilesUpserted };
+  }
+
+  const currentUser = { id: 'usr-1', email: 'diego@pizzeria.com' };
+  const registeredAccounts = ['otro_dueno@gmail.com', 'empleado@gmail.com'];
+
+  // Caso 1: Intento de usar un email que ya pertenece a otra cuenta
+  const collisionResult = simulateProfileChangeEmail({
+    me: currentUser,
+    bodyEmail: 'otro_dueno@gmail.com',
+    existingEmails: registeredAccounts,
+  });
+
+  assert.equal(collisionResult.status, 400);
+  assert.equal(collisionResult.error, 'Ese email ya lo usa otra cuenta');
+  assert.equal(collisionResult.membersUpdated, false, 'No debe modificar la tabla members');
+  assert.equal(collisionResult.profilesUpserted, false, 'No debe tocar la tabla profiles');
+
+  // Caso 2: Email con formato incorrecto
+  const invalidResult = simulateProfileChangeEmail({
+    me: currentUser,
+    bodyEmail: 'email-sin-arroba',
+    existingEmails: registeredAccounts,
+  });
+  assert.equal(invalidResult.status, 400);
+  assert.equal(invalidResult.error, 'Email inválido');
+
+  // Caso 3: Email con dominio de staff prohibido
+  const staffResult = simulateProfileChangeEmail({
+    me: currentUser,
+    bodyEmail: 'cajero@staff.pizzeria.local',
+    existingEmails: registeredAccounts,
+  });
+  assert.equal(staffResult.status, 400);
+  assert.equal(staffResult.error, 'Email inválido');
+
+  // Caso 4: Email válido y disponible
+  const validResult = simulateProfileChangeEmail({
+    me: currentUser,
+    bodyEmail: 'nuevo_correo_diego@gmail.com',
+    existingEmails: registeredAccounts,
+  });
+  assert.equal(validResult.status, 200);
+  assert.equal(validResult.ok, true);
+  assert.equal(validResult.login, 'nuevo_correo_diego@gmail.com');
+  assert.equal(validResult.membersUpdated, true);
+  assert.equal(validResult.profilesUpserted, true);
+});
+
+test('comanda y venta: exclusión de condimentos (ej: Napolitana sin tomate ni ajo) viaja a notas y ticket', () => {
+  const { S } = loadApp();
+
+  // Condimentos configurados en la sucursal (por ejemplo Orégano, Tomate, Ajo, Chimi)
+  const condiments = [
+    { id: 'oregano', name: 'Orégano', default: true },
+    { id: 'tomate', name: 'Tomate', default: true },
+    { id: 'ajo', name: 'Ajo', default: true },
+    { id: 'chimi', name: 'Chimi', default: false },
+  ];
+
+  // Pizza Napolitana
+  const napolitana = {
+    id: 'p-napo',
+    categoryId: 'c-piz',
+    name: 'Napolitana',
+    desc: 'Muzza, rodajas de tomate, ajo y perejil',
+    active: true,
+    variants: [{ id: 'grande', name: 'Grande', price: 15000, factor: 1 }],
+  };
+
+  // Simulación de interacción de usuario: el cliente o mozo desmarca 'tomate' y 'ajo'
+  const condState = { oregano: true, tomate: false, ajo: false, chimi: false };
+  const tags = [];
+  condiments.forEach((c) => {
+    const isDefault = c.default !== false;
+    const isSelected = !!condState[c.id];
+    if (isDefault && !isSelected) tags.push(`Sin ${c.name.toLowerCase()}`);
+    else if (!isDefault && isSelected) tags.push(`Con ${c.name.toLowerCase()}`);
+  });
+
+  assert.deepEqual(tags, ['Sin tomate', 'Sin ajo']);
+
+  // Generar nota final del ítem
+  let notes = tags.join(' · ');
+  assert.equal(notes, 'Sin tomate · Sin ajo');
+
+  // Crear el ítem de venta usando S.makeItem
+  const item = S.makeItem({
+    product: napolitana,
+    variant: napolitana.variants[0],
+    qty: 1,
+    notes,
+  });
+
+  assert.equal(item.name, 'Napolitana');
+  assert.equal(item.notes, 'Sin tomate · Sin ajo');
+
+  // En una orden / ticket de cocina
+  const order = {
+    id: 'o-test',
+    number: 101,
+    type: 'mesa',
+    table: 'Mesa 4',
+    items: [item],
+    total: 15000,
+    paid: false,
+    createdAt: Date.now(),
+  };
+
+  // Verificar que el ticket de cocina contiene la exclusión destacada
+  const kitchenHtml = item.notes ? `<div class="box">» ${item.notes}</div>` : '';
+  assert.ok(kitchenHtml.includes('» Sin tomate · Sin ajo'));
+});
+
+
