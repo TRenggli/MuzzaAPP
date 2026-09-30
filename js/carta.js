@@ -682,6 +682,9 @@
   function playCustomerChime(notes = [784, 1046]) {
     try {
       const ctx = new (window.AudioContext || /** @type {any} */ (window).webkitAudioContext)();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       notes.forEach((f, i) => {
         const t = i * 0.18;
         const o = ctx.createOscillator();

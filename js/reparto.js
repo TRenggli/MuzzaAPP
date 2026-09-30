@@ -154,6 +154,20 @@
         loadDeliveries().then(renderApp);
       }
     }, 15000);
+
+    // Al recuperar conexión a internet tras corte o falta de datos
+    window.addEventListener('online', () => {
+      if (!isStreamingGps && currentDriver) {
+        loadDeliveries().then(renderApp);
+      }
+    });
+
+    // Al encender la pantalla o volver a la pestaña tras bloqueo o reposo
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !isStreamingGps && currentDriver) {
+        loadDeliveries().then(renderApp);
+      }
+    });
   }
 
   function renderCodeLoginScreen(errMsg = '') {
@@ -530,6 +544,12 @@
       const nav = /** @type {any} */ (navigator);
       if ('wakeLock' in nav) {
         wakeLock = await nav.wakeLock.request('screen');
+        // Si el teléfono se bloqueó y se vuelve a encender, reactivar WakeLock
+        document.addEventListener('visibilitychange', async () => {
+          if (wakeLock !== null && document.visibilityState === 'visible') {
+            try { wakeLock = await nav.wakeLock.request('screen'); } catch (_) {}
+          }
+        });
       }
     } catch (e) {
       // Ignorar si el usuario no tiene permisos de WakeLock

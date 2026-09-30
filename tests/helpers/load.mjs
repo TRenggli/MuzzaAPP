@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-export function loadApp({ online = true } = {}) {
+export function loadApp({ online = true, Notification = undefined } = {}) {
   const mem = new Map();
   const localStorage = {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -22,6 +22,7 @@ export function loadApp({ online = true } = {}) {
     localStorage, sessionStorage: localStorage,
     location: { href: 'http://test/', origin: 'http://test', pathname: '/' },
     addEventListener() {},
+    ...(Notification ? { Notification } : {}),
   };
   ctx.window = ctx;
   ctx.globalThis = ctx;

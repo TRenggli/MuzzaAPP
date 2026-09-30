@@ -269,6 +269,9 @@ window.PZ.views = window.PZ.views || {};
   PZ.beep = function (notes = [784, 1046]) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       notes.forEach((f, i) => {
         const t = i * 0.18;
         const o = ctx.createOscillator();
@@ -313,7 +316,9 @@ window.PZ.views = window.PZ.views || {};
         });
         if (options.onClick) {
           notif.onclick = () => {
-            window.focus();
+            if (typeof window.focus === 'function') {
+              try { window.focus(); } catch (_) {}
+            }
             options.onClick();
           };
         }
