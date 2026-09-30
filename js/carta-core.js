@@ -330,9 +330,9 @@
     return Math.max(2, travelMins);
   }
 
-  /** Dirección pública para la app del repartidor @param {string} base @param {string} slug @param {string} [driver] */
-  const repartoUrl = (base, slug, driver = '') =>
-    `${String(base).replace(/[^/]*$/, '')}reparto.html?l=${encodeURIComponent(slug)}${driver ? `&d=${encodeURIComponent(driver)}` : ''}`;
+  /** Dirección pública para la app del repartidor @param {string} base @param {string} slug @param {string} [driver] @param {string} [branchId] */
+  const repartoUrl = (base, slug, driver = '', branchId = '') =>
+    `${String(base).replace(/[^/]*$/, '')}reparto.html?l=${encodeURIComponent(slug)}${branchId ? `&b=${encodeURIComponent(branchId)}` : ''}${driver ? `&d=${encodeURIComponent(driver)}` : ''}`;
 
   PZ.carta = {
     THEMES, FONTS, TYPE_LABEL, PAY_LABEL, DAYS,

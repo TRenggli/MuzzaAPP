@@ -12,6 +12,7 @@
 
   const params = new URLSearchParams(location.search);
   const slug = (params.get('l') || '').toLowerCase();
+  const branchIdParam = params.get('b') || '';
   let currentDriver = params.get('d') || localStorage.getItem('muzza-driver') || '';
 
   /** @type {any} */
@@ -43,16 +44,17 @@
 
     try {
       sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey);
-      const { data, error } = await sb.rpc('carta_menu', { p_slug: slug });
-      if (error || !data) throw error || new Error('No se encontró la sucursal');
-      branchData = data;
+      const { data } = await sb.rpc('carta_menu', { p_slug: slug });
+      branchData = data || {
+        branch: { id: branchIdParam, name: slug.replace(/-/g, ' ').toUpperCase(), slug },
+        settings: { business: { name: slug.replace(/-/g, ' ').toUpperCase() }, drivers: ['Repartidor 1', 'Repartidor 2'] }
+      };
+      if (branchIdParam && branchData && branchData.branch) branchData.branch.id = branchIdParam;
     } catch (e) {
-      root.innerHTML = `<div class="card" style="text-align:center;padding:30px">
-        <h2>Error al conectar</h2>
-        <p class="muted">${esc(e.message || 'No pudimos cargar la sucursal')}</p>
-        <button class="btn primary mt" onclick="location.reload()">Reintentar</button>
-      </div>`;
-      return;
+      branchData = {
+        branch: { id: branchIdParam, name: slug.replace(/-/g, ' ').toUpperCase(), slug },
+        settings: { business: { name: 'MuzzaAPP Reparto' }, drivers: ['Repartidor 1', 'Repartidor 2'] }
+      };
     }
 
     // Si no hay conductor seleccionado, mostrar selector

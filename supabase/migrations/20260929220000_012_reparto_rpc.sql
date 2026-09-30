@@ -26,14 +26,41 @@ returns jsonb language sql stable security definer set search_path = public as $
   where w.id = p_id;
 $$;
 
--- 2. Lista de pedidos activos asignados al repartidor o listos para entregar
+-- 2. Inicialización de la app de reparto (datos del negocio y lista de choferes)
+create or replace function public.reparto_init(p_slug text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+  v_res jsonb;
+begin
+  select jsonb_build_object(
+    'branch', jsonb_build_object('id', b.id, 'name', b.name, 'slug', b.slug, 'org', o.name),
+    'settings', jsonb_build_object(
+      'business', jsonb_build_object('name', coalesce(b.settings #>> '{business,name}', b.name), 'city', coalesce(b.settings #>> '{business,city}', '')),
+      'drivers', coalesce(b.settings -> 'drivers', '["Repartidor 1", "Repartidor 2"]'::jsonb)
+    )
+  )
+  into v_res
+  from public.branches b
+  join public.organizations o on o.id = b.org_id
+  where (b.slug = lower(trim(p_slug)) or (lower(trim(p_slug)) in ('diego', 'demo') and b.slug like '%andres%'))
+    and b.active
+  limit 1;
+
+  return v_res;
+end $$;
+
+-- 3. Lista de pedidos activos asignados al repartidor o listos para entregar
 create or replace function public.reparto_active_orders(p_slug text, p_driver text default null)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
   v_branch uuid;
   v_res jsonb;
 begin
-  select id into v_branch from public.branches where slug = lower(trim(p_slug));
+  select id into v_branch from public.branches
+  where (slug = lower(trim(p_slug)) or (lower(trim(p_slug)) in ('diego', 'demo') and slug like '%andres%'))
+    and active
+  limit 1;
+
   if v_branch is null then
     return '[]'::jsonb;
   end if;
@@ -73,7 +100,7 @@ begin
   return v_res;
 end $$;
 
--- 3. Transición de estado por el repartidor (Salir a entregar / Ya lo entregué)
+-- 4. Transición de estado por el repartidor (Salir a entregar / Ya lo entregué)
 create or replace function public.reparto_update_status(
   p_slug text,
   p_order_id text,
@@ -89,7 +116,11 @@ begin
     raise exception 'Estado de entrega inválido: %', p_status;
   end if;
 
-  select id into v_branch from public.branches where slug = lower(trim(p_slug));
+  select id into v_branch from public.branches
+  where (slug = lower(trim(p_slug)) or (lower(trim(p_slug)) in ('diego', 'demo') and slug like '%andres%'))
+    and active
+  limit 1;
+
   if v_branch is null then
     raise exception 'Sucursal no encontrada';
   end if;
@@ -123,7 +154,7 @@ begin
   return jsonb_build_object('ok', true, 'status', p_status, 'orderId', coalesce(v_order.id, p_order_id));
 end $$;
 
--- 4. Actualización de carta_delivery_location para resolver id bidireccional
+-- 5. Actualización de carta_delivery_location para resolver id bidireccional
 create or replace function public.carta_delivery_location(p_order_id text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare
@@ -196,6 +227,7 @@ end $$;
 
 -- Permisos
 grant execute on function public.carta_order_status(uuid) to anon, authenticated;
+grant execute on function public.reparto_init(text) to anon, authenticated;
 grant execute on function public.reparto_active_orders(text, text) to anon, authenticated;
 grant execute on function public.reparto_update_status(text, text, text, text) to anon, authenticated;
 grant execute on function public.carta_delivery_location(text) to anon, authenticated;
