@@ -119,7 +119,7 @@ window.PZ.views = window.PZ.views || {};
         const qr = qrcode(0, 'M');
         qr.addData(text);
         qr.make();
-        return qr.createSvgTag({ cellSize: cell, margin, scalable: true });
+        return qr.createSvgTag({ cellSize: cell, margin, scalable: false });
       } catch (e) {
         return '';
       }

@@ -625,8 +625,8 @@
             ${!slug ? `<div class="banner warn mb" style="text-align:left">
               <b>Aviso:</b> Tu sucursal aún no tiene asignada una dirección pública (slug). El código QR funcionará con la dirección completa, pero te recomendamos configurar un slug amigable en <i>Carta online</i> o <i>Ajustes</i>.
             </div>` : ''}
-            <div style="background:#fff;padding:16px;border-radius:16px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,0.08);margin-bottom:12px">
-              ${PZ.util.qrSvg(qrUrl, 7, 2)}
+            <div class="qr-salon-frame" style="width:230px;height:230px;background:#fff;padding:12px;border-radius:20px;box-shadow:0 4px 18px rgba(0,0,0,0.1);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">
+              ${PZ.util.qrSvg(qrUrl, 5, 2)}
             </div>
             <h3 style="margin:4px 0 2px;color:var(--primary)">${U.esc(b.name || 'Nuestra Carta')}</h3>
             <p class="muted small" style="max-width:440px;margin:0 auto 14px">
@@ -683,7 +683,7 @@
         flyerBtn.onclick = () => {
           const w = window.open('', '_blank');
           if (!w) return PZ.toast('Permití las ventanas emergentes para imprimir', 'warn');
-          const flyerSvg = PZ.util.qrSvg(qrUrl, 8, 2);
+          const flyerSvg = PZ.util.qrSvg(qrUrl, 5, 2);
           w.document.write(`<!doctype html>
             <html lang="es">
             <head>
@@ -703,7 +703,8 @@
                 .logo { margin-bottom: 8px; }
                 h1 { margin: 6px 0 2px; font-size: 26px; color: #d7263d; text-transform: uppercase; letter-spacing: 0.04em; }
                 .slogan { font-size: 14px; color: #666; margin-bottom: 16px; }
-                .qr-wrap { background: #fff; padding: 16px; border-radius: 18px; display: inline-block; border: 2px solid #eee; margin: 8px 0 16px; }
+                .qr-wrap { background: #fff; padding: 12px; border-radius: 18px; display: flex; align-items: center; justify-content: center; border: 2px solid #eee; margin: 8px auto 16px; width: 220px; height: 220px; box-sizing: border-box; }
+                .qr-wrap svg { width: 100% !important; height: 100% !important; display: block; }
                 .cta { font-size: 19px; font-weight: 800; margin: 8px 0 4px; line-height: 1.25; }
                 .sub-cta { font-size: 13px; color: #555; max-width: 300px; margin: 0 auto 16px; }
                 .wifi-box { background: #fdf6e3; border: 1px dashed #b7791f; border-radius: 12px; padding: 8px 12px; font-size: 12px; color: #85550c; margin-top: 12px; font-weight: 600; }

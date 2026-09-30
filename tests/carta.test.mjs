@@ -421,5 +421,17 @@ test('carta del salón: generación de URL pública y persistencia del código Q
   assert.ok(url.includes('qr=qr_token_permanente_999'), 'Debe incluir el token persistente de la mesa');
 });
 
+test('código QR permanente: genera SVG no vacío con dimensiones de ancho y alto explícitas', () => {
+  const url = C.salonUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'pizzeria-el-viejo-andres-el-viejo-andres', 'qr_token_permanente_123');
+  const svg = PZ.util.qrSvg(url, 5, 2);
+
+  assert.ok(svg.length > 500, 'El SVG generado debe tener contenido y módulos dibujados');
+  assert.ok(svg.includes('<svg'), 'Debe ser una etiqueta SVG válida');
+  assert.ok(/width="\d+px"/.test(svg), 'El SVG debe tener atributo width explícito para no colapsar a 0px');
+  assert.ok(/height="\d+px"/.test(svg), 'El SVG debe tener atributo height explícito para no colapsar a 0px');
+  assert.ok(svg.includes('viewBox="0 0'), 'El SVG debe conservar viewBox para ser escalable');
+});
+
+
 
 
