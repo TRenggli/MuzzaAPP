@@ -26,8 +26,12 @@ declare namespace PZ {
     /** se muestra en la carta online (por defecto sí) */
     online?: boolean;
     color?: string;
-    /** foto del producto: link a una imagen o archivo subido (sistema y carta) */
+    /** foto del producto, versión grande (~1080 px): la ventana del producto */
     photo?: string;
+    /** versión chica (~420 px) para tarjetas y listas: la carta abre rápido */
+    photoThumb?: string;
+    /** link que pegó el usuario (si la foto vino de un link) */
+    photoSrc?: string;
     /** encuadre de la foto al recortarla: arriba, centro (por defecto) o abajo */
     photoPos?: 'top' | 'center' | 'bottom';
     variants: Variant[];

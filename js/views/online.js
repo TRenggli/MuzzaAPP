@@ -54,7 +54,7 @@
       open: C.isOpen(o),
       categories: S.data.categories.filter((c) => prods.some((p) => p.categoryId === c.id)).map((c) => ({ id: c.id, name: c.name, icon: c.icon, allowHalf: !!c.allowHalf })),
       products: prods.map((p) => ({
-        id: p.id, categoryId: p.categoryId, name: p.name, desc: p.desc || '', color: p.color, photo: p.photo || '', ...(p.photoPos ? { photoPos: p.photoPos } : {}), active: true,
+        id: p.id, categoryId: p.categoryId, name: p.name, desc: p.desc || '', color: p.color, photo: p.photo || '', ...(p.photoThumb ? { photoThumb: p.photoThumb } : {}), ...(p.photoPos ? { photoPos: p.photoPos } : {}), active: true,
         allowHalf: p.allowHalf !== false, ...(Array.isArray(p.halfWith) ? { halfWith: p.halfWith } : {}),
         variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: Number(v.price) || 0 })),
       })),
@@ -282,12 +282,14 @@
         try {
           PZ.toast('Subiendo foto…', 'info', 1500);
           const blob = await U.imageBlob(f, kind === 'cover' ? 1400 : 400, 0.84);
+          const old = cfg()[kind];
           cfg()[kind] = await PZ.cloud.uploadMenuImage(blob, kind);
           changed(rerender);
           PZ.toast('Listo');
+          PZ.media.cleanup([old]);
         } catch (e) { PZ.toast('No se pudo subir: ' + e.message, 'err', 5000); }
       });
-      b.querySelectorAll('[data-rm]').forEach((x) => x.onclick = () => { cfg()[x.dataset.rm] = ''; changed(rerender); });
+      b.querySelectorAll('[data-rm]').forEach((x) => x.onclick = () => { const old = cfg()[x.dataset.rm]; cfg()[x.dataset.rm] = ''; changed(rerender); PZ.media.cleanup([old]); });
     },
 
     /* ---------------- Pedidos y pagos ---------------- */
@@ -352,31 +354,45 @@
           </div>`;
         }).join('')}`;
       b.querySelectorAll('[data-on]').forEach((x) => x.onchange = () => { S.product(x.dataset.on).online = x.checked; changed(); });
-      b.querySelectorAll('[data-rp]').forEach((x) => x.onclick = () => { const p = S.product(x.dataset.rp); p.photo = ''; delete p.photoPos; changed(rerender); });
-      b.querySelectorAll('[data-pl]').forEach((x) => x.onclick = async () => {
-        const p = S.product(x.dataset.pl);
-        const raw = await PZ.prompt('Link de la imagen (https://…). Sirven links compartidos de Google Drive o Dropbox si son públicos.', { title: `🔗 Foto de ${U.esc(p.name)}`, value: p.photo || '', type: 'url' });
-        if (raw == null) return;
-        const url = PZ.carta.imageUrl(raw);
-        if (raw.trim() && !url) return PZ.toast('Eso no es un link de imagen (tiene que empezar con https://)', 'warn', 5000);
-        const ok = !url || await new Promise((res) => { const i = new Image(); i.referrerPolicy = 'no-referrer'; i.onload = () => res(true); i.onerror = () => res(false); i.src = url; });
-        if (!ok && !(await PZ.confirm('No se pudo abrir esa imagen (¿el link es público?). Mientras no cargue se verá el ícono. ¿Guardarla igual?', { ok: 'Guardar igual' }))) return;
-        p.photo = url;
-        if (!url) delete p.photoPos;
+      /** Deja la foto nueva en el producto y borra la anterior del almacenamiento */
+      const applyPhoto = (/** @type {PZ.Product} */ p, /** @type {{ photo?: string, photoThumb?: string, photoSrc?: string }} */ r) => {
+        const old = [p.photo, p.photoThumb];
+        p.photo = r.photo || '';
+        if (r.photoThumb) p.photoThumb = r.photoThumb; else delete p.photoThumb;
+        if (r.photoSrc) p.photoSrc = r.photoSrc; else delete p.photoSrc;
+        if (!p.photo) delete p.photoPos;
         S.log('menú', `Foto de ${p.name}`);
         changed(rerender);
-        PZ.toast(url ? 'Foto guardada' : 'Foto quitada');
+        PZ.media.cleanup(old.filter((u) => u && u !== p.photo && u !== p.photoThumb));
+      };
+      b.querySelectorAll('[data-rp]').forEach((x) => x.onclick = () => { applyPhoto(S.product(x.dataset.rp), { photo: '' }); PZ.toast('Foto quitada'); });
+      b.querySelectorAll('[data-pl]').forEach((x) => x.onclick = async () => {
+        const p = S.product(x.dataset.pl);
+        const raw = await PZ.prompt('Link de la imagen (https://…). Sirven links compartidos de Google Drive o Dropbox si son públicos. Se guarda una copia liviana.', { title: `🔗 Foto de ${U.esc(p.name)}`, value: p.photoSrc || (PZ.cloud.isMenuImage(p.photo) ? '' : p.photo || ''), type: 'url' });
+        if (raw == null) return;
+        if (!raw.trim()) { applyPhoto(p, { photo: '' }); return PZ.toast('Foto quitada'); }
+        const url = PZ.carta.imageUrl(raw);
+        if (!url) return PZ.toast('Eso no es un link de imagen (tiene que empezar con https://)', 'warn', 5000);
+        PZ.toast('Preparando la foto liviana…', 'info', 2000);
+        try {
+          const r = await PZ.media.fromUrl(raw, p.id);
+          applyPhoto(p, r);
+          PZ.toast(r.kb ? `Foto lista: ${r.kb.photoThumb} KB la chica y ${r.kb.photo} KB la grande` : 'Foto guardada', 'ok', 4000);
+        } catch (e) {
+          if (!(await PZ.confirm(`${U.esc(e.message)} Mientras no cargue se verá el ícono. ¿Guardarla igual?`, { ok: 'Guardar igual' }))) return;
+          applyPhoto(p, { photo: url, photoSrc: raw.trim() });
+        }
       });
       b.querySelectorAll('[data-ph]').forEach((x) => x.onchange = async () => {
         const f = x.files[0];
+        x.value = '';
         if (!f) return;
+        const p = S.product(x.dataset.ph);
         try {
-          PZ.toast('Subiendo foto…', 'info', 1500);
-          const p = S.product(x.dataset.ph);
-          p.photo = await PZ.cloud.uploadMenuImage(await U.imageBlob(f, 900, 0.82), 'p-' + p.id);
-          S.log('menú', `Foto de ${p.name}`);
-          changed(rerender);
-          PZ.toast('Foto lista');
+          PZ.toast('Achicando y subiendo la foto…', 'info', 2500);
+          const r = await PZ.media.fromFile(f, p.id);
+          applyPhoto(p, r);
+          PZ.toast(`Foto lista: ${r.kb.photoThumb} KB la chica y ${r.kb.photo} KB la grande`, 'ok', 4000);
         } catch (e) { PZ.toast('No se pudo subir: ' + e.message, 'err', 5000); }
       });
     },

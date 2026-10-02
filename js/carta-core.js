@@ -455,14 +455,17 @@
 
   /**
    * Foto de un producto con su ícono de respaldo: si no hay foto o el link no
-   * carga, se ve el ícono (`fallback`, HTML ya escapado).
-   * @param {{ photo?: string, photoPos?: string, name?: string } | null | undefined} p
+   * carga, se ve el ícono (`fallback`, HTML ya escapado). Usa la versión chica
+   * (tarjetas, listas); `full` pide la grande (la ventana del producto).
+   * @param {{ photo?: string, photoThumb?: string, photoPos?: string, name?: string } | null | undefined} p
    * @param {string} fallback
+   * @param {{ full?: boolean }} [opts]
    */
-  function pic(p, fallback) {
-    if (!p || !p.photo) return fallback;
+  function pic(p, fallback, { full = false } = {}) {
+    const src = p && (full ? p.photo : p.photoThumb || p.photo);
+    if (!p || !src) return fallback;
     const pos = PHOTO_POS[/** @type {'top' | 'center' | 'bottom'} */ (p.photoPos || 'center')] || 'center';
-    return `<img class="pz-img" src="${esc(p.photo)}" alt="${esc(p.name || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="object-position:${pos}"><span class="pz-img-fb">${fallback}</span>`;
+    return `<img class="pz-img" src="${esc(src)}" alt="${esc(p.name || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="object-position:${pos}"><span class="pz-img-fb">${fallback}</span>`;
   }
 
   // Si una foto no carga (link roto, privado o borrado) se saca y queda el ícono

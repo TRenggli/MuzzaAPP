@@ -214,13 +214,35 @@
       const { error } = await sb.from('branches').update({ slug: slug || null }).eq('id', branchId);
       if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'Esa dirección ya la usa otro local, probá con otra' : /slug_chk|check/i.test(error.message) ? 'Usá solo letras minúsculas, números y guiones (3 a 40)' : error.message);
     },
-    /** Sube una foto del menú (producto, logo o portada) y devuelve la URL pública */
+    /**
+     * Sube una foto del menú (producto, logo o portada) y devuelve la URL pública.
+     * Cada archivo tiene nombre único, así que el celular del cliente puede
+     * guardarlo un año sin volver a bajarlo.
+     */
     async uploadMenuImage(blob, name) {
       const { orgId, branchId } = PZ.store.ctx;
       const path = `${orgId}/${branchId}/${String(name).replace(/[^a-z0-9-]/gi, '')}-${Date.now()}.jpg`;
-      const { error } = await sb.storage.from('menu').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      const { error } = await sb.storage.from('menu').upload(path, blob, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' });
       if (error) throw new Error(error.message);
       return sb.storage.from('menu').getPublicUrl(path).data.publicUrl;
+    },
+    /** ¿La foto está guardada en nuestro almacenamiento? (las de otros sitios no se tocan) */
+    isMenuImage(url) {
+      return !!url && String(url).startsWith(sb.storage.from('menu').getPublicUrl('').data.publicUrl);
+    },
+    /** De estas fotos, las que ya no usa ningún producto, menú modelo ni sucursal del negocio */
+    async unusedMenuImages(urls) {
+      const { data, error } = await sb.rpc('menu_images_unused', { p_org: PZ.store.ctx.orgId, p_urls: urls });
+      if (error) throw error;
+      return /** @type {string[]} */ (data || []);
+    },
+    /** Borra fotos propias del almacenamiento */
+    async deleteMenuImages(urls) {
+      const base = sb.storage.from('menu').getPublicUrl('').data.publicUrl;
+      const paths = urls.filter((u) => C.isMenuImage(u)).map((u) => decodeURIComponent(u.slice(base.length).split('?')[0]));
+      if (!paths.length) return;
+      const { error } = await sb.storage.from('menu').remove(paths);
+      if (error) throw error;
     },
     /** Pedidos web: los que esperan confirmación y los de las últimas horas */
     async webOrders(branchId) {

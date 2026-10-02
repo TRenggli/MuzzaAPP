@@ -64,7 +64,7 @@
           <div class="photo-edit">
             <div class="photo-prev"></div>
             <div>
-              <input name="photoUrl" type="url" inputmode="url" placeholder="Pegá el link de la imagen (https://…)" value="${U.esc(draft.photo || '')}" autocomplete="off" spellcheck="false">
+              <input name="photoUrl" type="url" inputmode="url" placeholder="Pegá el link de la imagen (https://…)" autocomplete="off" spellcheck="false">
               <div class="row-flex mt" style="gap:6px;flex-wrap:wrap;align-items:center">
                 <span class="small muted">Encuadre:</span>
                 <div class="seg photo-pos"><button type="button" data-pp="top">Arriba</button><button type="button" data-pp="center">Centro</button><button type="button" data-pp="bottom">Abajo</button></div>
@@ -92,6 +92,8 @@
         <div class="rec"></div>
         <button class="btn sm ghost" data-a="addr">➕ Agregar ingrediente</button>`,
       footer: `${!isNew ? '<button class="btn danger" data-a="del">Eliminar</button><span class="grow"></span>' : ''}<button class="btn ghost" data-a="x">Cancelar</button><button class="btn primary" data-a="ok">Guardar</button>`,
+      // si se cierra sin guardar, las fotos que se subieron en esta edición se borran
+      onClose: () => { if (!saved) { busy = null; PZ.media.cleanup(uploaded); } },
     });
     const E = m.el;
     const drawVars = () => {
@@ -121,14 +123,24 @@
     };
     drawVars(); drawRec();
     const catSelect = /** @type {HTMLSelectElement | null} */ (E.querySelector('[name=cat]'));
-    // Foto: un link pegado (se prueba que abra) o un archivo subido. Sin foto se ve el ícono.
+    // Foto: archivo subido o link pegado. Siempre queda liviana (dos tamaños:
+    // chica para tarjetas y listas, grande para la ventana del producto) y las
+    // que se descartan se borran del almacenamiento. Sin foto se ve el ícono.
     const photoUrlIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=photoUrl]'));
     const photoPrev = /** @type {HTMLElement} */ (E.querySelector('.photo-prev'));
     const photoHint = /** @type {HTMLElement} */ (E.querySelector('.photo-hint'));
     const colorIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=color]'));
-    const HINT = 'Se ve en Nueva venta, Salón, Menú y la carta. Sirve el link directo a una imagen, o uno compartido de Google Drive o Dropbox (con acceso público). Se recorta sola para cada lugar.';
+    const HINT = 'Subí una foto o pegá el link de una imagen (también de Google Drive o Dropbox, si es pública). Se achica sola para que la carta cargue rápido y se recorta para cada lugar.';
     const hint = (text, err = false) => { photoHint.textContent = text; photoHint.classList.toggle('err', err); };
-    let photoCheck = 0;
+    /** fotos que tenía el producto al abrir (si se reemplazan, se borran al guardar) */
+    const savedPhotos = [draft.photo, draft.photoThumb];
+    /** @type {string[]} fotos subidas en esta edición: las que no queden se borran */
+    const uploaded = [];
+    let saved = false;
+    /** @type {Promise<void> | null} foto que se está preparando */
+    let busy = null;
+    let lastRaw = draft.photoSrc || (draft.photo && !PZ.cloud.isMenuImage(draft.photo) ? draft.photo : '');
+    photoUrlIn.value = lastRaw;
     const drawPhoto = () => {
       const c = catSelect ? S.category(catSelect.value) : null;
       const icon = c && c.allowHalf
@@ -138,26 +150,43 @@
       photoPrev.className = 'photo-prev' + (draft.photo ? ' ok' : '');
       photoPrev.innerHTML = PZ.carta.pic(draft, icon);
     };
-    /** Lee el link pegado: lo normaliza, lo prueba y actualiza la vista previa @returns {boolean} */
+    /** @param {{ photo?: string, photoThumb?: string, photoSrc?: string, copied?: boolean }} r */
+    const setPhoto = (r) => {
+      draft.photo = r.photo || '';
+      if (r.photoThumb) draft.photoThumb = r.photoThumb; else delete draft.photoThumb;
+      if (r.photoSrc) draft.photoSrc = r.photoSrc; else delete draft.photoSrc;
+      if (r.copied && r.photo) uploaded.push(r.photo, r.photoThumb || '');
+      drawPhoto();
+    };
+    /** @param {{ photoThumb?: string, width?: number, kb?: { photo: number, photoThumb: number } }} r */
+    const readyHint = (r) => (r.kb ? `✅ Foto lista y alivianada: ${r.kb.photoThumb} KB la chica y ${r.kb.photo} KB la grande.`
+      : r.photoThumb ? '✅ Foto lista: se usa en el tamaño justo para cada lugar.'
+      : `✅ Foto encontrada.${r.width && r.width > 1400 ? ' Es pesada y ese sitio no deja guardar una copia liviana: para que la carta cargue rápido, descargala y usá "Subir archivo".' : ''}`);
+    /** Prepara una foto y la deja en el producto (si mientras tanto eligieron otra, esta se descarta) */
+    const prepare = (/** @type {Promise<any>} */ work, /** @type {(r: any) => void} */ onReady, /** @type {(e: any) => void} */ onFail) => {
+      /** @type {Promise<void>} */
+      const job = work.then((r) => {
+        if (busy !== job) { if (r.copied) PZ.media.cleanup([r.photo, r.photoThumb]); return; }
+        onReady(r);
+      }, (e) => { if (busy === job) onFail(e); });
+      busy = job;
+      job.finally(() => { if (busy === job) busy = null; });
+    };
+    /** Lee el link pegado y prepara la foto liviana */
     const readPhotoUrl = () => {
       const raw = photoUrlIn.value.trim();
+      if (raw === lastRaw) return;
+      lastRaw = raw;
+      busy = null;
+      if (!raw) { setPhoto({ photo: '' }); hint(HINT); return; }
       const url = PZ.carta.imageUrl(raw);
-      if (raw && !url) { hint('Eso no es un link de imagen: tiene que empezar con https://', true); return false; }
-      if (url !== (draft.photo || '')) {
-        draft.photo = url;
-        if (url && url !== raw) photoUrlIn.value = url;
-        drawPhoto();
-        if (url) {
-          const n = ++photoCheck;
-          const img = new Image();
-          img.referrerPolicy = 'no-referrer';
-          hint('Probando la imagen…');
-          img.onload = () => { if (n === photoCheck) hint(`✅ Imagen encontrada (${img.naturalWidth}×${img.naturalHeight} px).${img.naturalWidth < 400 ? ' Es chica: puede verse borrosa en la carta.' : ''}`); };
-          img.onerror = () => { if (n === photoCheck) hint('⚠️ No se pudo abrir la imagen. Revisá que el link sea de la imagen y que sea público. Mientras no cargue se ve el ícono.', true); };
-          img.src = url;
-        } else hint(HINT);
-      }
-      return true;
+      if (!url) { hint('Eso no es un link de imagen: tiene que empezar con https://', true); return; }
+      hint('Preparando la foto liviana…');
+      prepare(PZ.media.fromUrl(raw, draft.id), (r) => { setPhoto(r); hint(readyHint(r)); }, (e) => {
+        // no abrió: queda el link (mientras no cargue se ve el ícono)
+        setPhoto({ photo: url, photoSrc: raw });
+        hint('⚠️ ' + e.message + ' Mientras no cargue se ve el ícono.', true);
+      });
     };
     photoUrlIn.addEventListener('change', readPhotoUrl);
     photoUrlIn.addEventListener('paste', () => setTimeout(readPhotoUrl, 0));
@@ -167,19 +196,22 @@
       if (v === 'center') delete draft.photoPos; else draft.photoPos = v;
       drawPhoto();
     }));
-    /** @type {HTMLElement} */ (E.querySelector('[data-a=rmphoto]')).onclick = () => { draft.photo = ''; delete draft.photoPos; photoUrlIn.value = ''; hint(HINT); drawPhoto(); };
+    /** @type {HTMLElement} */ (E.querySelector('[data-a=rmphoto]')).onclick = () => {
+      busy = null;
+      lastRaw = '';
+      photoUrlIn.value = '';
+      delete draft.photoPos;
+      setPhoto({ photo: '' });
+      hint(HINT);
+    };
     const photoIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=photo]'));
-    photoIn.onchange = async () => {
+    photoIn.onchange = () => {
       const f = photoIn.files && photoIn.files[0];
+      photoIn.value = '';
       if (!f) return;
-      if (!navigator.onLine) return PZ.toast('Para subir fotos hace falta internet', 'warn');
-      try {
-        hint('Subiendo foto…');
-        draft.photo = await PZ.cloud.uploadMenuImage(await U.imageBlob(f, 1000, 0.84), 'p-' + draft.id);
-        photoUrlIn.value = draft.photo;
-        hint('✅ Foto subida.');
-        drawPhoto();
-      } catch (e) { hint('No se pudo subir: ' + e.message, true); }
+      hint('Achicando y subiendo la foto…');
+      prepare(PZ.media.fromFile(f, draft.id), (r) => { lastRaw = ''; photoUrlIn.value = ''; setPhoto(r); hint(readyHint(r)); },
+        (e) => hint('No se pudo subir: ' + e.message, true));
     };
     hint(HINT);
     const halfWrap = /** @type {HTMLElement | null} */ (E.querySelector('.half-opt-wrap'));
@@ -235,15 +267,26 @@
     if (del) del.onclick = async () => {
       if (!(await PZ.confirm(`¿Eliminar ${U.esc(p.name)}? Las ventas anteriores no se modifican.`, { danger: true, ok: 'Eliminar' }))) return;
       S.data.products = S.data.products.filter((x) => x.id !== p.id);
+      saved = true;
       S.save(); m.close(); done();
+      PZ.media.cleanup([...savedPhotos, ...uploaded]);
     };
-    E.querySelector('[data-a=ok]').onclick = () => {
+    const okBtn = /** @type {HTMLButtonElement} */ (E.querySelector('[data-a=ok]'));
+    okBtn.onclick = async () => {
+      // por si pegó un link y tocó Guardar sin salir del campo
+      readPhotoUrl();
+      const rawLink = photoUrlIn.value.trim();
+      if (rawLink && !PZ.carta.imageUrl(rawLink)) return PZ.toast('Revisá el link de la foto', 'warn');
+      if (busy) {
+        okBtn.disabled = true;
+        hint('Terminando de preparar la foto…');
+        try { await busy; } finally { okBtn.disabled = false; }
+      }
       draft.name = E.querySelector('[name=name]').value.trim();
       draft.desc = E.querySelector('[name=desc]').value.trim();
       draft.categoryId = E.querySelector('[name=cat]').value;
       draft.color = E.querySelector('[name=color]').value;
-      if (!readPhotoUrl()) return PZ.toast('Revisá el link de la foto', 'warn');
-      if (!draft.photo) { draft.photo = ''; delete draft.photoPos; }
+      if (!draft.photo) { draft.photo = ''; delete draft.photoThumb; delete draft.photoSrc; delete draft.photoPos; }
       const onl = E.querySelector('[name=online]');
       if (onl) draft.online = onl.checked;
       draft.allowHalf = halfModeSel !== 'none';
@@ -257,11 +300,13 @@
       if (isNew) S.data.products.push(draft);
       else {
         Object.assign(p, draft);
-        if (!('halfWith' in draft)) delete p.halfWith;
-        if (!('photoPos' in draft)) delete p.photoPos;
+        ['halfWith', 'photoPos', 'photoThumb', 'photoSrc'].forEach((k) => { if (!(k in draft)) delete p[k]; });
       }
+      saved = true;
       S.log('menú', `${isNew ? 'Alta' : 'Edición'} de ${draft.name}`);
       S.save(); m.close(); PZ.toast('Producto guardado'); done();
+      // las fotos reemplazadas o descartadas se borran del almacenamiento
+      PZ.media.cleanup([...savedPhotos, ...uploaded].filter((u) => u && u !== draft.photo && u !== draft.photoThumb));
     };
   }
 

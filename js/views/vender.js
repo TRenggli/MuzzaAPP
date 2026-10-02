@@ -129,7 +129,7 @@
     const m = PZ.modal({
       title: `${cat ? cat.icon : ''} ${U.esc(p.name)}`,
       body: `
-        ${p.photo ? `<div class="pm-photo">${PZ.carta.pic(p, '')}</div>` : ''}
+        ${p.photo ? `<div class="pm-photo">${PZ.carta.pic(p, '', { full: true })}</div>` : ''}
         ${p.desc ? `<p class="muted" style="margin-top:0">${U.esc(p.desc)}</p>` : ''}
         ${p.variants.length > 1 ? `<div class="opt-section">Tamaño</div><div class="opt-grid v-grid"></div>` : ''}
         ${allowHalf ? `

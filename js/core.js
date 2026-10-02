@@ -226,6 +226,119 @@ window.PZ.views = window.PZ.views || {};
     }, ms);
   };
 
+  /* ---------- Fotos de productos (siempre livianas) ----------
+     Cada foto se guarda en dos tamaños JPEG: la chica para tarjetas y listas,
+     la grande solo para la ventana del producto. Una foto de celular de 4 MB
+     queda en ~35 KB + ~150 KB, así la carta abre rápido aunque tenga 50
+     pizzas con foto. Las fotos que dejan de usarse se borran solas. */
+  /** [ancho máximo, alto máximo, calidad] */
+  const PHOTO_SIZES = { photo: [1080, 1350, 0.8], photoThumb: [420, 525, 0.78] };
+
+  /** Carga una imagen de internet; con `cors` se puede copiar (si el sitio lo permite) */
+  const loadRemote = (src, cors) => new Promise((res) => {
+    const img = new Image();
+    if (cors) img.crossOrigin = 'anonymous';
+    img.referrerPolicy = 'no-referrer';
+    const t = setTimeout(() => res(null), 20000);
+    img.onload = () => { clearTimeout(t); res(img); };
+    img.onerror = () => { clearTimeout(t); res(null); };
+    img.src = src;
+  });
+
+  PZ.media = {
+    PHOTO_SIZES,
+    /**
+     * Imagen → JPEG que entra en maxW × maxH (nunca la agranda)
+     * @param {HTMLImageElement} img @param {number} maxW @param {number} maxH @param {number} quality
+     * @returns {Promise<Blob>}
+     */
+    jpeg(img, maxW, maxH, quality) {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      const scale = Math.min(1, maxW / w, maxH / h);
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * scale));
+      c.height = Math.max(1, Math.round(h * scale));
+      const ctx = /** @type {CanvasRenderingContext2D} */ (c.getContext('2d'));
+      ctx.fillStyle = '#fff';   // las transparencias quedan en blanco (JPEG no tiene)
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('No se pudo preparar la imagen'))), 'image/jpeg', quality));
+    },
+
+    /**
+     * Sube los dos tamaños de una imagen ya cargada
+     * @param {HTMLImageElement} img @param {string} id
+     * @returns {Promise<{ photo: string, photoThumb: string, kb: { photo: number, photoThumb: number } }>}
+     */
+    async upload(img, id) {
+      if (!navigator.onLine) throw new Error('Para subir fotos hace falta internet');
+      const [full, thumb] = await Promise.all([
+        PZ.media.jpeg(img, ...PHOTO_SIZES.photo),
+        PZ.media.jpeg(img, ...PHOTO_SIZES.photoThumb),
+      ]);
+      const name = String(id).startsWith('p-') ? String(id) : 'p-' + id;
+      const [photo, photoThumb] = await Promise.all([PZ.cloud.uploadMenuImage(full, name), PZ.cloud.uploadMenuImage(thumb, name + '-chica')]);
+      return { photo, photoThumb, kb: { photo: Math.round(full.size / 1024), photoThumb: Math.round(thumb.size / 1024) } };
+    },
+
+    /** Foto elegida desde el celular o la compu @param {File} file @param {string} id */
+    async fromFile(file, id) {
+      let img;
+      try { img = await PZ.util.loadImage(await PZ.util.readFileAsDataURL(file)); } catch (e) {
+        throw new Error('No se pudo abrir esa imagen. Probá con una foto JPG o PNG.');
+      }
+      return { ...(await PZ.media.upload(img, id)), photoSrc: '', copied: true };
+    },
+
+    /**
+     * Link pegado: Google Drive ya entrega cada tamaño; de los demás sitios se
+     * guarda una copia liviana propia (si el sitio lo permite). Si no se puede
+     * copiar, queda el link tal cual.
+     * @param {string} raw @param {string} id
+     * @returns {Promise<{ photo: string, photoThumb: string, photoSrc: string, copied: boolean, width?: number, kb?: { photo: number, photoThumb: number } }>}
+     */
+    async fromUrl(raw, id) {
+      const url = PZ.carta.imageUrl(raw);
+      if (!url) throw new Error('Eso no es un link de imagen: tiene que empezar con https://');
+      const src = String(raw).trim();
+      const drive = url.match(/^https:\/\/drive\.google\.com\/thumbnail\?id=([\w-]+)/);
+      if (drive) {
+        const ok = await loadRemote(`https://drive.google.com/thumbnail?id=${drive[1]}&sz=w420`, false);
+        if (!ok) throw new Error('No se pudo abrir la foto de Drive. Revisá que esté compartida como "Cualquier persona con el enlace".');
+        return { photo: `https://drive.google.com/thumbnail?id=${drive[1]}&sz=w1080`, photoThumb: `https://drive.google.com/thumbnail?id=${drive[1]}&sz=w420`, photoSrc: src, copied: false, width: ok.naturalWidth };
+      }
+      const img = await loadRemote(url, true);
+      if (img) {
+        try {
+          return { ...(await PZ.media.upload(img, id)), photoSrc: src, copied: true, width: img.naturalWidth };
+        } catch (e) { /* sin internet o el sitio no deja copiar: queda el link */ }
+      }
+      const plain = img || await loadRemote(url, false);
+      if (!plain) throw new Error('No se pudo abrir la imagen. Revisá que el link sea de la imagen y que sea público.');
+      return { photo: url, photoThumb: '', photoSrc: src, copied: false, width: plain.naturalWidth };
+    },
+
+    /**
+     * Borra del almacenamiento las fotos propias que ya no usa nadie (se
+     * fija el servidor, en todas las sucursales y el menú modelo). Nunca
+     * frena a quien está trabajando: si falla, la foto queda guardada sin
+     * usarse, que no rompe nada.
+     * @param {Array<string | undefined | null>} urls
+     */
+    async cleanup(urls) {
+      const mine = Array.from(new Set(urls.filter((u) => u && PZ.cloud.isMenuImage(u))));
+      if (!mine.length || !navigator.onLine) return;
+      try {
+        PZ.store.diff();
+        await PZ.store.flush();
+        const unused = await PZ.cloud.unusedMenuImages(mine);
+        if (unused.length) await PZ.cloud.deleteMenuImages(unused);
+      } catch (e) { /* sin conexión o sin permiso: no pasa nada */ }
+    },
+  };
+
   /* ---------- Modales ---------- */
   /**
    * Ventana emergente.

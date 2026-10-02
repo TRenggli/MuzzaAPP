@@ -506,3 +506,12 @@ test('fotos de productos: sin foto queda el ícono; con foto, la imagen con el �
   assert.match(html, /object-position:center 20%/);
   assert.match(html, /<span class="pz-img-fb"><i>🍕<\/i><\/span>/, 'el ícono queda listo por si el link falla');
 });
+
+test('fotos livianas: tarjetas y listas usan la versión chica; la ventana del producto, la grande', () => {
+  const p = { name: 'Muzza', photo: 'https://x.com/grande.jpg', photoThumb: 'https://x.com/chica.jpg' };
+  assert.match(C.pic(p, ''), /src="https:\/\/x\.com\/chica\.jpg"/, 'por defecto, la chica');
+  assert.match(C.pic(p, '', { full: true }), /src="https:\/\/x\.com\/grande\.jpg"/, 'la ventana del producto pide la grande');
+  // fotos cargadas antes (sin versión chica) siguen andando
+  assert.match(C.pic({ name: 'Vieja', photo: 'https://x.com/vieja.jpg' }, ''), /src="https:\/\/x\.com\/vieja\.jpg"/);
+  assert.equal(C.pic({ name: 'Sin foto' }, '<i>🍕</i>', { full: true }), '<i>🍕</i>');
+});

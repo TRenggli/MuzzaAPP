@@ -387,7 +387,7 @@
     const cat = m.categories.find((c) => c.id === p.categoryId);
     const isPizza = !!(cat && cat.allowHalf);
     const on = { ...C.defaults(), ...m.settings.online };
-    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '')}</div>` : '';
+    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '', { full: true })}</div>` : '';
     const partners = isPizza ? C.halfPartners(p, m.products, (cid) => m.categories.find((c) => c.id === cid)) : [];
     const halfInfo = !partners.length ? 'ℹ️ Esta variedad <b>se vende solo entera</b>.'
       : C.halfMode(p) === 'some' ? `🍕 Se puede pedir <b>mitad y mitad</b> con: ${partners.map((x) => esc(x.name)).join(', ')}.`
@@ -521,7 +521,7 @@
     const condState = Object.fromEntries(condiments.map((c) => [c.id, c.default !== false]));
     /** @type {PZ.CartLine} */
     const line = { key: '', productId: p.id, variantId: p.variants[0].id, halfId: '', extras: [], qty: 1, notes: '' };
-    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '')}</div>` : '';
+    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '', { full: true })}</div>` : '';
 
     const s = sheet(`
       ${photo}
