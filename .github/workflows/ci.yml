@@ -60,10 +60,11 @@ jobs:
           mkdir _site
           cp -r index.html carta.html landing.html reparto.html manifest.webmanifest sw.js css js img vendor _site/
           # Cada publicación pide archivos con la versión nueva: ningún celular
-          # mezcla archivos viejos (guardados) con nuevos.
+          # mezcla archivos viejos (guardados) con nuevos. Si el archivo ya traía
+          # una versión fija (?v=4.2.1) se reemplaza: si no, quedaba vieja para siempre.
           V="${GITHUB_SHA::8}"
           for page in index.html carta.html landing.html reparto.html; do
-            sed -i -E "s#(src|href)=\"((js|css|vendor)/[^\"?]+\.(js|css))\"#\1=\"\2?v=$V\"#g" "_site/$page"
+            sed -i -E "s#(src|href)=\"((js|css|vendor)/[^\"?]+\.(js|css))(\?v=[^\"]*)?\"#\1=\"\2?v=$V\"#g" "_site/$page"
             grep -c "?v=$V" "_site/$page"
           done
           sed -i "s#const CACHE = 'pizzeria-#const CACHE = 'pizzeria-$V-#" _site/sw.js

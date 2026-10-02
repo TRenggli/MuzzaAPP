@@ -906,6 +906,25 @@
 
     lowStock: () => S.data.ingredients.filter((i) => i.stock <= i.min),
 
+    /**
+     * El logo del ticket viaja con la configuración a todos los equipos y a la
+     * carta online. Si quedó pesado (los PNG de foto pesaban ~500 KB y hacían
+     * tardar la carta en los celulares) se vuelve a guardar en JPEG, con una
+     * versión chica para la carta. Lo hace un encargado al entrar.
+     * @returns {Promise<boolean>} true si cambió algo
+     */
+    async optimizeLogo() {
+      const t = S.data && S.data.settings && S.data.settings.ticket;
+      if (!t || !t.logo || !PZ.auth.isAdmin() || !String(t.logo).startsWith('data:image/')) return false;
+      let changed = false;
+      try {
+        if (t.logo.length > 150000) { t.logo = await U.shrinkImage(t.logo, 400, 'image/jpeg', 0.9); changed = true; }
+        if (!t.logoSmall) { t.logoSmall = await U.shrinkImage(t.logo, 240, 'image/jpeg', 0.85); changed = true; }
+      } catch (e) { return false; }
+      if (changed) { S.log('configuración', 'Logo optimizado para que la carta cargue rápido'); S.save(); }
+      return changed;
+    },
+
     /* =================== Salón y mesas ===================
        Cada mesa ocupada tiene una CUENTA (tableSession). Cada vez que el mozo
        manda algo a la cocina se crea una TANDA (un pedido, para el tablero de

@@ -49,7 +49,7 @@
         halfPricing: st.halfPricing || 'max',
         zones: PZ.auth.feature('delivery') ? st.zones.map((z) => ({ id: z.id, name: z.name, fee: Number(z.fee) || 0 })) : [],
         transfer: o.payments.transferencia ? { alias: st.payments.alias, cbu: st.payments.cbu, holder: st.payments.holder, bank: st.payments.bank } : null,
-        logo: o.logo || (st.ticket.showLogo !== false ? st.ticket.logo : null),
+        logo: o.logo || (st.ticket.showLogo !== false ? st.ticket.logoSmall || st.ticket.logo : null),
       },
       open: C.isOpen(o),
       categories: S.data.categories.filter((c) => prods.some((p) => p.categoryId === c.id)).map((c) => ({ id: c.id, name: c.name, icon: c.icon, allowHalf: !!c.allowHalf })),

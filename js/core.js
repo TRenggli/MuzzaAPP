@@ -65,10 +65,15 @@ window.PZ.views = window.PZ.views || {};
       });
     },
 
-    /** Reduce una imagen a un ancho máximo (para no llenar el almacenamiento) */
-    async shrinkImage(dataURL, maxW = 400) {
+    /**
+     * Reduce una imagen a un tamaño máximo (para no llenar el almacenamiento).
+     * PNG para lo que tiene bordes nítidos (un QR); JPEG para logos y fotos,
+     * que pesan diez veces menos.
+     * @param {string} dataURL @param {number} [maxW] @param {string} [type] @param {number} [quality]
+     */
+    async shrinkImage(dataURL, maxW = 400, type = 'image/png', quality = 0.9) {
       const img = await PZ.util.loadImage(dataURL);
-      const scale = Math.min(1, maxW / img.width);
+      const scale = Math.min(1, maxW / img.width, (maxW * 2) / img.height);
       const c = document.createElement('canvas');
       c.width = Math.round(img.width * scale);
       c.height = Math.round(img.height * scale);
@@ -76,7 +81,7 @@ window.PZ.views = window.PZ.views || {};
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(img, 0, 0, c.width, c.height);
-      return c.toDataURL('image/png');
+      return c.toDataURL(type, quality);
     },
 
     /** Foto lista para subir: JPEG de hasta maxW px de ancho (livianita para el celular del cliente) */

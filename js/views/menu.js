@@ -553,7 +553,7 @@
     const fontSizeStyle = cfg.fontSize === 'sm' ? 'font-size:0.86em;' : cfg.fontSize === 'lg' ? 'font-size:1.14em;' : 'font-size:1em;';
 
     const cartaHtml = PZ.carta.renderSalonHtml({
-      shop: { name: b.name, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, logo: (st.online && st.online.logo) || (st.ticket && st.ticket.showLogo !== false ? st.ticket.logo : '') },
+      shop: { name: b.name, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, logo: (st.online && st.online.logo) || (st.ticket && st.ticket.showLogo !== false ? st.ticket.logoSmall || st.ticket.logo : '') },
       categories: allSystemCats,
       products: S.data.products,
       cfg,

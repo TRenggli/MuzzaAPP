@@ -342,6 +342,8 @@
       // Pedidos de la carta online y estado de Mercado Pago (no bloquean la entrada)
       PZ.web.load();
       PZ.mp.load();
+      // un logo pesado hace lenta la carta online en los celulares: se aliviana solo
+      if (A.isAdmin()) S.optimizeLogo().catch(() => {});
       App.renderShell();
       const cur = (location.hash.replace(/^#\/?/, '') || '').split('/')[0];
       if (!cur || modeOf(cur) !== 'branch') history.replaceState(null, '', '#/inicio');

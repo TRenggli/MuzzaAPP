@@ -49,6 +49,32 @@
   const saveCart = () => { if (!preview) save(cartKey(), cart); };
   const vibrate = (/** @type {number | number[]} */ p) => { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) { /* noop */ } };
 
+  /** @type {Promise<any> | null} */
+  let leafletLoading = null;
+  /**
+   * El mapa del delivery (Leaflet) se trae solo cuando hay una moto para
+   * seguir: así la carta abre rápido en el celular.
+   * @returns {Promise<any>}
+   */
+  function loadLeaflet() {
+    const w = /** @type {any} */ (window);
+    if (w.L) return Promise.resolve(w.L);
+    if (!leafletLoading) {
+      leafletLoading = new Promise((res, rej) => {
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = 'vendor/leaflet.css';
+        document.head.appendChild(css);
+        const s = document.createElement('script');
+        s.src = 'vendor/leaflet.js';
+        s.onload = () => res(w.L);
+        s.onerror = () => { leafletLoading = null; rej(new Error('No se pudo cargar el mapa')); };
+        document.head.appendChild(s);
+      });
+    }
+    return leafletLoading;
+  }
+
   /** Llama a una función pública de la base (sin sesión) @param {string} fn @param {object} args */
   async function rpc(fn, args) {
     const res = await fetch(`${CFG.supabaseUrl}/rest/v1/rpc/${fn}`, {
@@ -1017,8 +1043,7 @@
         <p class="c-muted small center">Esta pantalla se actualiza sola.</p>
       </main>`;
 
-    const Leaflet = /** @type {any} */ (window).L;
-    if (hasLiveGps && Leaflet && liveLoc) {
+    const drawMap = (/** @type {any} */ Leaflet, /** @type {{ lat: number, lng: number }} */ loc) => {
       const mapEl = document.getElementById('live-delivery-map');
       if (mapEl) {
         try {
@@ -1027,15 +1052,19 @@
             trackMap = null;
             trackMotoMarker = null;
           }
-          trackMap = Leaflet.map(mapEl, { zoomControl: false, attributionControl: false }).setView([liveLoc.lat, liveLoc.lng], 16);
+          trackMap = Leaflet.map(mapEl, { zoomControl: false, attributionControl: false }).setView([loc.lat, loc.lng], 16);
           Leaflet.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(trackMap);
           const motoHtml = `<div style="background:#fff;border:2.5px solid var(--c-primary,#d7263d);border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.3);font-size:20px;transform:translate(-50%,-50%)">🛵</div>`;
           const icon = Leaflet.divIcon({ className: 'c-moto-marker', html: motoHtml, iconSize: [0, 0] });
-          trackMotoMarker = Leaflet.marker([liveLoc.lat, liveLoc.lng], { icon }).addTo(trackMap);
+          trackMotoMarker = Leaflet.marker([loc.lat, loc.lng], { icon }).addTo(trackMap);
         } catch (err) {
           console.warn('Error inicializando mapa Leaflet:', err);
         }
       }
+    };
+    if (hasLiveGps && liveLoc) {
+      const loc = liveLoc;
+      loadLeaflet().then((Leaflet) => drawMap(Leaflet, loc), () => { /* sin mapa: queda el link a Google Maps */ });
     } else if (trackMap) {
       trackMap.remove();
       trackMap = null;

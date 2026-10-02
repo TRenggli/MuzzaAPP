@@ -140,11 +140,13 @@
       b.querySelector('[data-a=logo]').onchange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        t.logo = await U.shrinkImage(await U.readFileAsDataURL(file), 400);
+        // JPEG liviano: viaja a todos los equipos y a la carta online (un PNG de foto pesaba 500 KB)
+        t.logo = await U.shrinkImage(await U.readFileAsDataURL(file), 400, 'image/jpeg', 0.9);
+        t.logoSmall = await U.shrinkImage(t.logo, 240, 'image/jpeg', 0.85);
         S.save(); render(el);
       };
       const rm = b.querySelector('[data-a=rmlogo]');
-      if (rm) rm.onclick = () => { t.logo = null; S.save(); render(el); };
+      if (rm) rm.onclick = () => { t.logo = null; t.logoSmall = null; S.save(); render(el); };
     },
 
     cobros(b, el) {
