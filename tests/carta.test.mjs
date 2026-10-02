@@ -485,3 +485,24 @@ test('cartaUrl y salonUrl: resiliencia ante rutas con o sin barra final en GitHu
 
 
 
+
+test('fotos de productos: links pegados por el usuario se vuelven links directos', () => {
+  assert.equal(C.imageUrl(''), '');
+  assert.equal(C.imageUrl('hola'), '', 'texto suelto no es una imagen');
+  assert.equal(C.imageUrl('javascript:alert(1)'), '', 'solo links web');
+  assert.equal(C.imageUrl('https://mi-sitio.com/fotos/muzza.jpg'), 'https://mi-sitio.com/fotos/muzza.jpg');
+  assert.equal(C.imageUrl('  https://mi-sitio.com/a b.jpg '), 'https://mi-sitio.com/a%20b.jpg');
+  assert.equal(C.imageUrl('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w1200');
+  assert.equal(C.imageUrl('https://drive.google.com/open?id=1AbCdEfGhIjKlMnOp'), 'https://drive.google.com/thumbnail?id=1AbCdEfGhIjKlMnOp&sz=w1200');
+  assert.equal(C.imageUrl('https://www.dropbox.com/s/abc123/muzza.jpg?dl=0'), 'https://www.dropbox.com/s/abc123/muzza.jpg?raw=1');
+  assert.equal(C.imageUrl('https://imgur.com/AbC123x'), 'https://i.imgur.com/AbC123x.jpg');
+});
+
+test('fotos de productos: sin foto queda el ícono; con foto, la imagen con el ícono de respaldo', () => {
+  assert.equal(C.pic({ name: 'Muzza' }, '<i>🍕</i>'), '<i>🍕</i>');
+  const html = C.pic({ name: 'Muzza "especial"', photo: 'https://x.com/m.jpg?a=1&b=2', photoPos: 'top' }, '<i>🍕</i>');
+  assert.match(html, /<img class="pz-img" src="https:\/\/x\.com\/m\.jpg\?a=1&amp;b=2"/);
+  assert.match(html, /alt="Muzza &quot;especial&quot;"/, 'el nombre va escapado');
+  assert.match(html, /object-position:center 20%/);
+  assert.match(html, /<span class="pz-img-fb"><i>🍕<\/i><\/span>/, 'el ícono queda listo por si el link falla');
+});

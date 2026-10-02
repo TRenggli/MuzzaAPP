@@ -10,6 +10,7 @@
     owner: { label: 'Dueño/a' },
     admin: { label: 'Encargado/a' },
     cajero: { label: 'Cajero/a' },
+    mozo: { label: 'Mozo/a' },
     cocina: { label: 'Cocina' },
     delivery: { label: 'Delivery' },
   };
@@ -19,6 +20,8 @@
     owner: '*',
     admin: '*',
     cajero: ['inicio', 'vender', 'salon', 'pedidos', 'caja', 'clientes', 'historial', 'stock'],
+    // el mozo atiende las mesas en vivo; la cuenta la cobra la caja
+    mozo: ['salon', 'pedidos'],
     cocina: ['pedidos'],
     delivery: ['pedidos'],
   };
@@ -93,6 +96,9 @@
     },
 
     isAdmin: () => !!A.current && ['owner', 'admin'].includes(A.current.role),
+    /** Puede cobrar (caja): el mozo y la cocina no */
+    canCharge: () => !!A.current && ['owner', 'admin', 'cajero'].includes(A.current.role),
+    isWaiter: () => !!A.current && A.current.role === 'mozo',
     isOwner: () => !!A.current && A.current.role === 'owner',
 
     /**

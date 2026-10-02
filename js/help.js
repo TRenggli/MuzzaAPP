@@ -27,8 +27,21 @@
         'En las pizzas podés elegir <b>tamaño, mitad y mitad, agregados y aclaraciones</b> ("bien cocida", "sin aceitunas").',
         'Arriba del pedido elegís si es <b>mostrador, delivery, para retirar o mesa</b>. En delivery cargá la dirección: el cliente se guarda solo.',
         '<b>Cobrar</b>: elegí efectivo, transferencia, QR o tarjeta. En efectivo tocá con cuánto paga (o <b>Otro monto</b>) y te calcula el vuelto.',
-        '<b>Cobrar después</b> manda el pedido a la cocina sin cobrarlo (por ejemplo, delivery que paga al recibir).',
+        '<b>Cobrar después</b> manda el pedido a la cocina sin cobrarlo (por ejemplo, delivery que paga al recibir). En <b>mesa</b>, elegí la mesa del salón: se suma a su cuenta y se cobra todo junto desde Salón.',
         'Al cobrar se imprime el comprobante. Lo podés reimprimir o mandar por WhatsApp desde <b>Ventas</b>.',
+      ],
+    },
+    salon: {
+      title: 'Salón y mesas',
+      intro: 'Cada mesa ocupada tiene <b>una sola cuenta</b>: todo lo que pide se va sumando y se cobra junto, con un solo comprobante.',
+      tips: [
+        'Tocá una mesa libre, poné cuántas personas son y <b>Abrir y pedir</b>.',
+        '<b>Agregar tanda</b> manda a la cocina solo lo nuevo (por ejemplo, primero la pizza y después las empanadas). Todo queda en la misma cuenta.',
+        'Se actualiza solo en todos los equipos: lo que pide el mozo lo ve la caja al instante. Cuando la cocina marca <b>Listo</b>, la mesa se pone verde y suena un aviso para servir.',
+        '<b>Pedir cuenta</b> imprime la pre-cuenta (no es comprobante de pago) y avisa a la caja: la mesa se pone roja.',
+        '<b>Cobrar mesa</b> (caja o encargado) cobra todo junto, con uno o varios medios de pago, imprime el comprobante <b>PAGADO</b> y libera la mesa.',
+        'Si entra una tanda mientras se está cobrando, no se cobra sin querer: queda pendiente en la mesa y te avisa.',
+        'Con <b>Mis mesas</b> el mozo ve solo las que atiende. <b>Cambiar de mesa</b> pasa la cuenta completa a otra mesa libre.',
       ],
     },
     pedidos: {
@@ -40,6 +53,7 @@
         'Suena un aviso cuando entra un pedido nuevo. Si usan una tablet en la cocina, se actualiza sola.',
         'Con 💬 le avisás al cliente por WhatsApp en qué estado está su pedido.',
         'Los pedidos de la <b>carta online</b> aparecen arriba en verde: <b>Aceptar</b> los manda a la cocina con todo cargado; <b>Rechazar</b> le avisa al cliente.',
+        'Las tandas de las mesas dicen <b>Mesa N · Tanda K</b> y no se cobran acá: van a la cuenta de la mesa. Cuando están listas se marcan <b>Servida</b>.',
       ],
     },
     caja: {
@@ -77,7 +91,9 @@
         '<b>Aumentar precios</b> sube todo el menú (o una categoría) un porcentaje, con redondeo.',
         'Marcá un producto como <b>agotado</b> para que no aparezca al vender.',
         'Cargá la <b>receta</b> de cada producto: el stock baja solo al vender y el sistema calcula cuánto te cuesta cada pizza.',
-        '<b>Carta para clientes</b> arma un menú lindo para imprimir o mandar como PDF.',
+        '<b>Foto</b>: en cada producto podés pegar el link de una imagen (o subirla). Se recorta sola para la venta, el salón y la carta; sin foto se sigue viendo el ícono.',
+        '<b>Mitad y mitad</b>: en cada pizza elegís si va con cualquiera, solo con algunas (las marcás) o si es <b>solo entera</b>. La regla vale para las dos pizzas.',
+        '<b>Carta para clientes</b> arma un menú lindo para imprimir o mandar como PDF, y el <b>QR para las mesas</b>.',
       ],
     },
     online: {
@@ -87,7 +103,7 @@
         'Para publicarla: elegí la <b>dirección</b>, cargá el <b>WhatsApp</b> que recibe los pedidos y activá <b>Carta publicada</b>.',
         'Cada pedido llega también a <b>Pedidos</b> (con aviso sonoro): tocá <b>Aceptar</b> y pasa a la cocina con todo cargado, sin tipear nada.',
         'En <b>Diseño</b> elegís colores, letra, logo y portada. La vista previa muestra al instante cómo queda.',
-        'En <b>Productos y fotos</b> elegís qué se ve y le ponés foto a cada producto.',
+        'En <b>Productos y fotos</b> elegís qué se ve y le ponés foto a cada producto: 🔗 para pegar el link de una imagen o 📷 para subirla.',
         'Imprimí el <b>QR</b> para la vidriera, el mostrador o cada mesa. Con <b>Pausar pedidos</b> frenás los pedidos una noche complicada.',
       ],
     },
@@ -115,6 +131,7 @@
       tips: [
         '<b>Generar código</b> crea un enlace (y un QR) para que alguien se sume solo: elige su usuario y contraseña.',
         'También podés <b>crear el usuario</b> vos directamente.',
+        'Roles: <b>cajero</b> vende y cobra; <b>mozo</b> atiende las mesas (abre, pide tandas, pide la cuenta y marca servido, pero no cobra); <b>cocina</b> y <b>delivery</b> mueven los pedidos.',
         'La tabla muestra cuánto cobró cada uno, las anulaciones, las diferencias en los cierres de caja y cuánto vende por cada $1 de sueldo.',
       ],
     },
@@ -169,7 +186,7 @@
       intro: 'Todas las personas del negocio, su contacto y su rendimiento.',
       tips: [
         'Filtrá por sucursal para ver solo a su gente.',
-        'Solo vos podés sumar <b>encargados</b>; los encargados suman cajeros, cocina y delivery.',
+        'Solo vos podés sumar <b>encargados</b>; los encargados suman cajeros, mozos, cocina y delivery.',
       ],
     },
     'n-menu': {

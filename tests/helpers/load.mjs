@@ -17,7 +17,7 @@ export function loadApp({ online = true, Notification = undefined } = {}) {
   };
   const ctx = {
     console, Intl, Math, Date, JSON, Promise, Map, Set, Array, Object, String, Number, Boolean, Error, RegExp, Symbol,
-    setTimeout, clearTimeout, TextEncoder, crypto: globalThis.crypto,
+    setTimeout, clearTimeout, TextEncoder, URL, crypto: globalThis.crypto,
     navigator: { onLine: online, userAgent: 'test' },
     localStorage, sessionStorage: localStorage,
     location: { href: 'http://test/', origin: 'http://test', pathname: '/' },

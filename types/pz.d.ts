@@ -26,12 +26,16 @@ declare namespace PZ {
     /** se muestra en la carta online (por defecto sí) */
     online?: boolean;
     color?: string;
-    /** foto pública (carta online) */
+    /** foto del producto: link a una imagen o archivo subido (sistema y carta) */
     photo?: string;
+    /** encuadre de la foto al recortarla: arriba, centro (por defecto) o abajo */
+    photoPos?: 'top' | 'center' | 'bottom';
     variants: Variant[];
     recipe?: { ingredientId: string; qty: number }[];
     /** permite pedir mitad y mitad (por defecto hereda de la categoría si es true) */
     allowHalf?: boolean;
+    /** Si está, solo se combina por mitades con estas pizzas (ids) */
+    halfWith?: string[];
     _i?: number;
   }
   interface Extra {
@@ -206,6 +210,8 @@ declare namespace PZ {
     fontSize?: 'sm' | 'md' | 'lg';
     showDesc?: boolean;
     showBadges?: boolean;
+    /** miniatura de la foto junto a cada producto (si tiene) */
+    showPhotos?: boolean;
     qrToken?: string;
   }
   interface Condiment {

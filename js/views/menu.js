@@ -30,8 +30,8 @@
         const ps = S.data.products.filter((p) => p.categoryId === c.id);
         return `<div class="card mb"><h3>${c.icon} ${U.esc(c.name)} <span class="badge">${ps.length}</span></h3>
           ${ps.length ? `<div class="table-wrap"><table class="tbl"><tbody>${ps.map((p) => `<tr>
-            <td style="width:34px">${c.allowHalf ? `<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:${p.color || 'var(--accent)'};border:3px solid var(--crust)"></span>` : c.icon}</td>
-            <td><b>${U.esc(p.name)}</b>${c.allowHalf && p.allowHalf === false ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}<div class="small muted">${U.esc(p.desc || '')}</div></td>
+            <td style="width:48px"><span class="p-thumb">${PZ.carta.pic(p, c.allowHalf ? `<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:${U.esc(p.color || 'var(--accent)')};border:3px solid var(--crust)"></span>` : c.icon)}</span></td>
+            <td><b>${U.esc(p.name)}</b>${c.allowHalf && p.allowHalf === false ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : c.allowHalf && Array.isArray(p.halfWith) ? ` <span class="badge" style="font-size:0.75em;vertical-align:middle" title="Mitad y mitad solo con algunas pizzas">½ con ${p.halfWith.length}</span>` : ''}<div class="small muted">${U.esc(p.desc || '')}</div></td>
             <td class="nowrap">${p.variants.map((v) => `<span class="badge">${U.esc(v.name)} ${U.money(v.price)}</span>`).join(' ')}</td>
             <td><label class="check" style="margin:0"><input type="checkbox" data-av="${p.id}" ${p.active ? 'checked' : ''}> ${p.active ? 'Disponible' : 'Agotado'}</label></td>
             <td class="actions"><button class="btn sm ghost" data-e="${p.id}">✏️</button></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">Sin productos</div>'}
@@ -56,15 +56,34 @@
         </div>
         <label class="field"><span>Descripción</span><input name="desc" value="${U.esc(draft.desc || '')}"></label>
         <div class="grid-2">
-          <label class="field"><span>Color (para pizzas)</span><input name="color" type="color" value="${draft.color || '#ffd166'}" style="height:44px;padding:4px"></label>
+          <label class="field"><span>Color (ícono de pizza cuando no hay foto)</span><input name="color" type="color" value="${draft.color || '#ffd166'}" style="height:44px;padding:4px"></label>
           ${PZ.auth.feature('carta') ? `<div class="field"><span>Carta online</span>
-            <div class="img-slot"><div class="thumb photo-prev">${draft.photo ? `<img src="${U.esc(draft.photo)}" alt="">` : '📷'}</div>
-              <label class="btn ghost sm">Foto<input type="file" accept="image/*" name="photo" hidden></label>
-              <label class="check" style="margin:0"><input type="checkbox" name="online" ${draft.online !== false ? 'checked' : ''}> Se ve en la carta</label></div></div>` : ''}
+            <label class="check" style="margin:10px 0 0"><input type="checkbox" name="online" ${draft.online !== false ? 'checked' : ''}> Se ve en la carta online</label></div>` : ''}
+        </div>
+        <div class="field"><span>📷 Foto del producto (opcional)</span>
+          <div class="photo-edit">
+            <div class="photo-prev"></div>
+            <div>
+              <input name="photoUrl" type="url" inputmode="url" placeholder="Pegá el link de la imagen (https://…)" value="${U.esc(draft.photo || '')}" autocomplete="off" spellcheck="false">
+              <div class="row-flex mt" style="gap:6px;flex-wrap:wrap;align-items:center">
+                <span class="small muted">Encuadre:</span>
+                <div class="seg photo-pos"><button type="button" data-pp="top">Arriba</button><button type="button" data-pp="center">Centro</button><button type="button" data-pp="bottom">Abajo</button></div>
+                <label class="btn ghost sm">📤 Subir archivo<input type="file" accept="image/*" name="photo" hidden></label>
+                <button type="button" class="btn ghost sm" data-a="rmphoto">Quitar foto</button>
+              </div>
+              <small class="photo-hint muted"></small>
+            </div>
+          </div>
         </div>
         <div class="half-opt-wrap" style="margin: 6px 0 12px">
-          <label class="check" style="margin:0"><input type="checkbox" name="allowHalf" ${draft.allowHalf !== false ? 'checked' : ''}> 🍕 Permitir mitad y mitad con otras pizzas</label>
-          <div class="small muted" style="margin-left:24px">Desmarcalo si es una pizza especial, calzón o rellena que solo se vende entera.</div>
+          <div class="opt-section" style="margin-top:4px">🍕 Mitad y mitad</div>
+          <div class="seg half-mode">
+            <button type="button" data-hm="all">Con cualquier pizza</button>
+            <button type="button" data-hm="some">Solo con algunas</button>
+            <button type="button" data-hm="none">Solo entera</button>
+          </div>
+          <p class="small muted half-help" style="margin:6px 0"></p>
+          <div class="half-list"></div>
         </div>
         <div class="opt-section">Tamaños y precios</div>
         <div class="vars"></div>
@@ -101,22 +120,110 @@
       E.querySelectorAll('[data-rr]').forEach((b) => b.onclick = () => { draft.recipe.splice(Number(b.dataset.rr), 1); drawRec(); });
     };
     drawVars(); drawRec();
-    const photoIn = E.querySelector('[name=photo]');
-    if (photoIn) photoIn.onchange = async () => {
-      const f = photoIn.files[0];
+    const catSelect = /** @type {HTMLSelectElement | null} */ (E.querySelector('[name=cat]'));
+    // Foto: un link pegado (se prueba que abra) o un archivo subido. Sin foto se ve el ícono.
+    const photoUrlIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=photoUrl]'));
+    const photoPrev = /** @type {HTMLElement} */ (E.querySelector('.photo-prev'));
+    const photoHint = /** @type {HTMLElement} */ (E.querySelector('.photo-hint'));
+    const colorIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=color]'));
+    const HINT = 'Se ve en Nueva venta, Salón, Menú y la carta. Sirve el link directo a una imagen, o uno compartido de Google Drive o Dropbox (con acceso público). Se recorta sola para cada lugar.';
+    const hint = (text, err = false) => { photoHint.textContent = text; photoHint.classList.toggle('err', err); };
+    let photoCheck = 0;
+    const drawPhoto = () => {
+      const c = catSelect ? S.category(catSelect.value) : null;
+      const icon = c && c.allowHalf
+        ? `<span style="display:inline-block;width:58px;height:58px;border-radius:50%;background:${U.esc(colorIn.value)};border:5px solid var(--crust)"></span>`
+        : (c ? c.icon : '🍽️');
+      E.querySelectorAll('[data-pp]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-pp') === (draft.photoPos || 'center')));
+      photoPrev.className = 'photo-prev' + (draft.photo ? ' ok' : '');
+      photoPrev.innerHTML = PZ.carta.pic(draft, icon);
+    };
+    /** Lee el link pegado: lo normaliza, lo prueba y actualiza la vista previa @returns {boolean} */
+    const readPhotoUrl = () => {
+      const raw = photoUrlIn.value.trim();
+      const url = PZ.carta.imageUrl(raw);
+      if (raw && !url) { hint('Eso no es un link de imagen: tiene que empezar con https://', true); return false; }
+      if (url !== (draft.photo || '')) {
+        draft.photo = url;
+        if (url && url !== raw) photoUrlIn.value = url;
+        drawPhoto();
+        if (url) {
+          const n = ++photoCheck;
+          const img = new Image();
+          img.referrerPolicy = 'no-referrer';
+          hint('Probando la imagen…');
+          img.onload = () => { if (n === photoCheck) hint(`✅ Imagen encontrada (${img.naturalWidth}×${img.naturalHeight} px).${img.naturalWidth < 400 ? ' Es chica: puede verse borrosa en la carta.' : ''}`); };
+          img.onerror = () => { if (n === photoCheck) hint('⚠️ No se pudo abrir la imagen. Revisá que el link sea de la imagen y que sea público. Mientras no cargue se ve el ícono.', true); };
+          img.src = url;
+        } else hint(HINT);
+      }
+      return true;
+    };
+    photoUrlIn.addEventListener('change', readPhotoUrl);
+    photoUrlIn.addEventListener('paste', () => setTimeout(readPhotoUrl, 0));
+    colorIn.addEventListener('input', drawPhoto);
+    E.querySelectorAll('[data-pp]').forEach((b) => b.addEventListener('click', () => {
+      const v = /** @type {'top' | 'center' | 'bottom'} */ (b.getAttribute('data-pp'));
+      if (v === 'center') delete draft.photoPos; else draft.photoPos = v;
+      drawPhoto();
+    }));
+    /** @type {HTMLElement} */ (E.querySelector('[data-a=rmphoto]')).onclick = () => { draft.photo = ''; delete draft.photoPos; photoUrlIn.value = ''; hint(HINT); drawPhoto(); };
+    const photoIn = /** @type {HTMLInputElement} */ (E.querySelector('[name=photo]'));
+    photoIn.onchange = async () => {
+      const f = photoIn.files && photoIn.files[0];
       if (!f) return;
       if (!navigator.onLine) return PZ.toast('Para subir fotos hace falta internet', 'warn');
       try {
-        PZ.toast('Subiendo foto…', 'info', 1500);
-        draft.photo = await PZ.cloud.uploadMenuImage(await U.imageBlob(f, 900, 0.82), 'p-' + draft.id);
-        E.querySelector('.photo-prev').innerHTML = `<img src="${U.esc(draft.photo)}" alt="">`;
-      } catch (e) { PZ.toast('No se pudo subir: ' + e.message, 'err', 5000); }
+        hint('Subiendo foto…');
+        draft.photo = await PZ.cloud.uploadMenuImage(await U.imageBlob(f, 1000, 0.84), 'p-' + draft.id);
+        photoUrlIn.value = draft.photo;
+        hint('✅ Foto subida.');
+        drawPhoto();
+      } catch (e) { hint('No se pudo subir: ' + e.message, true); }
     };
-    const catSelect = /** @type {HTMLSelectElement | null} */ (E.querySelector('[name=cat]'));
+    hint(HINT);
     const halfWrap = /** @type {HTMLElement | null} */ (E.querySelector('.half-opt-wrap'));
+    // Mitad y mitad: con cualquiera, solo con algunas (lista) o solo entera
+    let halfModeSel = PZ.carta.halfMode(draft);
+    const halfWith = new Set(Array.isArray(draft.halfWith) ? draft.halfWith : []);
+    const otherPizzas = () => S.data.products.filter((x) => x.id !== draft.id && S.category(x.categoryId) && S.category(x.categoryId).allowHalf);
+    const drawHalf = () => {
+      if (!halfWrap) return;
+      halfWrap.querySelectorAll('[data-hm]').forEach((b) => b.classList.toggle('on', b.getAttribute('data-hm') === halfModeSel));
+      const help = /** @type {HTMLElement} */ (halfWrap.querySelector('.half-help'));
+      const list = /** @type {HTMLElement} */ (halfWrap.querySelector('.half-list'));
+      help.textContent = halfModeSel === 'all' ? 'Se puede combinar con cualquier otra pizza que también lo permita.'
+        : halfModeSel === 'none' ? 'Solo se vende entera (ideal para calzones, rellenas o especiales).'
+        : 'Marcá con qué pizzas se puede combinar. Las que no marques no aparecen como "otra mitad".';
+      if (halfModeSel !== 'some') { list.innerHTML = ''; return; }
+      const others = otherPizzas();
+      list.innerHTML = others.length ? `<div class="half-grid">${others.map((x) => {
+        // la regla vale para las dos pizzas: avisamos si la otra no acepta a esta
+        const blocks = x.allowHalf === false || (Array.isArray(x.halfWith) && !x.halfWith.includes(draft.id));
+        return `<label class="check" style="margin:0"><input type="checkbox" data-hw="${x.id}" ${halfWith.has(x.id) ? 'checked' : ''}> ${U.esc(x.name)}${blocks ? ` <small class="muted" title="Esa pizza tiene su propia regla">(${x.allowHalf === false ? 'es solo entera' : 'no acepta a esta'})</small>` : ''}</label>`;
+      }).join('')}</div>
+        <div class="row-flex mt" style="gap:6px"><button type="button" class="btn sm ghost" data-hwall="1">Marcar todas</button><button type="button" class="btn sm ghost" data-hwall="0">Ninguna</button></div>`
+        : '<p class="small muted">No hay otras pizzas para combinar.</p>';
+      list.querySelectorAll('[data-hw]').forEach((i) => i.addEventListener('change', () => {
+        const id = i.getAttribute('data-hw') || '';
+        if (/** @type {HTMLInputElement} */ (i).checked) halfWith.add(id); else halfWith.delete(id);
+      }));
+      list.querySelectorAll('[data-hwall]').forEach((b) => b.addEventListener('click', () => {
+        if (b.getAttribute('data-hwall') === '1') others.forEach((x) => halfWith.add(x.id)); else halfWith.clear();
+        drawHalf();
+      }));
+    };
+    if (halfWrap) halfWrap.querySelectorAll('[data-hm]').forEach((b) => b.addEventListener('click', () => {
+      halfModeSel = /** @type {'all' | 'some' | 'none'} */ (b.getAttribute('data-hm'));
+      // al pasar a "solo con algunas" arranca con todas marcadas: se destildan las que no van
+      if (halfModeSel === 'some' && !halfWith.size) otherPizzas().forEach((x) => halfWith.add(x.id));
+      drawHalf();
+    }));
     const syncHalfOpt = () => {
       const c = catSelect ? S.category(catSelect.value) : null;
       if (halfWrap) halfWrap.style.display = c && c.allowHalf ? '' : 'none';
+      drawHalf();
+      drawPhoto();
     };
     if (catSelect) catSelect.onchange = syncHalfOpt;
     syncHalfOpt();
@@ -135,16 +242,24 @@
       draft.desc = E.querySelector('[name=desc]').value.trim();
       draft.categoryId = E.querySelector('[name=cat]').value;
       draft.color = E.querySelector('[name=color]').value;
+      if (!readPhotoUrl()) return PZ.toast('Revisá el link de la foto', 'warn');
+      if (!draft.photo) { draft.photo = ''; delete draft.photoPos; }
       const onl = E.querySelector('[name=online]');
       if (onl) draft.online = onl.checked;
-      const hfIn = /** @type {HTMLInputElement | null} */ (E.querySelector('[name=allowHalf]'));
-      if (hfIn) draft.allowHalf = hfIn.checked;
+      draft.allowHalf = halfModeSel !== 'none';
+      if (halfModeSel === 'some') draft.halfWith = Array.from(halfWith);
+      else delete draft.halfWith;
       draft.variants = draft.variants.filter((v) => v.name.trim() || draft.variants.length === 1);
       draft.recipe = draft.recipe.filter((r) => r.qty > 0);
       if (!draft.name) return PZ.toast('Falta el nombre', 'warn');
       if (draft.variants.some((v) => !v.price)) return PZ.toast('Todos los tamaños necesitan precio', 'warn');
+      if (halfModeSel === 'some' && !halfWith.size) return PZ.toast('Marcá al menos una pizza para combinar, o elegí "Solo entera"', 'warn');
       if (isNew) S.data.products.push(draft);
-      else Object.assign(p, draft);
+      else {
+        Object.assign(p, draft);
+        if (!('halfWith' in draft)) delete p.halfWith;
+        if (!('photoPos' in draft)) delete p.photoPos;
+      }
       S.log('menú', `${isNew ? 'Alta' : 'Edición'} de ${draft.name}`);
       S.save(); m.close(); PZ.toast('Producto guardado'); done();
     };
@@ -411,6 +526,9 @@
           <label class="check" style="margin:0">
             <input type="checkbox" name="showBadges" ${cfg.showBadges !== false ? 'checked' : ''}> Mostrar distintivos (Solo entera / Permite mitad)
           </label>
+          <label class="check" style="margin:0">
+            <input type="checkbox" name="showPhotos" ${cfg.showPhotos !== false ? 'checked' : ''}> 📷 Mostrar las fotos de los productos que tengan
+          </label>
         </div>
 
         <div>
@@ -435,7 +553,7 @@
     const fontSizeStyle = cfg.fontSize === 'sm' ? 'font-size:0.86em;' : cfg.fontSize === 'lg' ? 'font-size:1.14em;' : 'font-size:1em;';
 
     const cartaHtml = PZ.carta.renderSalonHtml({
-      shop: { name: b.name, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, logo: S.data.settings.logo },
+      shop: { name: b.name, slogan: b.slogan, phone: b.phone, address: b.address, city: b.city, logo: (st.online && st.online.logo) || (st.ticket && st.ticket.showLogo !== false ? st.ticket.logo : '') },
       categories: allSystemCats,
       products: S.data.products,
       cfg,
@@ -483,6 +601,11 @@
       saveAndRefresh();
     };
 
+    body.querySelector('[name=showPhotos]').onchange = (e) => {
+      cfg.showPhotos = e.target.checked;
+      saveAndRefresh();
+    };
+
     body.querySelectorAll('[data-cat-id]').forEach((inp) => {
       inp.onchange = () => {
         const id = inp.dataset.catId;
@@ -511,7 +634,20 @@
       const branch = S.branch() || {};
       const slug = branch.slug || '';
       const origin = location.origin + location.pathname.replace(/index\.html$/, '');
-      const qrUrl = slug ? PZ.carta.salonUrl(origin, slug, cfg.qrToken) : `${origin}carta.html?preview=carta`;
+      // el QR abre la carta pública: necesita la dirección (slug) y la carta publicada
+      const published = !!(st.online && st.online.enabled);
+      if (!slug) {
+        const w = PZ.modal({
+          title: '📱 Código QR para mesas',
+          size: 'sm',
+          body: '<p style="margin-top:0">Para generar el QR primero elegí la <b>dirección de tu carta</b> y publicala en <b>Carta online → Publicar</b>.</p><p class="small muted">El QR lleva a esa dirección: sin ella, el celular del cliente no tendría qué abrir.</p>',
+          footer: '<button class="btn ghost" data-a="x">Cerrar</button>' + (PZ.auth.can('online') ? '<a class="btn primary" href="#/online">Ir a Carta online</a>' : ''),
+        });
+        /** @type {HTMLElement} */ (w.el.querySelector('[data-a=x]')).onclick = () => w.close();
+        w.el.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => w.close()));
+        return;
+      }
+      const qrUrl = PZ.carta.salonUrl(origin, slug, cfg.qrToken);
       const qrSvg = PZ.util.qrSvg(qrUrl, 5, 2);
       const qrDataUrl = PZ.util.qrDataUrl(qrUrl, 6, 2);
 
@@ -520,9 +656,7 @@
         size: 'lg',
         body: `
           <div style="text-align:center;padding:10px 0">
-            ${!slug ? `<div class="banner warn mb" style="text-align:left">
-              <b>Aviso:</b> Tu sucursal aún no tiene asignada una dirección pública (slug). El código QR funcionará con la dirección completa, pero te recomendamos configurar un slug amigable en <i>Carta online</i> o <i>Ajustes</i>.
-            </div>` : ''}
+            ${!published ? `<div class="alert-row" style="text-align:left;margin-bottom:12px">⚠️ La carta online todavía no está publicada: hasta que la publiques (Carta online → Publicar), este QR muestra "carta no disponible". Podés imprimirlo igual: empieza a funcionar solo cuando la publiques.</div>` : ''}
             <div class="qr-salon-frame" style="width:230px;height:230px;background:#fff;padding:12px;border-radius:20px;box-shadow:0 4px 18px rgba(0,0,0,0.1);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;box-sizing:border-box">
               ${qrSvg || (qrDataUrl ? `<img src="${qrDataUrl}" width="206" height="206" alt="Código QR" style="display:block;max-width:100%">` : '<div style="color:var(--muted)">Generando QR...</div>')}
             </div>
@@ -540,14 +674,12 @@
               <ul style="margin:0;padding-left:18px;line-height:1.4" class="muted">
                 <li>Es <b>permanente</b>: podés imprimirlo e instalarlo en tus mesas todo el tiempo que quieras.</li>
                 <li>Si cambiás los precios o agregás platos, los comensales verán los cambios actualizados automáticamente sin necesidad de reimprimir.</li>
-                <li>Si alguna vez necesitás invalidar o renovar el código, podés hacer clic en <i>Regenerar nuevo QR</i>.</li>
+                <li>Sigue funcionando mientras no cambies la dirección de la carta (en <i>Carta online</i>). Si la cambiás, hay que reimprimirlo.</li>
               </ul>
             </div>
           </div>
         `,
         footer: `
-          <button class="btn sm danger-outline" data-a="renew-qr">🔄 Regenerar nuevo QR</button>
-          <span class="grow"></span>
           <button class="btn ghost" data-a="x">Cerrar</button>
           <button class="btn primary" data-a="print-flyer">🖨️ Imprimir cartel para mesa</button>
         `,
@@ -559,20 +691,6 @@
           const inp = m.el.querySelector('#qr-salon-url');
           if (inp && navigator.clipboard) {
             navigator.clipboard.writeText(inp.value).then(() => PZ.toast('Enlace copiado al portapapeles', 'ok'));
-          }
-        };
-      }
-
-      const renewBtn = m.el.querySelector('[data-a=renew-qr]');
-      if (renewBtn) {
-        renewBtn.onclick = () => {
-          if (confirm('¿Querés generar un nuevo código QR? El enlace anterior dejará de ser el oficial. Hacelo solo si necesitás reemplazar los carteles de tus mesas.')) {
-            cfg.qrToken = U.uid('qr_');
-            st.online.salonMenu = cfg;
-            S.save();
-            m.close();
-            PZ.toast('Código QR regenerado exitosamente', 'ok');
-            carta(body, el);
           }
         };
       }
@@ -656,9 +774,15 @@
           .carta-cat-section { break-inside: avoid; }
           ${cfg.pageBreakPerCat ? '.carta-cat-section:not(:first-of-type) { break-before: page; page-break-before: always; }' : ''}
         </style>
-      </head><body><div class="card">${cartaHtml}</div></body></html>`);
+      </head><body><div class="card">${cartaHtml.replace(/ loading="lazy"/g, '')}</div></body></html>`);
       w.document.close();
-      setTimeout(() => w.print(), 400);
+      // espera las fotos (las que no cargan se sacan) antes de imprimir
+      const imgs = Array.from(w.document.images);
+      const loaded = Promise.all(imgs.map((i) => (i.complete && i.naturalWidth ? 1 : new Promise((r) => {
+        i.onload = r;
+        i.onerror = () => { if (i.parentElement) i.parentElement.classList.add('pz-img-broken'); i.remove(); r(1); };
+      }))));
+      Promise.race([loaded, new Promise((r) => setTimeout(r, 5000))]).then(() => setTimeout(() => w.print(), 250));
     };
   }
 

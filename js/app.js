@@ -414,7 +414,7 @@
       if (mode === 'branch') {
         chips += `<button class="branch-chip" data-a="branch" title="Cambiar de sucursal">🏪 <span class="bc-txt">${U.esc(S.branchName())}</span>${App.allowedBranches().length > 1 || A.isOwner() ? ' ▾' : ''}</button>`;
         if (A.isOwner()) chips += '<button class="mode-chip" data-a="panel" title="Panel del negocio">🏢 <span class="mc-txt">Panel</span></button>';
-        chips += '<button class="sync-chip" data-a="sync"></button><button class="cash-chip" data-a="cash"></button>';
+        chips += '<button class="sync-chip" data-a="sync"></button>' + (A.can('caja') ? '<button class="cash-chip" data-a="cash"></button>' : '');
       } else if (mode === 'org') {
         chips += '<button class="mode-chip primary" data-a="operate" title="Operar en una sucursal">🍕 <span class="mc-txt">Operar en sucursal</span> ▾</button>';
         if (u.support) chips += '<button class="mode-chip" data-a="platform" title="Volver a la plataforma">🛠️ <span class="mc-txt">Plataforma</span></button>';
@@ -508,12 +508,14 @@
       const r = root();
       if (App.mode !== 'branch' || !S.data) return;
       const chip = /** @type {HTMLElement | null} */ (r.querySelector('.cash-chip'));
-      if (!chip) return;
-      const s = S.currentSession();
-      chip.className = 'cash-chip ' + (s ? 'open' : 'closed');
-      chip.innerHTML = `<span class="c-ico">💰</span><span class="dot"></span><span class="c-txt">${s ? 'Caja abierta' : 'Caja cerrada'}</span>`;
-      chip.title = s ? 'Caja abierta' : 'Caja cerrada';
-      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status)).length
+      if (chip) {
+        const s = S.currentSession();
+        chip.className = 'cash-chip ' + (s ? 'open' : 'closed');
+        chip.innerHTML = `<span class="c-ico">💰</span><span class="dot"></span><span class="c-txt">${s ? 'Caja abierta' : 'Caja cerrada'}</span>`;
+        chip.title = s ? 'Caja abierta' : 'Caja cerrada';
+      }
+      // el mozo solo sigue lo del salón
+      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status) && (!A.isWaiter() || o.type === 'mesa')).length
         + (PZ.web && A.can('vender') ? PZ.web.pending().length : 0);
       r.querySelectorAll('.n-count').forEach((el) => {
         el.textContent = active;
@@ -668,13 +670,45 @@
     });
   }
 
+  /* ===================== Ojito en las contraseñas ===================== */
+  // Todo campo de contraseña (ingreso, alta de empleados, perfil, autorización
+  // de encargado…) recibe un botón para ver u ocultar lo que se escribió.
+  const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a10 10 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  function passwordEyes(scope) {
+    scope.querySelectorAll('input[type="password"]:not([data-eye])').forEach((el) => {
+      const input = /** @type {HTMLInputElement} */ (el);
+      input.dataset.eye = '1';
+      const wrap = document.createElement('span');
+      wrap.className = 'pw-wrap';
+      input.replaceWith(wrap);
+      wrap.appendChild(input);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pw-eye';
+      const draw = () => {
+        const shown = input.type === 'text';
+        btn.innerHTML = shown ? EYE_OFF : EYE;
+        btn.setAttribute('aria-label', shown ? 'Ocultar contraseña' : 'Mostrar contraseña');
+        btn.setAttribute('aria-pressed', String(shown));
+        btn.title = shown ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      };
+      btn.addEventListener('mousedown', (e) => e.preventDefault()); // no le saca el foco al campo
+      btn.addEventListener('click', () => { input.type = input.type === 'password' ? 'text' : 'password'; draw(); input.focus(); });
+      draw();
+      wrap.appendChild(btn);
+    });
+  }
+  PZ.passwordEyes = passwordEyes;
+
   /* ===================== Arranque ===================== */
   async function boot() {
     App.applyTheme();
     window.addEventListener('hashchange', () => App.route());
     S.onChange(() => App.refreshChrome());
     S.onStatus((st) => App.refreshSync(st));
-    new MutationObserver(() => labelTables(document.body)).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(() => { labelTables(document.body); passwordEyes(document.body); }).observe(document.body, { childList: true, subtree: true });
+    passwordEyes(document.body);
 
     // Cambios de otros equipos: se redibujan las pantallas "en vivo"
     S.onRemoteHook = U.debounce(() => {

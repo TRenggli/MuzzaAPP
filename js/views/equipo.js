@@ -27,14 +27,14 @@
     /** Genera un código. Si no se indica rol, se elige en un modal. */
     async create(branchId, role, done = () => {}) {
       if (!role) {
-        const roles = ['cajero', 'cocina', 'delivery'].concat(A().isOwner() ? ['admin'] : []);
+        const roles = ['cajero', 'mozo', 'cocina', 'delivery'].concat(A().isOwner() ? ['admin'] : []);
         role = await new Promise((res) => {
           let chosen = null;
           const m = PZ.modal({
             title: '🔑 Código para sumar a alguien',
             size: 'sm',
             body: `<p class="muted" style="margin-top:0">Sucursal <b>${U.esc(S.branchName(branchId))}</b>. ¿Qué va a hacer esta persona?</p>
-              <div class="pick-list">${roles.map((r) => `<button class="pick" data-r="${r}"><span class="pick-ico">${{ admin: '🧑‍💼', cajero: '💵', cocina: '👨‍🍳', delivery: '🛵' }[r]}</span><span><b>${A().ROLES[r].label}</b><small>${{ admin: 'Maneja toda la sucursal', cajero: 'Vende, cobra, caja y pedidos', cocina: 'Solo tablero de pedidos', delivery: 'Solo tablero de pedidos' }[r]}</small></span><span class="pick-go">→</span></button>`).join('')}</div>`,
+              <div class="pick-list">${roles.map((r) => `<button class="pick" data-r="${r}"><span class="pick-ico">${{ admin: '🧑‍💼', cajero: '💵', mozo: '🍽️', cocina: '👨‍🍳', delivery: '🛵' }[r]}</span><span><b>${A().ROLES[r].label}</b><small>${{ admin: 'Maneja toda la sucursal', cajero: 'Vende, cobra, caja y pedidos', mozo: 'Atiende las mesas: abre, pide tandas y pide la cuenta', cocina: 'Solo tablero de pedidos', delivery: 'Solo tablero de pedidos' }[r]}</small></span><span class="pick-go">→</span></button>`).join('')}</div>`,
             onClose: () => res(chosen),
           });
           m.el.querySelectorAll('[data-r]').forEach((b) => b.onclick = () => { chosen = b.dataset.r; m.close(); });

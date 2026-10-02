@@ -17,7 +17,7 @@ Un negocio de una sola persona funciona igual: el dueño tiene todas las funcion
 1. **Vos** (plataforma) creás el negocio y el usuario del dueño → le mandás los datos por WhatsApp desde el mismo panel.
 2. **El dueño** crea sucursales y genera un **código** para el encargado de cada una (`ABCD-1234`, un solo uso, vence en 7 días).
 3. **El encargado** abre el **enlace** (o escanea el QR, o toca *Tengo un código de sucursal*) → elige su usuario y contraseña. Queda solo en su sucursal.
-4. **El encargado** genera enlaces para cajeros, cocina y delivery de su sucursal, o les crea el usuario directamente.
+4. **El encargado** genera enlaces para cajeros, mozos, cocina y delivery de su sucursal, o les crea el usuario directamente.
 5. **Al primer ingreso** cada persona completa su perfil: nombre completo, teléfono y CUIL (se valida el dígito verificador). Desde *Mi perfil* cambia foto, correo y contraseña. El dueño y el encargado ven los datos de su gente en *Equipo*.
 
 ## Qué ve el dueño
@@ -26,6 +26,26 @@ Un negocio de una sola persona funciona igual: el dueño tiene todas las funcion
 - **Finanzas:** por sucursal y total: ventas, gastos, ganancia, margen, food cost (costo teórico de mercadería según recetas), ventas vs gastos por día y en qué se gasta.
 - **Equipo:** por persona: cuánto cobró, tickets, ticket promedio, descuentos, anulaciones, diferencias en los cierres de caja que hizo, sueldo pagado y cuánto vende por cada $1 de sueldo.
 - **Menú modelo:** menú oficial del negocio que se copia a las sucursales nuevas; se puede mandar a las existentes (solo precios, agregar faltantes o reemplazar) y aumentar precios en varias sucursales a la vez.
+
+## Roles dentro de la sucursal
+
+| Rol | Qué hace |
+|---|---|
+| **Encargado** | Todo lo de su sucursal: menú, precios, equipo, reportes, anulaciones. |
+| **Cajero** | Vende, cobra (también las mesas), caja, clientes, pedidos web. |
+| **Mozo** | Atiende el salón: abre mesas, manda tandas a la cocina, pide la cuenta y marca lo servido. **No cobra** (lo valida el servidor). |
+| **Cocina / Delivery** | Mueven los pedidos en el tablero. |
+
+## Salón y mesas (en vivo)
+
+- Cada mesa ocupada es **una sola cuenta**. Cada vez que se pide algo se manda una **tanda** a la cocina (sale como comanda propia, "MESA 3 · TANDA 2"), pero se cobra todo junto con **un solo comprobante PAGADO**. La pre-cuenta dice "PRE-CUENTA" y no es comprobante de pago.
+- Todos los equipos (mozos, caja, cocina) ven lo mismo al instante: lo que pide el mozo aparece en la caja; cuando la cocina marca *Listo*, la mesa se pone verde y suena un aviso para servir.
+- Pensado para varios equipos a la vez: si dos abren la misma mesa, las cuentas se unifican solas; si entra una tanda mientras la caja cobra, queda pendiente (no se cobra sin querer); si llega una tanda a una mesa ya cobrada, la cuenta se reabre con ese saldo.
+- El cobro de la mesa acepta varios medios de pago y descuentos/recargos, que se reparten entre las tandas para que cada venta cierre exacto en el servidor.
+
+## Fotos de productos
+
+Cada producto puede tener una foto: se pega el **link de una imagen** (sirven links compartidos de Google Drive o Dropbox si son públicos) o se sube el archivo. Se recorta sola para cada lugar (venta, salón, menú, carta online y carta del salón) con encuadre arriba/centro/abajo. Sin foto, o si el link deja de funcionar, se sigue viendo el ícono.
 
 ## Ayudas y uso en cualquier equipo
 
@@ -36,7 +56,7 @@ Un negocio de una sola persona funciona igual: el dueño tiene todas las funcion
 
 Cada sucursal puede publicar su carta en `carta.html?l=<dirección>` (sin instalar nada, se abre desde el celular del cliente):
 
-1. El cliente mira la carta, elige tamaños, **mitad y mitad**, agregados y aclaraciones, y arma el carrito.
+1. El cliente mira la carta, elige tamaños, **mitad y mitad** (solo con las pizzas que el local permite combinar), agregados y aclaraciones, y arma el carrito.
 2. Carga sus datos (retiro, delivery con zona de envío o desde la mesa con un QR por mesa) y cómo va a pagar.
 3. El pedido **se guarda en el sistema** con los precios calculados por el servidor (no se confía en lo que manda el teléfono) y se abre **WhatsApp** con todo el detalle para mandarlo al local.
 4. En el local suena un aviso y el pedido aparece arriba en **Pedidos**: con **Aceptar** pasa a la cocina con todo cargado (sin tipearlo); con **Rechazar** se le avisa al cliente.
@@ -62,9 +82,9 @@ El comprobante se imprime **siempre**, se pague como se pague (efectivo, transfe
 
 ## Calidad
 
-- `tests/*.test.mjs`: 41 pruebas de cálculos de dinero, carta online (precios, horarios, mensaje de WhatsApp), Mercado Pago (con respuestas simuladas), CUIL, fechas y sincronización (`npm test`).
+- `tests/*.test.mjs`: más de 80 pruebas de cálculos de dinero, salón (cobro unificado, tandas tardías, dos equipos abriendo la misma mesa), mitad y mitad, fotos, carta online (precios, horarios, mensaje de WhatsApp), Mercado Pago (con respuestas simuladas), CUIL, fechas y sincronización (`npm test`).
 - **TypeScript sin compilar**: TODOS los archivos de la app (y el service worker) se revisan con `npm run types`; los nuevos se suman solos. Los tipos del negocio (producto, pedido, pagos, sucursal) están en `types/pz.d.ts`. Las funciones del servidor se revisan con `deno check`.
-- `supabase/tests/integridad.sql` (18) y `supabase/tests/carta.sql` (24): pruebas de seguridad que simulan cajeros, encargados y clientes anónimos intentando hacer trampa (se deshacen solas).
+- `supabase/tests/integridad.sql` (18), `supabase/tests/carta.sql` (24) y `supabase/tests/salon.sql` (12): pruebas de seguridad que simulan cajeros, mozos, encargados y clientes anónimos intentando hacer trampa (se deshacen solas).
 - GitHub Actions corre todo en cada cambio y **publica la página solo si pasa**.
 - Los errores que tenga la app en los equipos de los clientes quedan registrados en *Plataforma → Errores de la app*.
 

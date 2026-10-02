@@ -118,7 +118,15 @@
       if (!S.order(o.id)) S.data.orders.push(o);
       S.rebuildShadow();
       S.cache(true);
-      S.log('pedido web', `Aceptado W-${w.number} → pedido #${o.number}`);
+      // Pedido hecho desde el QR de una mesa del salón: se suma a la cuenta de esa mesa
+      const t = o.type === 'mesa' && PZ.auth.feature('mesas') ? S.tables().find((x) => String(x.number) === String(o.table)) : null;
+      const s = t ? S.activeTableSession(t.id) || S.openTable(t.id) : null;
+      if (s && !o.tableSessionId) {
+        o.batchNumber = S.tableOrders(s).reduce((m, x) => Math.max(m, Number(x.batchNumber) || 0), 0) + 1;
+        o.tableSessionId = s.id;
+      }
+      S.log('pedido web', `Aceptado W-${w.number} → pedido #${o.number}${s ? ` (cuenta de la mesa ${o.table})` : ''}`);
+      S.save();
       W.emit();
       const st = S.data.settings;
       if (st.ticket.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' });

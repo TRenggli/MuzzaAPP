@@ -8,7 +8,7 @@
   const L = () => PZ.labels;
 
   const CART_KEY = 'pz-cart';
-  const emptyCart = () => ({ type: 'mostrador', items: [], customerId: null, customerName: '', phone: '', address: '', zoneId: null, deliveryFee: 0, table: '', discount: null, notes: '', eta: '', driver: '' });
+  const emptyCart = () => ({ type: 'mostrador', items: [], customerId: null, customerName: '', phone: '', address: '', zoneId: null, deliveryFee: 0, table: '', tableId: null, discount: null, notes: '', eta: '', driver: '' });
   let cart = (() => { try { return JSON.parse(sessionStorage.getItem(CART_KEY) || 'null') || emptyCart(); } catch (e) { return emptyCart(); } })();
   let activeCat = null;
   let query = '';
@@ -67,8 +67,9 @@
       const cat = S.category(p.categoryId);
       const isPizza = cat && cat.allowHalf;
       const minPrice = Math.min(...p.variants.map((v) => v.price));
-      return `<button class="prod" data-p="${p.id}" style="animation-delay:${i * 0.025}s">
-        ${isPizza ? `<div class="p-disc" style="--pc:${p.color || 'var(--accent)'}"></div>` : `<div class="p-emoji">${cat ? cat.icon : '🍽️'}</div>`}
+      const icon = isPizza ? `<div class="p-disc" style="--pc:${U.esc(p.color || 'var(--accent)')}"></div>` : `<div class="p-emoji">${cat ? cat.icon : '🍽️'}</div>`;
+      return `<button class="prod${p.photo ? ' has-photo' : ''}" data-p="${p.id}" style="animation-delay:${i * 0.025}s">
+        ${p.photo ? `<div class="p-photo">${PZ.carta.pic(p, icon)}</div>` : icon}
         <div class="p-name">${U.esc(p.name)}</div>
         ${p.desc ? `<div class="p-desc">${U.esc(p.desc)}</div>` : ''}
         <div class="p-price">${p.variants.length > 1 ? 'desde ' : ''}${U.money(minPrice)}</div>
@@ -105,8 +106,9 @@
   function productModal(p, onAdd) {
     const cat = S.category(p.categoryId);
     const isPizza = !!(cat && cat.allowHalf);
-    const allowHalf = isPizza && p.allowHalf !== false;
-    const halfCandidates = S.data.products.filter((x) => x.active && x.id !== p.id && x.allowHalf !== false && S.category(x.categoryId) && S.category(x.categoryId).allowHalf);
+    // Solo las pizzas que el local permite combinar con esta (la regla vale para las dos)
+    const halfCandidates = isPizza ? PZ.carta.halfPartners(p, S.data.products, S.category) : [];
+    const allowHalf = isPizza && halfCandidates.length > 0;
     let variant = p.variants[0];
     /** @type {PZ.Product | null} */
     let half = null;
@@ -127,6 +129,7 @@
     const m = PZ.modal({
       title: `${cat ? cat.icon : ''} ${U.esc(p.name)}`,
       body: `
+        ${p.photo ? `<div class="pm-photo">${PZ.carta.pic(p, '')}</div>` : ''}
         ${p.desc ? `<p class="muted" style="margin-top:0">${U.esc(p.desc)}</p>` : ''}
         ${p.variants.length > 1 ? `<div class="opt-section">Tamaño</div><div class="opt-grid v-grid"></div>` : ''}
         ${allowHalf ? `
@@ -326,7 +329,13 @@
       body: `
         <label class="field"><span>Buscar cliente existente</span><input class="c-search" placeholder="Nombre o teléfono…" autocomplete="off"></label>
         <div class="c-results"></div>
-        ${cart.type === 'mesa' ? `<label class="field"><span>Número de mesa</span><input name="table" value="${U.esc(cart.table)}" inputmode="numeric"></label>` : ''}
+        ${cart.type === 'mesa' ? (S.tables().length
+          ? `<label class="field"><span>Mesa del salón</span><select name="tableId"><option value="">Elegir mesa…</option>${S.tables().map((t) => {
+            const s = S.activeTableSession(t.id);
+            return `<option value="${t.id}" ${cart.tableId === t.id || (!cart.tableId && cart.table === t.number) ? 'selected' : ''}>Mesa ${U.esc(t.number)}${s ? ` · ocupada (${U.money(S.tableBalance(s))})` : ' · libre'}</option>`;
+          }).join('')}</select></label>
+            <p class="small muted" style="margin-top:-6px">“Cobrar después” lo suma a la cuenta de la mesa (se cobra todo junto desde Salón).</p>`
+          : `<label class="field"><span>Número de mesa</span><input name="table" value="${U.esc(cart.table)}" inputmode="numeric"></label>`) : ''}
         <div class="grid-2">
           <label class="field"><span>Nombre</span><input name="name" value="${U.esc(cart.customerName)}"></label>
           <label class="field"><span>Teléfono / WhatsApp</span><input name="phone" value="${U.esc(cart.phone)}" inputmode="tel"></label>
@@ -380,7 +389,12 @@
       cart.customerId = f('cid').value || null;
       cart.customerName = f('name').value.trim();
       cart.phone = f('phone').value.trim();
-      if (f('table')) cart.table = f('table').value.trim();
+      if (f('table')) { cart.table = f('table').value.trim(); cart.tableId = null; }
+      if (f('tableId')) {
+        const t = S.table(f('tableId').value);
+        cart.tableId = t ? t.id : null;
+        cart.table = t ? t.number : '';
+      }
       if (cart.type === 'delivery') {
         const df = S.data.settings.deliveryFields || {};
         if (df.separateAddress) {
@@ -437,11 +451,18 @@
   /* ======================= Guardar sin cobrar ======================= */
   async function saveUnpaid(el) {
     if (!validateCart()) return;
-    const o = S.createOrder(cart);
+    // Mesa del salón: se suma como una tanda más a la cuenta de esa mesa
+    const t = cart.type === 'mesa' ? salonTable() : null;
+    let o;
+    if (t) {
+      const s = S.activeTableSession(t.id) || S.openTable(t.id);
+      if (!s) return PZ.toast('No se pudo abrir la mesa', 'err');
+      o = S.addTableBatch(s.id, cart.items, { notes: cart.notes, discount: cart.discount, customerName: cart.customerName, phone: cart.phone, customerId: cart.customerId });
+    } else o = S.createOrder(cart);
     cart = emptyCart(); saveCart();
     renderCart(el);
     el.querySelector('.cart').classList.remove('open');
-    PZ.toast(`Pedido #${o.number} enviado a cocina`);
+    PZ.toast(t ? `Mesa ${t.number}: tanda ${o.batchNumber} enviada a cocina (se cobra desde Salón)` : `Pedido #${o.number} enviado a cocina`);
     const st = S.data.settings.ticket;
     if (st.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' });
   }
@@ -449,7 +470,13 @@
   function validateCart() {
     if (!cart.items.length) return false;
     if (cart.type === 'delivery' && !cart.address) { PZ.toast('Falta la dirección de entrega', 'warn'); infoModal(document.getElementById('view')); return false; }
+    if (cart.type === 'mesa' && !cart.table) { PZ.toast('Elegí la mesa', 'warn'); infoModal(document.getElementById('view')); return false; }
     return true;
+  }
+  /** Mesa del salón elegida en el carrito (si el negocio usa el salón) */
+  function salonTable() {
+    if (!PZ.auth.feature('mesas')) return null;
+    return (cart.tableId && S.table(cart.tableId)) || S.tables().find((t) => t.number === cart.table) || null;
   }
 
   /* ======================= Cobrar carrito ======================= */
@@ -511,7 +538,7 @@
       const due = () => (split ? base - paidSoFar() : totalFor(method));
 
       const m = PZ.modal({
-        title: `💸 Cobrar${order.number ? ' pedido #' + order.number : ''}`,
+        title: `💸 Cobrar${order.tableBill ? ' ' + U.esc(String(order.number).toLowerCase()) : order.number ? ' pedido #' + order.number : ''}`,
         body: `
           <div class="pay-total"><div class="pt-label">Total a cobrar</div><div class="pt-value"></div><div class="pt-adj small muted"></div></div>
           <div class="pay-methods">${methods.map((k) => `<button class="pay-m" data-m="${k}"><span>${L().methodIcon[k]}</span>${L().method[k].split(' ')[0]}</button>`).join('')}</div>
@@ -628,7 +655,7 @@
         const d = due();
         const amt = split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value)) : d;
         if (!amt) return;
-        const desc = `${order.number ? 'Pedido #' + order.number + ' · ' : ''}${st.business.name || 'Pizzería'}`;
+        const desc = `${order.tableBill ? order.number + ' · ' : order.number ? 'Pedido #' + order.number + ' · ' : ''}${st.business.name || 'Pizzería'}`;
         const res = await PZ.mp.charge(amt, desc);
         if (!res) return;
         mpPaid = { ...res, amount: amt };
@@ -690,13 +717,5 @@
   PZ.productModal = productModal;
   PZ.setCart = (c) => { cart = { ...emptyCart(), ...c }; saveCart(); };
 
-  PZ.views.vender = {
-    title: 'Nueva venta', render,
-    /** Inicia una tanda nueva sin mezclarla con pedidos anteriores de la mesa. */
-    startTable(session) {
-      const table = S.table(session.tableIds[0]);
-      cart = { ...emptyCart(), type: 'mesa', table: table ? table.number : '', tableSessionId: session.id, batchNumber: (session.orderIds || []).length + 1 };
-      saveCart(); location.hash = '#/vender';
-    },
-  };
+  PZ.views.vender = { title: 'Nueva venta', render };
 })(window.PZ);

@@ -53,7 +53,11 @@
       },
       open: C.isOpen(o),
       categories: S.data.categories.filter((c) => prods.some((p) => p.categoryId === c.id)).map((c) => ({ id: c.id, name: c.name, icon: c.icon, allowHalf: !!c.allowHalf })),
-      products: prods.map((p) => ({ id: p.id, categoryId: p.categoryId, name: p.name, desc: p.desc || '', color: p.color, photo: p.photo || '', active: true, variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: Number(v.price) || 0 })) })),
+      products: prods.map((p) => ({
+        id: p.id, categoryId: p.categoryId, name: p.name, desc: p.desc || '', color: p.color, photo: p.photo || '', ...(p.photoPos ? { photoPos: p.photoPos } : {}), active: true,
+        allowHalf: p.allowHalf !== false, ...(Array.isArray(p.halfWith) ? { halfWith: p.halfWith } : {}),
+        variants: p.variants.map((v) => ({ id: v.id, name: v.name, price: Number(v.price) || 0 })),
+      })),
       extras: S.data.extras.map((x) => ({ id: x.id, name: x.name, price: Number(x.price) || 0 })),
     };
   }
@@ -338,16 +342,31 @@
           if (!ps.length) return '';
           return `<div class="card mb"><h3>${c.icon} ${U.esc(c.name)}</h3>
             ${ps.map((p) => `<div class="list-row">
-              <div class="thumb">${p.photo ? `<img src="${U.esc(p.photo)}" alt="">` : c.icon}</div>
+              <div class="thumb">${PZ.carta.pic(p, c.icon)}</div>
               <div class="grow"><b>${U.esc(p.name)}</b>${p.active ? '' : ' <span class="badge warn">Agotado</span>'}<div class="small muted">${p.variants.map((v) => `${U.esc(v.name)} ${U.money(v.price)}`).join(' · ')}</div></div>
-              <label class="btn ghost sm" title="Foto">📷<input type="file" accept="image/*" data-ph="${p.id}" hidden></label>
+              <button class="btn ghost sm" data-pl="${p.id}" title="Pegar el link de una foto">🔗</button>
+              <label class="btn ghost sm" title="Subir una foto">📷<input type="file" accept="image/*" data-ph="${p.id}" hidden></label>
               ${p.photo ? `<button class="btn ghost sm" data-rp="${p.id}" title="Quitar foto">🗑️</button>` : ''}
               <label class="switch" title="Mostrar en la carta"><input type="checkbox" data-on="${p.id}" ${p.online !== false ? 'checked' : ''}><i></i></label>
             </div>`).join('')}
           </div>`;
         }).join('')}`;
       b.querySelectorAll('[data-on]').forEach((x) => x.onchange = () => { S.product(x.dataset.on).online = x.checked; changed(); });
-      b.querySelectorAll('[data-rp]').forEach((x) => x.onclick = () => { S.product(x.dataset.rp).photo = ''; changed(rerender); });
+      b.querySelectorAll('[data-rp]').forEach((x) => x.onclick = () => { const p = S.product(x.dataset.rp); p.photo = ''; delete p.photoPos; changed(rerender); });
+      b.querySelectorAll('[data-pl]').forEach((x) => x.onclick = async () => {
+        const p = S.product(x.dataset.pl);
+        const raw = await PZ.prompt('Link de la imagen (https://…). Sirven links compartidos de Google Drive o Dropbox si son públicos.', { title: `🔗 Foto de ${U.esc(p.name)}`, value: p.photo || '', type: 'url' });
+        if (raw == null) return;
+        const url = PZ.carta.imageUrl(raw);
+        if (raw.trim() && !url) return PZ.toast('Eso no es un link de imagen (tiene que empezar con https://)', 'warn', 5000);
+        const ok = !url || await new Promise((res) => { const i = new Image(); i.referrerPolicy = 'no-referrer'; i.onload = () => res(true); i.onerror = () => res(false); i.src = url; });
+        if (!ok && !(await PZ.confirm('No se pudo abrir esa imagen (¿el link es público?). Mientras no cargue se verá el ícono. ¿Guardarla igual?', { ok: 'Guardar igual' }))) return;
+        p.photo = url;
+        if (!url) delete p.photoPos;
+        S.log('menú', `Foto de ${p.name}`);
+        changed(rerender);
+        PZ.toast(url ? 'Foto guardada' : 'Foto quitada');
+      });
       b.querySelectorAll('[data-ph]').forEach((x) => x.onchange = async () => {
         const f = x.files[0];
         if (!f) return;

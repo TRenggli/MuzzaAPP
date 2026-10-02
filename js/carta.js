@@ -328,9 +328,8 @@
    * @param {PZ.SalonMenuConfig} [salonCfg]
    */
   function cardSalon(p, c, photos, salonCfg = {}) {
-    const pic = photos && p.photo
-      ? `<img src="${esc(p.photo)}" alt="" loading="lazy">`
-      : c.allowHalf ? `<span class="c-disc" style="--pc:${esc(p.color || '#ffd166')}" aria-hidden="true"></span>` : `<span class="c-emoji" aria-hidden="true">${esc(c.icon)}</span>`;
+    const icon = c.allowHalf ? `<span class="c-disc" style="--pc:${esc(p.color || '#ffd166')}" aria-hidden="true"></span>` : `<span class="c-emoji" aria-hidden="true">${esc(c.icon)}</span>`;
+    const pic = photos ? C.pic(p, icon) : icon;
     const showDesc = salonCfg.showDesc !== false;
     const showBadges = salonCfg.showBadges !== false;
     const soloEntera = c.allowHalf && p.allowHalf === false;
@@ -362,7 +361,11 @@
     const cat = m.categories.find((c) => c.id === p.categoryId);
     const isPizza = !!(cat && cat.allowHalf);
     const on = { ...C.defaults(), ...m.settings.online };
-    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo"><img src="${esc(p.photo)}" alt=""></div>` : '';
+    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '')}</div>` : '';
+    const partners = isPizza ? C.halfPartners(p, m.products, (cid) => m.categories.find((c) => c.id === cid)) : [];
+    const halfInfo = !partners.length ? 'ℹ️ Esta variedad <b>se vende solo entera</b>.'
+      : C.halfMode(p) === 'some' ? `🍕 Se puede pedir <b>mitad y mitad</b> con: ${partners.map((x) => esc(x.name)).join(', ')}.`
+      : '🍕 Esta pizza <b>permite mitad y mitad</b> con otras variedades de nuestra carta.';
 
     const s = sheet(`
       ${photo}
@@ -381,7 +384,7 @@
       </div>
       ${isPizza ? `
         <div style="margin-top:16px;padding:10px 12px;background:rgba(0,0,0,0.04);border-radius:10px;font-size:0.9em" class="c-muted">
-          ${p.allowHalf !== false ? '🍕 Esta pizza <b>permite mitad y mitad</b> con otras variedades de nuestra carta.' : 'ℹ️ Esta variedad <b>se vende solo entera</b>.'}
+          ${halfInfo}
         </div>` : ''}
       <div class="c-sheet-foot" style="margin-top:20px">
         <button class="c-btn primary grow" data-a="close-info">Entendido</button>
@@ -396,9 +399,8 @@
   function card(p, c, photos) {
     const min = Math.min(...p.variants.map((v) => Number(v.price) || 0));
     const inCart = cart.filter((l) => l.productId === p.id).reduce((a, l) => a + l.qty, 0);
-    const pic = photos && p.photo
-      ? `<img src="${esc(p.photo)}" alt="" loading="lazy">`
-      : c.allowHalf ? `<span class="c-disc" style="--pc:${esc(p.color || '#ffd166')}" aria-hidden="true"></span>` : `<span class="c-emoji" aria-hidden="true">${esc(c.icon)}</span>`;
+    const icon = c.allowHalf ? `<span class="c-disc" style="--pc:${esc(p.color || '#ffd166')}" aria-hidden="true"></span>` : `<span class="c-emoji" aria-hidden="true">${esc(c.icon)}</span>`;
+    const pic = photos ? C.pic(p, icon) : icon;
     return `<button class="c-card" data-p="${esc(p.id)}">
       <div class="c-pic">${pic}${inCart ? `<span class="c-incart">${inCart}</span>` : ''}</div>
       <div class="c-body">
@@ -478,8 +480,9 @@
     if (!p) return;
     const cat = m.categories.find((c) => c.id === p.categoryId);
     const isPizza = !!(cat && cat.allowHalf);
-    const allowHalf = isPizza && p.allowHalf !== false;
-    const halves = allowHalf ? m.products.filter((x) => x.id !== p.id && x.allowHalf !== false && m.categories.some((c) => c.id === x.categoryId && c.allowHalf)) : [];
+    // Solo las combinaciones que el local permite (la regla vale para las dos pizzas)
+    const halves = isPizza ? C.halfPartners(p, m.products, (cid) => m.categories.find((c) => c.id === cid)) : [];
+    const allowHalf = halves.length > 0;
     const on = { ...C.defaults(), ...m.settings.online };
     /** @type {PZ.Condiment[]} */
     const condiments = Array.isArray(on.condiments) && on.condiments.length
@@ -492,7 +495,7 @@
     const condState = Object.fromEntries(condiments.map((c) => [c.id, c.default !== false]));
     /** @type {PZ.CartLine} */
     const line = { key: '', productId: p.id, variantId: p.variants[0].id, halfId: '', extras: [], qty: 1, notes: '' };
-    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo"><img src="${esc(p.photo)}" alt=""></div>` : '';
+    const photo = on.showPhotos && p.photo ? `<div class="c-sheet-photo">${C.pic(p, '')}</div>` : '';
 
     const s = sheet(`
       ${photo}

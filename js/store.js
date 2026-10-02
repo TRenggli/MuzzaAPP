@@ -649,7 +649,6 @@
         if (c && !c.address) c.address = o.address;
       }
       S.data.orders.push(o);
-      if (o.tableSessionId) S.addOrderToTableSession(o.tableSessionId, o.id);
       S.applyStock(o, -1, 'consumo por pedido');
       if (paid) S.payOrder(o.id, payments, { silent: true, ...adjust });
       S.save();
@@ -775,9 +774,11 @@
       const egresos = moves.filter((m) => m.type === 'egreso').reduce((a, m) => a + m.amount, 0);
       const sales = valid.reduce((a, o) => a + o.total, 0);
       const expectedCash = s.openingAmount + byMethod.efectivo + ingresos - egresos;
+      // una mesa cobrada junta (varias tandas) es UN comprobante
+      const tickets = new Set(valid.map((o) => (o.ticketNumber != null ? 't' + o.ticketNumber : o.id))).size;
       return {
         orders: valid, voided: orders.filter((o) => o.voided), byMethod, moves, ingresos, egresos, sales, expectedCash,
-        tickets: valid.length, avg: valid.length ? sales / valid.length : 0,
+        tickets, avg: tickets ? sales / tickets : 0,
         discounts: valid.reduce((a, o) => a + (o.discountAmount || 0) + (o.cashDiscount || 0), 0),
         delivery: valid.reduce((a, o) => a + (o.deliveryFee || 0), 0),
       };
@@ -852,10 +853,13 @@
     employeeStats(from, to) {
       const map = {};
       const get = (id) => (map[id] = map[id] || { id, sales: 0, tickets: 0, discounts: 0, voids: 0, voidAmount: 0, closes: 0, absDiff: 0, diff: 0, salary: 0 });
+      const seenTicket = new Set();
       S.data.orders.forEach((o) => {
         if (o.paid && !o.voided && (o.paidAt || o.createdAt || 0) >= from && (o.paidAt || o.createdAt || 0) <= to) {
           const r = get(o.paidBy || o.userId);
-          r.sales += o.total; r.tickets++; r.discounts += (o.discountAmount || 0) + (o.cashDiscount || 0);
+          const tk = `${o.paidBy || o.userId}:${o.ticketNumber != null ? o.ticketNumber : o.id}`;
+          r.sales += o.total; r.discounts += (o.discountAmount || 0) + (o.cashDiscount || 0);
+          if (!seenTicket.has(tk)) { seenTicket.add(tk); r.tickets++; }
         }
         if (o.voided && o.voidedAt >= from && o.voidedAt <= to && o.voidedBy) { const r = get(o.voidedBy); r.voids++; r.voidAmount += o.total; }
       });
@@ -902,62 +906,276 @@
 
     lowStock: () => S.data.ingredients.filter((i) => i.stock <= i.min),
 
-    /* =================== Salón y mesas =================== */
+    /* =================== Salón y mesas ===================
+       Cada mesa ocupada tiene una CUENTA (tableSession). Cada vez que el mozo
+       manda algo a la cocina se crea una TANDA (un pedido, para el tablero de
+       cocina), pero la cuenta se cobra toda junta con UN solo comprobante.
+
+       Varios equipos (mozos, caja, encargado) trabajan las mismas mesas:
+       · Lo que se pidió se calcula desde los pedidos, nunca desde una lista
+         guardada en la cuenta: dos tandas mandadas a la vez no se pisan.
+       · Si dos equipos abren la misma mesa a la vez, quedan dos cuentas: se
+         unifican solas en la más antigua (todos llegan al mismo resultado).
+       · Si llega una tanda después de cobrar, la cuenta vuelve a estar activa
+         con ese saldo (no se pierde ni queda "colgada"). */
     tables: () => S.data.diningTables || [],
     table: (id) => S.tables().find((t) => t.id === id),
     tableSession: (id) => (S.data.tableSessions || []).find((s) => s.id === id),
-    activeTableSession(tableId) { return (S.data.tableSessions || []).find((s) => s.tableIds.includes(tableId) && !s.closedAt) || null; },
-    tableOrders(session) { return S.data.orders.filter((o) => o.tableSessionId === session.id && !o.voided); },
-    tableBalance(session) { return S.tableOrders(session).filter((o) => !o.paid).reduce((sum, o) => sum + o.total, 0); },
+    /** Tandas de la cuenta (sin las anuladas), en el orden en que se pidieron */
+    tableOrders(session) {
+      return S.data.orders.filter((o) => o.tableSessionId === session.id && !o.voided).sort((a, b) => a.createdAt - b.createdAt);
+    },
+    tablePending(session) { return S.tableOrders(session).filter((o) => !o.paid); },
+    tableBalance(session) { return S.tablePending(session).reduce((sum, o) => sum + (Number(o.total) || 0), 0); },
+    tableTotal(session) { return S.tableOrders(session).reduce((sum, o) => sum + (Number(o.total) || 0), 0); },
+    /** Una cuenta está activa si no se cerró, o si quedó saldo (una tanda tardía) */
+    sessionActive(s) { return !!s && !s.mergedInto && (!s.closedAt || S.tableBalance(s) > 0); },
+    /** Cuenta activa de una mesa (si hay dos por un choque entre equipos, la más antigua) */
+    activeTableSession(tableId) {
+      const list = (S.data.tableSessions || []).filter((s) => (s.tableIds || []).includes(tableId) && S.sessionActive(s));
+      if (!list.length) return null;
+      return list.sort((a, b) => (a.openedAt - b.openedAt) || (a.id < b.id ? -1 : 1))[0];
+    },
+    /**
+     * Unifica cuentas duplicadas de una misma mesa (dos equipos la abrieron a
+     * la vez). Todos los equipos eligen la misma (la más antigua), así que el
+     * resultado es el mismo en todos. Devuelve true si cambió algo.
+     */
+    reconcileTables() {
+      let changed = false;
+      const byTable = new Map();
+      (S.data.tableSessions || []).forEach((s) => {
+        if (!S.sessionActive(s)) return;
+        (s.tableIds || []).forEach((t) => { if (!byTable.has(t)) byTable.set(t, []); byTable.get(t).push(s); });
+      });
+      byTable.forEach((list) => {
+        if (list.length < 2) return;
+        list.sort((a, b) => (a.openedAt - b.openedAt) || (a.id < b.id ? -1 : 1));
+        const keep = list[0];
+        list.slice(1).forEach((dup) => {
+          S.data.orders.forEach((o) => { if (o.tableSessionId === dup.id) o.tableSessionId = keep.id; });
+          keep.guests = Math.max(Number(keep.guests) || 0, Number(dup.guests) || 0);
+          if (dup.state === 'cuenta_solicitada' && keep.state !== 'cuenta_solicitada') { keep.state = dup.state; keep.requestedBillAt = dup.requestedBillAt; }
+          dup.mergedInto = keep.id;
+          dup.state = 'unificada';
+          dup.closedAt = dup.closedAt || Date.now();
+          changed = true;
+        });
+      });
+      // Una cuenta cobrada que recibió una tanda después vuelve a estar ocupada
+      (S.data.tableSessions || []).forEach((s) => {
+        if (s.closedAt && !s.mergedInto && S.tableBalance(s) > 0 && s.state !== 'ocupada') { s.state = 'ocupada'; changed = true; }
+      });
+      if (changed) S.save();
+      return changed;
+    },
     ensureDining() {
       if (S.data.diningAreas.length || S.data.diningTables.length) return;
       S.data.diningAreas.push({ id: 'area-salon', name: 'Salón', _i: 0 });
       for (let n = 1; n <= 12; n++) S.data.diningTables.push({ id: `table-${n}`, areaId: 'area-salon', number: String(n), capacity: 4, shape: n % 3 ? 'round' : 'square', x: ((n - 1) % 4) * 25 + 8, y: Math.floor((n - 1) / 4) * 30 + 10, _i: n });
       S.save();
     },
+    /** Abre la mesa (o devuelve la cuenta que ya tiene) */
     openTable(tableId, { guests = 0 } = {}) {
       const table = S.table(tableId); if (!table) return null;
       const current = S.activeTableSession(tableId); if (current) return current;
-      const now = Date.now(); const userId = PZ.auth.current ? PZ.auth.current.id : null;
-      const s = { id: U.uid('ts-'), tableIds: [tableId], openedAt: now, openedBy: userId, waiterId: userId, guests: Number(guests) || 0, state: 'ocupada', requestedBillAt: null, orderIds: [], closedAt: null, version: 1, history: [{ at: now, action: 'apertura', userId }] };
-      S.data.tableSessions.unshift(s); S.log('salón', `Abrió mesa ${table.number}`); S.save();
-      if (typeof navigator !== 'undefined' && navigator.onLine && S.ctx.branchId && PZ.cloud && PZ.cloud.diningOpen && /^[0-9a-f-]{36}$/i.test(tableId)) {
-        const op = U.uid('op-open-');
-        PZ.cloud.diningOpen(S.ctx.branchId, tableId, s.guests, op).then((res) => {
-          if (res && res.id) { s.remoteId = res.id; s.version = res.version || s.version; S.save(); }
-        }).catch((e) => { console.warn('diningOpen RPC fallback a cola local:', e.message); });
-      }
+      const now = Date.now();
+      const me = PZ.auth.current;
+      const s = {
+        id: U.uid('ts-'), tableIds: [tableId], openedAt: now, openedBy: me ? me.id : null,
+        waiterId: me ? me.id : null, waiterName: me ? me.name : '', guests: Number(guests) || 0,
+        state: 'ocupada', requestedBillAt: null, closedAt: null, closedBy: null,
+      };
+      S.data.tableSessions.unshift(s);
+      S.log('salón', `Abrió mesa ${table.number}`);
+      S.save();
       return s;
     },
-    addOrderToTableSession(sessionId, orderId) {
-      const s = S.tableSession(sessionId); if (!s || s.closedAt || s.orderIds.includes(orderId)) return;
-      s.orderIds.push(orderId); s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'tanda', orderId, userId: PZ.auth.current ? PZ.auth.current.id : null }); S.save();
-      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningAddBatch && s.remoteId) {
-        const order = S.data.orders.find((o) => o.id === orderId);
-        if (order) {
-          const op = U.uid('op-batch-');
-          PZ.cloud.diningAddBatch(s.remoteId, order, s.version - 1, op).catch((e) => { console.warn('diningAddBatch RPC fallback a cola local:', e.message); });
-        }
-      }
+    /**
+     * Manda una tanda a la cocina dentro de la cuenta de la mesa. Si la cuenta
+     * se cerró desde otro equipo mientras tanto, se abre una nueva en la misma
+     * mesa para que el pedido nunca se pierda.
+     * @param {string} sessionId
+     * @param {PZ.OrderItem[]} items
+     * @param {{ notes?: string, discount?: any, customerName?: string, phone?: string, customerId?: string | null }} [extra]
+     */
+    addTableBatch(sessionId, items, { notes = '', discount = null, customerName = '', phone = '', customerId = null } = {}) {
+      let s = S.tableSession(sessionId);
+      if (!s) throw new Error('La cuenta de la mesa ya no existe. Volvé a abrir la mesa.');
+      if (s.mergedInto) s = S.tableSession(s.mergedInto) || s;
+      if (!S.sessionActive(s)) s = S.openTable(s.tableIds[0], { guests: s.guests }) || s;
+      if (!items || !items.length) throw new Error('La tanda está vacía');
+      const table = S.table(s.tableIds[0]);
+      const batchNumber = S.tableOrders(s).reduce((m, o) => Math.max(m, Number(o.batchNumber) || 0), 0) + 1;
+      const o = S.createOrder({ type: 'mesa', table: table ? table.number : '', tableSessionId: s.id, batchNumber, items, notes, discount, customerName, phone, customerId });
+      if (s.state === 'cuenta_solicitada') { s.state = 'ocupada'; s.requestedBillAt = null; }
+      S.save();
+      return o;
     },
-    requestTableBill(sessionId) { const s = S.tableSession(sessionId); if (!s || s.closedAt) return; s.state = 'cuenta_solicitada'; s.requestedBillAt = Date.now(); s.history.push({ at: Date.now(), action: 'cuenta solicitada' }); S.save(); },
+    requestTableBill(sessionId) {
+      const s = S.tableSession(sessionId); if (!s || !S.sessionActive(s)) return;
+      s.state = 'cuenta_solicitada';
+      s.requestedBillAt = Date.now();
+      s.requestedBy = PZ.auth.current ? PZ.auth.current.id : null;
+      S.save();
+    },
+    setTableGuests(sessionId, guests) {
+      const s = S.tableSession(sessionId); if (!s) return;
+      s.guests = Math.max(0, Number(guests) || 0);
+      S.save();
+    },
     moveTableSession(sessionId, toTableId) {
-      const s = S.tableSession(sessionId); if (!s || s.closedAt || S.activeTableSession(toTableId)) return false;
-      s.tableIds = [toTableId]; s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'traslado', toTableId }); S.save();
-      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningMove && s.remoteId && /^[0-9a-f-]{36}$/i.test(toTableId)) {
-        const op = U.uid('op-move-');
-        PZ.cloud.diningMove(s.remoteId, toTableId, s.version - 1, op).catch((e) => { console.warn('diningMove RPC fallback a cola local:', e.message); });
-      }
+      const s = S.tableSession(sessionId); const to = S.table(toTableId);
+      if (!s || !to || !S.sessionActive(s) || S.activeTableSession(toTableId)) return false;
+      const from = S.table(s.tableIds[0]);
+      s.tableIds = [toTableId];
+      // el número de mesa de las tandas sin cobrar acompaña a la cuenta (cocina y tickets)
+      S.tablePending(s).forEach((o) => { o.table = to.number; });
+      S.log('salón', `Pasó la mesa ${from ? from.number : '?'} a la mesa ${to.number}`);
+      S.save();
       return true;
     },
+    /** Libera la mesa (solo sin saldo pendiente) */
     closeTableSession(sessionId) {
-      const s = S.tableSession(sessionId); if (!s || s.closedAt || S.tableBalance(s) > 0) return false;
-      s.closedAt = Date.now(); s.state = 'limpieza'; s.version = (s.version || 1) + 1; s.history.push({ at: Date.now(), action: 'cierre' }); S.save();
-      if (typeof navigator !== 'undefined' && navigator.onLine && PZ.cloud && PZ.cloud.diningClose && s.remoteId) {
-        const op = U.uid('op-close-');
-        PZ.cloud.diningClose(s.remoteId, s.version - 1, op).catch((e) => { console.warn('diningClose RPC fallback a cola local:', e.message); });
-      }
+      const s = S.tableSession(sessionId); if (!s || S.tableBalance(s) > 0) return false;
+      if (s.closedAt && !S.sessionActive(s)) return true;
+      s.closedAt = Date.now();
+      s.closedBy = PZ.auth.current ? PZ.auth.current.id : null;
+      s.state = 'cerrada';
+      S.save();
       return true;
+    },
+
+    /**
+     * Cobra TODA la cuenta de la mesa en un solo cobro y un solo comprobante.
+     * Por dentro el pago se reparte entre las tandas pendientes (cada pedido
+     * queda pagado con montos exactos, como exige la base de datos) y todas
+     * comparten el mismo número de comprobante. La mesa queda libre.
+     * @param {string} sessionId
+     * @param {PZ.Payment[]} payments  pagos tal como los cargó la caja (pueden ser varios medios)
+     * @param {{ cashDiscount?: number, surcharge?: number }} [adjust]
+     * @param {string[] | null} [orderIds] tandas que vio la caja al cobrar: si mientras
+     *   tanto entró otra, esa queda pendiente (no se cobra sin querer)
+     */
+    payTable(sessionId, payments, { cashDiscount = 0, surcharge = 0 } = {}, orderIds = null) {
+      const s = S.tableSession(sessionId);
+      if (!s) throw new Error('La cuenta de la mesa ya no existe');
+      const pend = S.tablePending(s).filter((o) => !orderIds || orderIds.includes(o.id));
+      if (!pend.length) throw new Error('La mesa no tiene saldo para cobrar');
+      pend.forEach((o) => S.computeTotals(o));
+      const base = pend.reduce((a, o) => a + o.total, 0);
+      // descuento por efectivo o recargo por tarjeta: proporcional a cada tanda
+      const share = (amount) => {
+        let left = Math.round(amount) || 0;
+        return pend.map((o, i) => {
+          const v = i === pend.length - 1 ? left : Math.round(((Math.round(amount) || 0) * o.total) / (base || 1));
+          left -= v;
+          return v;
+        });
+      };
+      const cds = share(cashDiscount);
+      const scs = share(surcharge);
+      const targets = pend.map((o, i) => Math.max(0, o.total - cds[i] + scs[i]));
+      const due = targets.reduce((a, v) => a + v, 0);
+      const paidIn = payments.reduce((a, p) => a + (Number(p.amount) || 0), 0);
+      if (Math.abs(paidIn - due) > 1) throw new Error(`Los pagos (${U.money(paidIn)}) no coinciden con el saldo de la mesa (${U.money(due)})`);
+      const pool = payments.map((p) => ({ ...p, left: Number(p.amount) || 0 }));
+      const now = Date.now();
+      const ticket = S.nextNumber('ticket');
+      const sess = S.currentSession();
+      const uid = PZ.auth.current ? PZ.auth.current.id : null;
+      pend.forEach((o, i) => {
+        let need = targets[i];
+        /** @type {PZ.Payment[]} */
+        const parts = [];
+        pool.forEach((p) => {
+          // el redondeo sobrante va a la última tanda
+          const last = i === pend.length - 1;
+          if ((need <= 0 && !last) || p.left <= 0) return;
+          const take = last ? p.left : Math.min(p.left, need);
+          if (take <= 0) return;
+          p.left -= take;
+          need -= take;
+          parts.push({ method: p.method, amount: take, tendered: take, change: 0, ref: p.ref || '', ...(p.cardType ? { cardType: p.cardType } : {}), ...(p.mp ? { mp: p.mp } : {}) });
+        });
+        o.cashDiscount = cds[i];
+        o.surcharge = scs[i];
+        o.total = parts.reduce((a, p) => a + p.amount, 0) || targets[i];
+        o.payments = parts;
+        o.paid = true;
+        o.paidAt = now;
+        o.ticketNumber = ticket;
+        o.cashSessionId = sess ? sess.id : null;
+        o.paidBy = uid;
+        o.tableBill = { sessionId: s.id, ticketNumber: ticket };
+      });
+      const table = S.table(s.tableIds[0]);
+      s.bill = {
+        ticketNumber: ticket, paidAt: now, paidBy: uid, total: due, cashDiscount: Math.round(cashDiscount) || 0, surcharge: Math.round(surcharge) || 0,
+        payments: payments.map((p) => ({ ...p })),
+      };
+      // la mesa se libera si no quedó nada por cobrar (si entró otra tanda, sigue ocupada)
+      if (!S.tablePending(s).length) {
+        s.closedAt = now;
+        s.closedBy = uid;
+        s.state = 'cerrada';
+      } else {
+        s.state = 'ocupada';
+      }
+      S.log('salón', `Cobró la mesa ${table ? table.number : '?'}: ${U.money(due)} (${pend.length} tanda${pend.length === 1 ? '' : 's'})`);
+      S.save();
+      return S.tableBillOrder(s, ticket);
+    },
+
+    /**
+     * La cuenta completa como un solo "pedido" para imprimir: pre-cuenta
+     * (antes de cobrar) o comprobante final con PAGADO (después de cobrar).
+     * Los productos iguales de distintas tandas se suman en una línea.
+     */
+    tableBillOrder(s, ticketNumber = null) {
+      const table = S.table(s.tableIds[0]);
+      const orders = S.tableOrders(s);
+      const pending = orders.filter((o) => !o.paid);
+      // comprobante de un cobro (el indicado o el último) · si no, pre-cuenta de lo que falta cobrar
+      const tk = ticketNumber != null ? ticketNumber : (!pending.length && s.bill ? s.bill.ticketNumber : null);
+      const lastBill = tk != null ? { ...(s.bill && s.bill.ticketNumber === tk ? s.bill : {}), ticketNumber: tk } : null;
+      const shown = lastBill ? orders.filter((o) => o.paid && o.tableBill && o.tableBill.ticketNumber === tk) : pending;
+      if (lastBill && !lastBill.payments) lastBill.payments = shown.flatMap((o) => o.payments || []);
+      if (lastBill && !lastBill.paidAt) lastBill.paidAt = shown.length ? shown[0].paidAt : Date.now();
+      const lines = new Map();
+      shown.forEach((o) => o.items.forEach((it) => {
+        const key = [it.name, it.variantName || '', it.unitPrice, (it.extras || []).map((e) => e.name).join('+'), it.notes || ''].join('|');
+        const cur = lines.get(key);
+        if (cur) { cur.qty += it.qty; cur.total = cur.unitPrice * cur.qty; } else lines.set(key, { ...it, extras: (it.extras || []).slice(), qty: it.qty, total: it.unitPrice * it.qty });
+      }));
+      const sum = (k) => shown.reduce((a, o) => a + (Number(o[k]) || 0), 0);
+      const subtotal = sum('subtotal');
+      const discountAmount = sum('discountAmount');
+      return {
+        id: s.id,
+        tableBill: true,
+        number: `Mesa ${table ? table.number : ''}`,
+        ticketNumber: lastBill ? lastBill.ticketNumber : null,
+        type: 'mesa',
+        table: table ? table.number : '',
+        createdAt: s.openedAt,
+        paidAt: lastBill ? lastBill.paidAt : null,
+        userId: s.waiterId || s.openedBy,
+        items: Array.from(lines.values()),
+        subtotal,
+        discount: null,
+        discountAmount,
+        cashDiscount: lastBill ? sum('cashDiscount') : 0,
+        surcharge: lastBill ? sum('surcharge') : 0,
+        deliveryFee: 0,
+        total: sum('total'),
+        paid: !!lastBill,
+        payments: lastBill ? lastBill.payments : [],
+        voided: false,
+        status: 'entregado',
+        customerName: '',
+        notes: `${shown.length} tanda${shown.length === 1 ? '' : 's'}${s.guests ? ` · ${s.guests} persona${s.guests === 1 ? '' : 's'}` : ''}`,
+      };
     },
 
     /* =================== Datos iniciales y demo =================== */

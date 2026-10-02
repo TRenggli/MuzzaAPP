@@ -35,13 +35,15 @@
   }
 
   function render(el) {
-    const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status));
+    // el mozo ve solo lo del salón
+    const forMe = (o) => !PZ.auth.isWaiter() || o.type === 'mesa';
+    const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status) && forMe(o));
     const pendingCount = active.filter((o) => o.status === 'pendiente').length;
     if (lastPending !== null && pendingCount > lastPending) beep();
     lastPending = pendingCount;
 
     const prep = S.data.settings.prepMinutes || 35;
-    const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime()).slice().reverse();
+    const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime() && forMe(o)).slice().reverse();
     const web = PZ.web && PZ.auth.can('vender') ? PZ.web.pending() : [];
 
     if (lastWebPending !== null && web.length > lastWebPending) {
@@ -107,14 +109,18 @@
     const mins = U.minutesSince(o.createdAt);
     const late = mins > prep && o.status !== 'en_camino';
     const isDelivery = o.type === 'delivery';
+    // Tanda de una mesa del salón: se cobra junto con toda la cuenta de la mesa
+    const tableAcc = !!o.tableSessionId;
     let next = col.next;
     let nextLabel = col.nextLabel;
     if (col.id === 'listo') {
       next = isDelivery ? 'en_camino' : 'entregado';
-      nextLabel = isDelivery ? '🛵 Salió' : '🏁 Entregado';
+      nextLabel = isDelivery ? '🛵 Salió' : o.type === 'mesa' ? '🍽️ Servida' : '🏁 Entregado';
     }
-    const canCook = PZ.auth.can('pedidos');
-    const canCash = PZ.auth.can('vender');
+    const waiter = PZ.auth.isWaiter();
+    // el mozo solo marca como servido lo que está listo en sus mesas
+    const canCook = PZ.auth.can('pedidos') && (!waiter || (o.type === 'mesa' && col.id === 'listo'));
+    const canCash = PZ.auth.can('vender') && PZ.auth.canCharge();
     const mapUrl = o.address ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(o.address + ', ' + (S.data.settings.business.city || '')) : '';
     return `<div class="ocard ${late ? 'late' : ''}">
       ${o.status === 'horno' ? '<div class="steam"><i></i><i></i><i></i></div>' : ''}
@@ -123,9 +129,9 @@
         <span class="timer ${late ? 'badge err' : 'badge'}">⏱ ${mins} min</span>
       </div>
       <div class="row-flex" style="gap:6px">
-        <span class="badge pri">${L.typeIcon[o.type]} ${L.type[o.type]}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</span>
+        <span class="badge pri">${L.typeIcon[o.type]} ${L.type[o.type]}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}${tableAcc && o.batchNumber ? ' · Tanda ' + o.batchNumber : ''}</span>
         ${o.web ? `<span class="badge">📲 W-${o.web.number}</span>` : ''}
-        ${o.paid ? '<span class="badge ok">Pagado</span>' : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
+        ${o.paid ? '<span class="badge ok">Pagado</span>' : tableAcc ? '<span class="badge">🧾 Va a la cuenta de la mesa</span>' : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
         ${o.eta ? `<span class="badge">🕒 ${U.esc(o.eta)}</span>` : ''}
       </div>
       ${o.customerName ? `<div style="margin-top:6px;font-weight:800">${U.esc(o.customerName)}</div>` : ''}
@@ -135,10 +141,11 @@
       ${o.notes ? `<div class="oc-note">📝 ${U.esc(o.notes)}</div>` : ''}
       <div class="oc-actions">
         ${canCook && next ? `<button class="btn sm primary" data-act="to:${next}" data-id="${o.id}">${nextLabel}</button>` : ''}
-        ${canCash && !o.paid ? `<button class="btn sm accent" data-act="pay" data-id="${o.id}">💸 Cobrar</button>` : ''}
+        ${canCash && !o.paid && !tableAcc ? `<button class="btn sm accent" data-act="pay" data-id="${o.id}">💸 Cobrar</button>` : ''}
+        ${tableAcc && PZ.auth.can('salon') ? `<button class="btn sm ghost" data-act="table" data-id="${o.id}" title="Ver la cuenta de la mesa">🍽️ Ver mesa</button>` : ''}
         ${isDelivery && canCash ? `<button class="btn sm ghost" data-act="driver" data-id="${o.id}" title="Repartidor">🛵</button>` : ''}
-        ${o.phone ? `<button class="btn sm ghost" data-act="wa" data-id="${o.id}" title="Avisar por WhatsApp">💬</button>` : ''}
-        <button class="btn sm ghost" data-act="print" data-id="${o.id}" title="Imprimir">🖨️</button>
+        ${o.phone && !waiter ? `<button class="btn sm ghost" data-act="wa" data-id="${o.id}" title="Avisar por WhatsApp">💬</button>` : ''}
+        ${!waiter ? `<button class="btn sm ghost" data-act="print" data-id="${o.id}" title="Imprimir">🖨️</button>` : ''}
         ${canCash ? `<button class="btn sm ghost" data-act="cancel" data-id="${o.id}" title="Cancelar">✕</button>` : ''}
       </div>
     </div>`;
@@ -149,16 +156,18 @@
     if (!o) return;
     if (act.startsWith('to:')) {
       const st = act.slice(3);
-      if (st === 'entregado' && !o.paid) {
-        if (!PZ.auth.can('vender')) return PZ.toast('Este pedido todavía no está cobrado', 'warn');
+      // una tanda de mesa se sirve sin cobrar: se cobra la cuenta completa al final
+      if (st === 'entregado' && !o.paid && !o.tableSessionId) {
+        if (!PZ.auth.can('vender') || !PZ.auth.canCharge()) return PZ.toast('Este pedido todavía no está cobrado', 'warn');
         const paid = await pay(o);
         if (!paid) return;
       }
       S.setStatus(o.id, st);
-      if (st === 'entregado') PZ.toast(`Pedido #${o.number} entregado 🎉`);
+      if (st === 'entregado') PZ.toast(o.tableSessionId ? `Mesa ${o.table}: tanda ${o.batchNumber || ''} servida 🍽️` : `Pedido #${o.number} entregado 🎉`);
       return render(el);
     }
     if (act === 'pay') { await pay(o); return render(el); }
+    if (act === 'table') { PZ.salonOpen = o.tableSessionId; location.hash = '#/salon'; return; }
     if (act === 'print') {
       const m = PZ.modal({
         title: `🖨️ Pedido #${o.number}`, size: 'sm',
@@ -255,6 +264,7 @@
   };
 
   async function pay(o) {
+    if (o.tableSessionId) { PZ.toast('Esta tanda se cobra junto con la cuenta de la mesa (Salón)', 'warn'); return false; }
     if (!(await PZ.cash.ensureOpen())) return false;
     S.computeTotals(o);
     const res = await PZ.checkout(o);

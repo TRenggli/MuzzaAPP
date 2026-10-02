@@ -242,23 +242,6 @@
       if (error) throw new Error(error.message);
       return data;
     },
-    /** Comandos transaccionales de salón; cada uno recibe una clave idempotente. */
-    async diningOpen(branchId, tableId, guests, operation) {
-      const { data, error } = await sb.rpc('dining_open_session', { p_branch: branchId, p_table: tableId, p_guests: guests, p_operation: operation });
-      if (error) throw new Error(error.message); return data;
-    },
-    async diningMove(sessionId, tableId, version, operation) {
-      const { data, error } = await sb.rpc('dining_move_session', { p_session: sessionId, p_to_table: tableId, p_expected_version: version, p_operation: operation });
-      if (error) throw new Error(error.message); return data;
-    },
-    async diningAddBatch(sessionId, order, version, operation) {
-      const { data, error } = await sb.rpc('dining_add_batch', { p_session: sessionId, p_order: order, p_expected_version: version, p_operation: operation });
-      if (error) throw new Error(error.message); return data;
-    },
-    async diningClose(sessionId, version, operation) {
-      const { data, error } = await sb.rpc('dining_close_session', { p_session: sessionId, p_expected_version: version, p_operation: operation });
-      if (error) throw new Error(error.message); return data;
-    },
 
     /* ---------------- Mercado Pago ---------------- */
     mp(action, body = {}) {

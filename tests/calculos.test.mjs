@@ -97,20 +97,19 @@ test('salón conserva tandas de una mesa y solo cierra con saldo cero', () => {
   S.ensureDining();
   // Mesa con 0 pedidos se puede liberar directamente
   const emptySession = S.openTable('table-4', { guests: 2 });
-  assert.equal(emptySession.orderIds.length, 0);
+  assert.equal(S.tableOrders(emptySession).length, 0);
   assert.equal(S.tableBalance(emptySession), 0);
   assert.equal(S.closeTableSession(emptySession.id), true, 'mesa vacía sin consumos se libera');
 
   // Mesa con pedidos conserva tandas y exige saldo cero
   const session = S.openTable('table-5', { guests: 3 });
   const p = P(S, 'p-muz');
-  const o1 = S.createOrder({ type: 'mesa', table: '5', tableSessionId: session.id, items: [S.makeItem({ product: p, variant: V(S, 'p-muz', 'grande') })] });
-  const o2 = S.createOrder({ type: 'mesa', table: '5', tableSessionId: session.id, items: [S.makeItem({ product: p, variant: V(S, 'p-muz', 'grande') })] });
-  assert.equal(session.orderIds.length, 2);
+  const o1 = S.addTableBatch(session.id, [S.makeItem({ product: p, variant: V(S, 'p-muz', 'grande') })]);
+  const o2 = S.addTableBatch(session.id, [S.makeItem({ product: p, variant: V(S, 'p-muz', 'grande') })]);
+  assert.equal(S.tableOrders(session).length, 2);
   assert.equal(S.tableBalance(session), o1.total + o2.total);
   assert.equal(S.closeTableSession(session.id), false, 'no se puede liberar una mesa con una cuenta pendiente');
-  S.payOrder(o1.id, [{ method: 'efectivo', amount: o1.total }], { silent: true });
-  S.payOrder(o2.id, [{ method: 'efectivo', amount: o2.total }], { silent: true });
+  S.payTable(session.id, [{ method: 'efectivo', amount: o1.total + o2.total }]);
   assert.equal(S.tableBalance(session), 0);
   assert.equal(S.closeTableSession(session.id), true);
 });

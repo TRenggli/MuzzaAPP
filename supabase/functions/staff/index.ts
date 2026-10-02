@@ -5,7 +5,7 @@
 // Un encargado solo gestiona empleados (no encargados) de SUS sucursales.
 import { adminClient, cors, dupMsg, json, loginEmail, validUsername } from '../_shared/common.ts';
 
-const ROLES = ['admin', 'cajero', 'cocina', 'delivery'];
+const ROLES = ['admin', 'cajero', 'mozo', 'cocina', 'delivery'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });

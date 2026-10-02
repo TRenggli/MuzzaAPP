@@ -159,6 +159,40 @@
     return `${days} · ${h.from} a ${h.to}`;
   }
 
+  /* ---------------- Mitad y mitad ---------------- */
+  /**
+   * Cómo se puede pedir una pizza por mitades:
+   *   'all'  con cualquier otra pizza que también lo permita
+   *   'some' solo con las pizzas elegidas en `halfWith`
+   *   'none' solo entera
+   * @param {Partial<PZ.Product>} p
+   * @returns {'all' | 'some' | 'none'}
+   */
+  const halfMode = (p) => (!p || p.allowHalf === false ? 'none' : Array.isArray(p.halfWith) ? 'some' : 'all');
+
+  /**
+   * ¿Se pueden combinar estas dos pizzas en una mitad y mitad? La regla vale
+   * para las dos: si una no acepta a la otra, no se combinan.
+   * (Misma regla que la base de datos al recibir pedidos de la carta.)
+   * @param {PZ.Product | null | undefined} a
+   * @param {PZ.Product | null | undefined} b
+   * @param {(id: string) => PZ.Category | null | undefined} categoryOf
+   */
+  function canPairHalf(a, b, categoryOf) {
+    if (!a || !b || a.id === b.id) return false;
+    const ca = categoryOf(a.categoryId);
+    const cb = categoryOf(b.categoryId);
+    if (!ca || !cb || !ca.allowHalf || !cb.allowHalf) return false;
+    if (halfMode(a) === 'none' || halfMode(b) === 'none') return false;
+    if (Array.isArray(a.halfWith) && !a.halfWith.includes(b.id)) return false;
+    if (Array.isArray(b.halfWith) && !b.halfWith.includes(a.id)) return false;
+    return true;
+  }
+
+  /** Pizzas que pueden ir como la otra mitad de `p`
+   * @param {PZ.Product} p @param {PZ.Product[]} products @param {(id: string) => PZ.Category | null | undefined} categoryOf */
+  const halfPartners = (p, products, categoryOf) => products.filter((x) => x.active !== false && canPairHalf(p, x, categoryOf));
+
   /* ---------------- Precios ---------------- */
   /**
    * Precio unitario de una línea: tamaño, mitad y mitad y agregados.
@@ -176,9 +210,10 @@
     /** @type {PZ.Product | null} */
     let half = null;
     const isPizza = !!(cat && cat.allowHalf);
-    const allowHalf = isPizza && p.allowHalf !== false;
-    if (line.halfId && allowHalf) {
-      half = menu.products.find((x) => x.id === line.halfId && x.allowHalf !== false) || null;
+    const categoryOf = (/** @type {string} */ id) => menu.categories.find((c) => c.id === id);
+    if (line.halfId && isPizza) {
+      const other = menu.products.find((x) => x.id === line.halfId) || null;
+      half = other && canPairHalf(p, other, categoryOf) ? other : null;
       if (half) {
         const hv = half.variants.find((x) => x.id === v.id) || half.variants[0];
         const p2 = Number(hv.price) || 0;
@@ -380,6 +415,67 @@
 
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+  /* ---------------- Fotos de productos ----------------
+     Cada producto puede tener una foto (link a una imagen en internet o un
+     archivo subido). Donde no hay foto, o el link no carga, se sigue viendo
+     el ícono de siempre. */
+
+  /**
+   * Link de imagen pegado por el usuario → link directo que se puede mostrar.
+   * Entiende los links "para compartir" de Google Drive, Dropbox e Imgur.
+   * Devuelve '' si no es un link de imagen utilizable.
+   * @param {string} raw
+   */
+  function imageUrl(raw) {
+    let s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.startsWith('//')) s = 'https:' + s;
+    if (!/^https?:\/\//i.test(s)) {
+      if (/^[\w-]+(\.[\w-]+)+\//.test(s)) s = 'https://' + s; // "imgur.com/abc.jpg"
+      else return '';
+    }
+    let u;
+    try { u = new URL(s); } catch (e) { return ''; }
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    if (host === 'drive.google.com' || host === 'docs.google.com') {
+      const m = u.pathname.match(/\/d\/([\w-]{10,})/);
+      const id = (m && m[1]) || u.searchParams.get('id');
+      return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w1200` : '';
+    }
+    if (host === 'dropbox.com' || host.endsWith('.dropbox.com')) {
+      u.searchParams.delete('dl');
+      u.searchParams.set('raw', '1');
+      return u.toString();
+    }
+    if (host === 'imgur.com' && /^\/\w{5,}$/.test(u.pathname)) return `https://i.imgur.com${u.pathname}.jpg`;
+    return u.toString();
+  }
+
+  const PHOTO_POS = { top: 'center 20%', center: 'center', bottom: 'center 80%' };
+
+  /**
+   * Foto de un producto con su ícono de respaldo: si no hay foto o el link no
+   * carga, se ve el ícono (`fallback`, HTML ya escapado).
+   * @param {{ photo?: string, photoPos?: string, name?: string } | null | undefined} p
+   * @param {string} fallback
+   */
+  function pic(p, fallback) {
+    if (!p || !p.photo) return fallback;
+    const pos = PHOTO_POS[/** @type {'top' | 'center' | 'bottom'} */ (p.photoPos || 'center')] || 'center';
+    return `<img class="pz-img" src="${esc(p.photo)}" alt="${esc(p.name || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="object-position:${pos}"><span class="pz-img-fb">${fallback}</span>`;
+  }
+
+  // Si una foto no carga (link roto, privado o borrado) se saca y queda el ícono
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('error', (e) => {
+      const t = /** @type {HTMLElement} */ (e.target);
+      if (t && t.tagName === 'IMG' && t.classList.contains('pz-img')) {
+        if (t.parentElement) t.parentElement.classList.add('pz-img-broken');
+        t.remove();
+      }
+    }, true);
+  }
+
   /**
    * Genera la tabla HTML para una categoría o lista de productos de la carta del salón
    * @param {PZ.Product[]} ps
@@ -406,8 +502,9 @@
             const vars = p.variants || [];
             const soloEntera = c && c.allowHalf && p.allowHalf === false;
             const clickAttr = interactive ? `data-p="${esc(p.id)}" style="cursor:pointer"` : '';
+            const thumb = cfg.showPhotos !== false && p.photo ? `<span class="carta-thumb">${pic(p, '')}</span>` : '';
             const nameCell = `<td style="padding:10px 6px;vertical-align:middle">
-              <b style="color:var(--c-ink, #1d1b19);font-size:1.02em">${esc(p.name)}</b>
+              ${thumb}<b style="color:var(--c-ink, #1d1b19);font-size:1.02em">${esc(p.name)}</b>
               ${showBadges && soloEntera ? ' <span class="badge muted" style="font-size:0.75em;vertical-align:middle">Solo entera</span>' : ''}
               ${showDesc && p.desc ? `<div class="small muted" style="margin-top:2px;color:var(--c-muted, rgba(29,27,25,0.65));line-height:1.35">${esc(p.desc)}</div>` : ''}
             </td>`;
@@ -652,11 +749,12 @@
     THEMES, FONTS, TYPE_LABEL, PAY_LABEL, DAYS,
     money, defaults, themeVars, contrast, inkOn,
     isOpen, hoursText, localTime,
-    priceLine, totals, validLines, extraApplies,
+    priceLine, totals, validLines, extraApplies, halfMode, canPairHalf, halfPartners,
     waNumber, waLink, waMessage, shortDate,
     slugify, validSlug, cartaUrl, salonUrl,
     sortProducts, prepareSalonCategories,
     getTableColumns, renderSalonTable, renderSalonHtml,
+    imageUrl, pic,
     haversineDistance, estimateDeliveryEta, repartoUrl,
     generateDriverCode, parseDriverCode, matchDriver,
   };

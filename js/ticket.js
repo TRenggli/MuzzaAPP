@@ -36,7 +36,14 @@
 
   const pad = (n, len = 8) => String(n).padStart(len, '0');
   /** Título del papel: lo elige cada sucursal (comprobante, recibo, ticket…) */
-  const docTitle = (o) => (o.paid ? (PZ.store.data.settings.ticket.docTitle || 'Comprobante de pago') : 'Comprobante de pedido');
+  const docTitle = (o) => (o.paid ? (PZ.store.data.settings.ticket.docTitle || 'Comprobante de pago') : o.tableBill ? 'Cuenta de la mesa' : 'Comprobante de pedido');
+  /** "Pedido #12" o, para la cuenta completa de una mesa, "Mesa 3" */
+  const orderRef = (o) => (o.tableBill ? String(o.number) : 'Pedido #' + o.number);
+  /** Sello: la cuenta de mesa antes de cobrar no es un comprobante de pago */
+  const stampOf = (o) => (o.voided ? 'ANULADO' : o.paid ? 'PAGADO' : o.tableBill ? 'PRE-CUENTA' : 'A COBRAR');
+  /** Comanda: las tandas de mesa se cobran con la cuenta, no por separado */
+  const kitchenFoot = (o) => (o.paid ? 'PAGADO' : o.tableSessionId ? 'VA A LA CUENTA DE LA MESA' : 'A COBRAR ' + U.money(o.total));
+  const kitchenHead = (o) => (o.tableSessionId && o.table ? 'MESA ' + o.table : '#' + o.number);
   const ticketId = (o) => `${pad(PZ.store.data.settings.ticket.pos, 4)}-${pad(o.ticketNumber || 0)}`;
 
   /* ======================= Estilos del papel ======================= */
@@ -125,7 +132,7 @@
       </div>
       <hr class="solid">
       <div class="doc"><span>${U.esc(docTitle(o).toUpperCase())}</span></div>
-      <div class="row"><span>${o.paid ? 'Nº ' + ticketId(o) : 'Pedido'}</span><span>Pedido #${o.number}</span></div>
+      <div class="row"><span>${o.paid ? 'Nº ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido'}</span><span>${U.esc(orderRef(o))}</span></div>
       <div class="row small"><span>Fecha: ${U.date(o.paidAt || o.createdAt)}</span><span>Hora: ${U.time(o.paidAt || o.createdAt)}</span></div>
       <div class="row small"><span>${L.type[o.type] || o.type}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</span><span>Atendió: ${U.esc(seller ? seller.name : '-')}</span></div>
       ${o.customerName ? `<div class="small">Cliente: <b>${U.esc(o.customerName)}</b>${o.phone ? ' · ' + U.esc(o.phone) : ''}</div>` : ''}
@@ -141,7 +148,8 @@
       ${o.surcharge ? `<div class="row"><span>Recargo tarjeta</span><span>${U.money(o.surcharge)}</span></div>` : ''}
       <div class="row tot"><span>TOTAL</span><span>${U.money(o.total)}</span></div>
       ${o.paid ? `<hr><div class="small" style="font-weight:800;margin-bottom:.5mm">FORMA DE PAGO</div>${pays}` : ''}
-      <div class="c"><div class="stamp">${o.voided ? 'ANULADO' : o.paid ? 'PAGADO' : 'A COBRAR'}</div></div>
+      <div class="c"><div class="stamp">${stampOf(o)}</div></div>
+      ${o.tableBill && !o.paid ? '<div class="c small" style="font-weight:700">No válido como comprobante de pago</div>' : ''}
       ${unpaidInfo}
       ${o.notes ? `<div class="small" style="margin-top:1.5mm">Nota: ${U.esc(o.notes)}</div>` : ''}
       <hr>
@@ -158,8 +166,9 @@
     return `
     <div class="paper ${Number(t.width) === 58 ? 'w58' : ''}">
       <div class="c small" style="font-weight:800">COMANDA · COCINA</div>
-      <div class="big">#${o.number}</div>
-      <div class="c" style="font-weight:800;font-size:1.2em">${(L.type[o.type] || o.type).toUpperCase()}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</div>
+      <div class="big">${U.esc(kitchenHead(o))}</div>
+      ${o.tableSessionId ? `<div class="c" style="font-weight:800">TANDA ${o.batchNumber || 1} · #${o.number}</div>` : ''}
+      ${o.tableSessionId ? '' : `<div class="c" style="font-weight:800;font-size:1.2em">${(L.type[o.type] || o.type).toUpperCase()}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</div>`}
       <div class="c small">${U.dateTime(o.createdAt)}${o.eta ? ' · Entrega: ' + U.esc(o.eta) : ''}</div>
       ${o.customerName ? `<div class="c">${U.esc(o.customerName)}</div>` : ''}
       <hr class="solid">
@@ -170,7 +179,7 @@
         </div>`).join('')}
       ${o.notes ? `<hr><div class="box">NOTA: ${U.esc(o.notes)}</div>` : ''}
       <hr class="solid">
-      <div class="c small">${o.paid ? 'PAGADO' : 'A COBRAR ' + U.money(o.total)}</div>
+      <div class="c small">${kitchenFoot(o)}</div>
     </div>`;
   }
 
@@ -357,7 +366,7 @@
     if (b.cuit) e.ln('CUIT: ' + b.cuit + (b.taxCondition ? ' - ' + b.taxCondition : ''));
     e.align('l').sep('=');
     e.bold(true).ln(docTitle(o).toUpperCase()).bold(false);
-    e.pair(o.paid ? 'N ' + ticketId(o) : 'Pedido', 'Pedido #' + o.number);
+    e.pair(o.paid ? 'N ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido', orderRef(o));
     e.pair('Fecha: ' + U.date(o.paidAt || o.createdAt), 'Hora: ' + U.time(o.paidAt || o.createdAt));
     e.pair((L.type[o.type] || o.type) + (o.type === 'mesa' && o.table ? ' ' + o.table : ''), 'Atendio: ' + (seller ? seller.name : '-'));
     if (o.customerName) e.ln('Cliente: ' + o.customerName + (o.phone ? ' - ' + o.phone : ''));
@@ -387,7 +396,8 @@
         if (p.ref) e.ln('  Operacion: ' + p.ref);
       });
     }
-    e.align('c').ln().bold(true).size(2, 2).ln(o.voided ? 'ANULADO' : o.paid ? 'PAGADO' : 'A COBRAR').size(1, 1).bold(false);
+    e.align('c').ln().bold(true).size(2, 2).ln(stampOf(o)).size(1, 1).bold(false);
+    if (o.tableBill && !o.paid) e.ln('No valido como comprobante de pago');
     if (!o.paid && st.payments.alias) e.ln('Alias: ' + st.payments.alias);
     if (o.notes) e.align('l').wrap('Nota: ' + o.notes).align('c');
     e.sep().ln(t.footer);
@@ -402,8 +412,8 @@
   function escposKitchen(o) {
     const t = PZ.store.data.settings.ticket, L = PZ.labels;
     const e = new EscPos(Number(t.width) === 58 ? 32 : 48, !!t.escposAccents);
-    e.align('c').bold(true).ln('COMANDA - COCINA').size(3, 3).ln('#' + o.number).size(2, 1)
-      .ln((L.type[o.type] || o.type).toUpperCase() + (o.type === 'mesa' && o.table ? ' ' + o.table : '')).size(1, 1).bold(false)
+    e.align('c').bold(true).ln('COMANDA - COCINA').size(3, 3).ln(kitchenHead(o)).size(2, 1)
+      .ln(o.tableSessionId ? `TANDA ${o.batchNumber || 1} - #${o.number}` : (L.type[o.type] || o.type).toUpperCase() + (o.type === 'mesa' && o.table ? ' ' + o.table : '')).size(1, 1).bold(false)
       .ln(U.dateTime(o.createdAt) + (o.eta ? ' - Entrega: ' + o.eta : ''));
     if (o.customerName) e.ln(o.customerName);
     e.align('l').sep('=');
@@ -413,7 +423,7 @@
       if (it.notes) e.bold(true).wrap('>> ' + it.notes, '   ').bold(false);
     });
     if (o.notes) e.sep().bold(true).wrap('NOTA: ' + o.notes).bold(false);
-    e.sep('=').align('c').ln(o.paid ? 'PAGADO' : 'A COBRAR ' + U.money(o.total));
+    e.sep('=').align('c').ln(kitchenFoot(o));
     return e.feed(4).cut().bytes();
   }
 
@@ -505,7 +515,7 @@
     const st = PZ.store.data.settings, L = PZ.labels;
     const lines = [];
     lines.push(`*${st.business.name}*`);
-    lines.push(o.paid ? `${docTitle(o)} Nº ${ticketId(o)}` : `Pedido #${o.number}`);
+    lines.push(o.paid ? `${docTitle(o)} Nº ${ticketId(o)}${o.tableBill ? ' · ' + o.number : ''}` : o.tableBill ? `Cuenta · ${o.number}` : `Pedido #${o.number}`);
     lines.push(U.dateTime(o.paidAt || o.createdAt));
     lines.push('');
     o.items.forEach((it) => {
@@ -616,17 +626,18 @@
     /** Vista previa con acciones @param {any} o @param {{ title?: string }} [opts] */
     preview(o, { title } = {}) {
       const m = PZ.modal({
-        title: title || (o.paid ? `Comprobante Nº ${ticketId(o)}` : `Pedido #${o.number}`),
+        title: title || (o.paid ? `Comprobante Nº ${ticketId(o)}` : o.tableBill ? `Cuenta · ${U.esc(o.number)}` : `Pedido #${o.number}`),
         size: 'ticket',
         body: `<div class="ticket-stage"><div class="ticket-roll">${customerHTML(o)}</div></div>`,
         footer: `
-          <button class="btn ghost" data-a="kit">👨‍🍳 Comanda</button>
+          ${o.tableBill ? '' : '<button class="btn ghost" data-a="kit">👨‍🍳 Comanda</button>'}
           <button class="btn ghost" data-a="wa">💬 WhatsApp</button>
           <button class="btn ghost" data-a="share">↗ Compartir</button>
           <button class="btn primary" data-a="print">🖨️ Imprimir</button>`,
       });
       m.el.querySelector('[data-a=print]').onclick = () => T.printOrder(o);
-      m.el.querySelector('[data-a=kit]').onclick = () => T.printOrder(o, { kitchen: true, customer: false });
+      const kit = m.el.querySelector('[data-a=kit]');
+      if (kit) kit.onclick = () => T.printOrder(o, { kitchen: true, customer: false });
       m.el.querySelector('[data-a=wa]').onclick = () => T.shareWhatsApp(o);
       m.el.querySelector('[data-a=share]').onclick = () => T.share(o);
       return m;
