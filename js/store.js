@@ -639,6 +639,8 @@
         voided: false,
         ...(draft.web ? { web: draft.web } : {}),
         ...(draft.tableSessionId ? { tableSessionId: draft.tableSessionId, batchNumber: draft.batchNumber || 1 } : {}),
+        // delivery en efectivo: lo cobra el repartidor al entregar
+        ...(draft.collect ? { collect: { ...draft.collect } } : {}),
       };
       S.computeTotals(o);
       if (!o.customerId && (o.phone || (o.customerName && o.type === 'delivery'))) {

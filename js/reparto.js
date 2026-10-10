@@ -271,6 +271,7 @@
           total: o.total || 0,
           paid: o.paid,
           payment: o.payment || 'efectivo',
+          collect: o.collect && typeof o.collect === 'object' ? o.collect : null,
           status: o.status === 'en_camino' ? 'en_camino' : 'listo',
           driver: o.driver || currentDriver,
           onlineOrderId: o.onlineOrderId || o.id,
@@ -396,6 +397,11 @@
 
   function renderDeliveryCard(/** @type {any} */ d, /** @type {string} */ city) {
     const isRoute = d.status === 'en_camino';
+    const money = (/** @type {number} */ n) => (U ? U.money(n) : '$' + n);
+    // efectivo que cobra el repartidor: cuánto (con descuento por efectivo) y el vuelto que lleva
+    const cashDue = d.collect && Number(d.collect.amount) > 0 ? Number(d.collect.amount) : d.total;
+    const cashTendered = d.collect ? Number(d.collect.tendered) || 0 : 0;
+    const cashChange = Math.max(0, cashTendered - cashDue);
     const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.address + (city ? ', ' + city : ''))}`;
     const branchName = branchData && branchData.branch ? branchData.branch.name : '';
     const waUrl = d.phone ? `https://wa.me/${d.phone}?text=${encodeURIComponent(`¡Hola ${d.customerName ? d.customerName.split(' ')[0] : ''}! Soy ${currentDriver} de ${branchName}, estoy yendo con tu pedido 🛵`)}` : '';
@@ -419,9 +425,10 @@
         </div>
 
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:0.85rem">
-          <span>${d.paid ? '💳 Ya pagado' : (d.payment === 'efectivo' ? '💵 Cobrar en efectivo:' : '💳 A cobrar (' + esc(d.payment) + '):')}</span>
-          <b style="font-size:1rem;color:var(--primary)">${d.paid ? 'PAGADO' : (U ? U.money(d.total) : '$' + d.total)}</b>
+          <span>${d.paid ? '💳 Ya pagado' : (d.payment === 'efectivo' || d.collect ? '💵 Cobrar en efectivo:' : '💳 A cobrar (' + esc(d.payment) + '):')}</span>
+          <b style="font-size:1rem;color:var(--primary)">${d.paid ? 'PAGADO' : money(cashDue)}</b>
         </div>
+        ${!d.paid && cashChange > 0 ? `<div class="small" style="margin-top:4px;font-weight:700">Paga con ${money(cashTendered)} · llevá ${money(cashChange)} de vuelto</div>` : ''}
 
         <div class="action-grid">
           <a href="${esc(mapsUrl)}" target="_blank" rel="noopener" class="btn sm ghost" style="text-align:center">🗺️ Abrir GPS Maps</a>

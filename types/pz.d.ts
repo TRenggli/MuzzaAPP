@@ -107,6 +107,8 @@ declare namespace PZ {
     voided: boolean;
     /** pedido que llegó por la carta online */
     web?: { id: string; number: number };
+    /** delivery en efectivo que cobra el repartidor: cuánto cobra y con cuánto paga el cliente */
+    collect?: { method: 'efectivo'; amount: number; tendered: number };
   }
 
   /* ---------------- Sucursal ---------------- */

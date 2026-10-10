@@ -41,8 +41,23 @@
   const orderRef = (o) => (o.tableBill ? String(o.number) : 'Pedido #' + o.number);
   /** Sello: la cuenta de mesa antes de cobrar no es un comprobante de pago */
   const stampOf = (o) => (o.voided ? 'ANULADO' : o.paid ? 'PAGADO' : o.tableBill ? 'PRE-CUENTA' : 'A COBRAR');
+  /**
+   * Delivery en efectivo que cobra el repartidor al entregar: cuánto cobra
+   * (con el descuento por efectivo, si hay) y cuánto vuelto tiene que llevar.
+   * @param {any} o
+   */
+  const collectOf = (o) => {
+    const c = !o.paid && !o.voided && o.collect;
+    if (!c || c.method !== 'efectivo') return null;
+    const amount = Math.round(Number(c.amount) || o.total);
+    const tendered = Math.round(Number(c.tendered) || 0);
+    return { amount, discount: Math.max(0, o.total - amount), tendered, change: Math.max(0, tendered - amount) };
+  };
   /** Comanda: las tandas de mesa se cobran con la cuenta, no por separado */
-  const kitchenFoot = (o) => (o.paid ? 'PAGADO' : o.tableSessionId ? 'VA A LA CUENTA DE LA MESA' : 'A COBRAR ' + U.money(o.total));
+  const kitchenFoot = (o) => {
+    const cash = collectOf(o);
+    return o.paid ? 'PAGADO' : o.tableSessionId ? 'VA A LA CUENTA DE LA MESA' : 'A COBRAR ' + U.money(cash ? cash.amount : o.total) + (cash ? ' EN EFECTIVO' : '');
+  };
   const kitchenHead = (o) => (o.tableSessionId && o.table ? 'MESA ' + o.table : '#' + o.number);
   const ticketId = (o) => `${pad(PZ.store.data.settings.ticket.pos, 4)}-${pad(o.ticketNumber || 0)}`;
 
@@ -111,7 +126,17 @@
         }).join('')
       : '';
 
-    const unpaidInfo = !o.paid && (st.payments.alias || st.payments.cbu)
+    // lo cobra el repartidor: cuánto cobra y el vuelto que lleva (sin datos de transferencia)
+    const cash = collectOf(o);
+    const cashInfo = cash ? `<div class="box">
+        ${cash.discount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(cash.discount)}</span></div>` : ''}
+        <div class="row" style="font-size:1.15em"><span>COBRAR EN EFECTIVO</span><span>${U.money(cash.amount)}</span></div>
+        ${cash.change ? `<div class="row"><span>Paga con</span><span>${U.money(cash.tendered)}</span></div>
+        <div class="row" style="font-size:1.15em"><span>LLEVAR DE VUELTO</span><span>${U.money(cash.change)}</span></div>`
+        : cash.tendered ? '<div>Paga justo, sin vuelto</div>' : ''}
+      </div>` : '';
+
+    const unpaidInfo = !o.paid && !cash && (st.payments.alias || st.payments.cbu)
       ? `<div class="pay-info small"><b>Podés pagar por transferencia:</b><br>${st.payments.alias ? 'Alias: <b>' + U.esc(st.payments.alias) + '</b><br>' : ''}${st.payments.cbu ? 'CBU/CVU: ' + U.esc(st.payments.cbu) + '<br>' : ''}${st.payments.holder ? 'Titular: ' + U.esc(st.payments.holder) : ''}</div>`
       : '';
 
@@ -148,6 +173,7 @@
       ${o.surcharge ? `<div class="row"><span>Recargo tarjeta</span><span>${U.money(o.surcharge)}</span></div>` : ''}
       <div class="row tot"><span>TOTAL</span><span>${U.money(o.total)}</span></div>
       ${o.paid ? `<hr><div class="small" style="font-weight:800;margin-bottom:.5mm">FORMA DE PAGO</div>${pays}` : ''}
+      ${cashInfo}
       <div class="c"><div class="stamp">${stampOf(o)}</div></div>
       ${o.tableBill && !o.paid ? '<div class="c small" style="font-weight:700">No válido como comprobante de pago</div>' : ''}
       ${unpaidInfo}
@@ -396,9 +422,17 @@
         if (p.ref) e.ln('  Operacion: ' + p.ref);
       });
     }
+    const cash = collectOf(o);
+    if (cash) {
+      e.sep();
+      if (cash.discount) e.pair('Desc. pago efectivo', '-' + U.money(cash.discount));
+      e.bold(true).pair('COBRAR EN EFECTIVO', U.money(cash.amount)).bold(false);
+      if (cash.change) e.pair('Paga con', U.money(cash.tendered)).bold(true).size(1, 2).pair('LLEVAR DE VUELTO', U.money(cash.change)).size(1, 1).bold(false);
+      else if (cash.tendered) e.ln('Paga justo, sin vuelto');
+    }
     e.align('c').ln().bold(true).size(2, 2).ln(stampOf(o)).size(1, 1).bold(false);
     if (o.tableBill && !o.paid) e.ln('No valido como comprobante de pago');
-    if (!o.paid && st.payments.alias) e.ln('Alias: ' + st.payments.alias);
+    if (!o.paid && !cash && st.payments.alias) e.ln('Alias: ' + st.payments.alias);
     if (o.notes) e.align('l').wrap('Nota: ' + o.notes).align('c');
     e.sep().ln(t.footer);
     let qrText = '';
@@ -529,9 +563,14 @@
     if (o.deliveryFee) lines.push(`Envío: ${U.money(o.deliveryFee)}`);
     if (o.surcharge) lines.push(`Recargo tarjeta: ${U.money(o.surcharge)}`);
     lines.push(`*TOTAL: ${U.money(o.total)}*`);
+    const cash = collectOf(o);
     if (o.paid) {
       o.payments.forEach((p) => lines.push(`Pagado con ${L.method[p.method]}: ${U.money(p.amount)}${p.tendered > p.amount ? ` (vuelto ${U.money(p.tendered - p.amount)})` : ''}`));
       lines.push('✅ PAGADO');
+    } else if (cash) {
+      if (cash.discount) lines.push(`Desc. pago en efectivo: -${U.money(cash.discount)}`);
+      lines.push(`💵 Se paga en efectivo al recibir: *${U.money(cash.amount)}*`);
+      if (cash.change) lines.push(`Paga con ${U.money(cash.tendered)} (vuelto ${U.money(cash.change)})`);
     } else if (st.payments.alias) {
       lines.push(`Podés transferir al alias *${st.payments.alias}*${st.payments.holder ? ' (' + st.payments.holder + ')' : ''}`);
     }
@@ -548,6 +587,7 @@
     kitchenHTML,
     closeHTML,
     plainText,
+    collectOf,
     ticketId,
     escpos: { customer: escposCustomer, kitchen: escposKitchen, close: escposClose },
 

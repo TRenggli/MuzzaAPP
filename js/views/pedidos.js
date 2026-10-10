@@ -44,6 +44,8 @@
 
     const prep = S.data.settings.prepMinutes || 35;
     const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime() && forMe(o)).slice().reverse();
+    // entregados sin cobrar (por ejemplo, el repartidor marcó "entregado" y todavía no rindió la plata)
+    const owed = PZ.auth.isWaiter() ? [] : S.data.orders.filter((o) => o.status === 'entregado' && !o.paid && !o.voided && !o.tableSessionId);
     const web = PZ.web && PZ.auth.can('vender') ? PZ.web.pending() : [];
 
     if (lastWebPending !== null && web.length > lastWebPending) {
@@ -83,8 +85,13 @@
           </div>`;
         }).join('')}
       </div>
+      ${owed.length ? `<div class="card mt owed">
+        <h3>💵 Entregados sin cobrar <span class="badge warn">${owed.length}</span></h3>
+        <p class="muted small" style="margin-top:4px">Ya se entregaron, pero la plata todavía no entró a la caja. Cuando el repartidor la rinda, tocá Cobrar.</p>
+        <div class="table-wrap"><table class="tbl"><tbody>${owed.map((o) => { const cash = PZ.ticket.collectOf(o); return `<tr><td>#${o.number}</td><td>${U.esc(o.customerName || o.address || PZ.labels.type[o.type])}${o.driver ? `<div class="small muted">🛵 ${U.esc(o.driver)}</div>` : ''}</td><td class="right"><b>${U.money(cash ? cash.amount : o.total)}</b>${cash ? '<div class="small muted">efectivo</div>' : ''}</td><td class="right">${PZ.auth.can('vender') && PZ.auth.canCharge() ? `<button class="btn sm accent" data-act="pay" data-id="${o.id}">💸 Cobrar</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
+      </div>` : ''}
       <div class="card mt"><h3>🏁 Entregados hoy <span class="badge">${today.length}</span></h3>
-        ${today.length ? `<div class="table-wrap"><table class="tbl"><tbody>${today.slice(0, 40).map((o) => `<tr><td>#${o.number}</td><td>${PZ.labels.typeIcon[o.type]} ${U.esc(o.customerName || PZ.labels.type[o.type])}</td><td class="small muted">${o.items.map((i) => i.qty + 'x ' + U.esc(i.name)).join(', ')}</td><td class="right">${U.money(o.total)}</td><td class="small muted">${o.statusTimes && o.statusTimes.entregado ? Math.round((o.statusTimes.entregado - o.createdAt) / 60000) + ' min' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">Todavía no se entregó nada hoy</div>'}
+        ${today.length ? `<div class="table-wrap"><table class="tbl"><tbody>${today.slice(0, 40).map((o) => `<tr><td>#${o.number}</td><td>${PZ.labels.typeIcon[o.type]} ${U.esc(o.customerName || PZ.labels.type[o.type])}</td><td class="small muted">${o.items.map((i) => i.qty + 'x ' + U.esc(i.name)).join(', ')}</td><td class="right">${U.money(o.total)}${!o.paid && !o.tableSessionId ? ' <span class="badge warn">sin cobrar</span>' : ''}</td><td class="small muted">${o.statusTimes && o.statusTimes.entregado ? Math.round((o.statusTimes.entregado - o.createdAt) / 60000) + ' min' : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty small">Todavía no se entregó nada hoy</div>'}
       </div>`;
 
     el.querySelectorAll('[data-mc]').forEach((b) => b.onclick = () => { mobileCol = b.dataset.mc; render(el); });
@@ -111,6 +118,7 @@
     const isDelivery = o.type === 'delivery';
     // Tanda de una mesa del salón: se cobra junto con toda la cuenta de la mesa
     const tableAcc = !!o.tableSessionId;
+    const cash = PZ.ticket.collectOf(o);
     let next = col.next;
     let nextLabel = col.nextLabel;
     if (col.id === 'listo') {
@@ -131,12 +139,13 @@
       <div class="row-flex" style="gap:6px">
         <span class="badge pri">${L.typeIcon[o.type]} ${L.type[o.type]}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}${tableAcc && o.batchNumber ? ' · Tanda ' + o.batchNumber : ''}</span>
         ${o.web ? `<span class="badge">📲 W-${o.web.number}</span>` : ''}
-        ${o.paid ? '<span class="badge ok">Pagado</span>' : tableAcc ? '<span class="badge">🧾 Va a la cuenta de la mesa</span>' : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
+        ${o.paid ? '<span class="badge ok">Pagado</span>' : tableAcc ? '<span class="badge">🧾 Va a la cuenta de la mesa</span>' : cash ? `<span class="badge warn">🛵 Cobra el repartidor ${U.money(cash.amount)}</span>` : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
         ${o.eta ? `<span class="badge">🕒 ${U.esc(o.eta)}</span>` : ''}
       </div>
       ${o.customerName ? `<div style="margin-top:6px;font-weight:800">${U.esc(o.customerName)}</div>` : ''}
       ${isDelivery && o.address ? `<div class="small"><a href="${mapUrl}" target="_blank" rel="noopener">📍 ${U.esc(o.address)}</a></div>` : ''}
       ${isDelivery && o.driver ? `<div class="small muted">Repartidor: ${U.esc(o.driver)}</div>` : ''}
+      ${cash ? `<div class="small">💵 En efectivo${cash.change ? ` · paga con ${U.money(cash.tendered)} · lleva ${U.money(cash.change)} de vuelto` : cash.tendered ? ' · paga justo' : ''}</div>` : ''}
       <div class="oc-items">${o.items.map((it) => `<div><b>${it.qty}x</b> ${U.esc(it.name)}${it.variantName ? ' <span class="muted">(' + U.esc(it.variantName) + ')</span>' : ''}${it.extras.length ? `<div class="small muted">+ ${it.extras.map((e) => U.esc(e.name)).join(', ')}</div>` : ''}${it.notes ? `<div class="oc-note">» ${U.esc(it.notes)}</div>` : ''}</div>`).join('')}</div>
       ${o.notes ? `<div class="oc-note">📝 ${U.esc(o.notes)}</div>` : ''}
       <div class="oc-actions">
@@ -269,6 +278,13 @@
     S.computeTotals(o);
     const res = await PZ.checkout(o);
     if (!res) return false;
+    if (res.collect) {
+      o.collect = res.collect;
+      S.log('venta', `Pedido #${o.number}: lo cobra el repartidor en efectivo`);
+      S.save();
+      PZ.afterSent(o, { ...res, kitchen: false });
+      return false;
+    }
     S.payOrder(o.id, res.payments, res.adjust);
     PZ.afterPaid(o, { ...res, kitchen: false });
     return true;

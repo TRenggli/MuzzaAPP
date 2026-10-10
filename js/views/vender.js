@@ -486,11 +486,29 @@
     const draft = cartTotals();
     const res = await PZ.checkout(draft, { isNew: true });
     if (!res) return;
-    const o = S.createOrder(cart, { paid: true, payments: res.payments, adjust: res.adjust });
+    // efectivo en un delivery: queda a cobrar y lo cobra el repartidor al entregar
+    const o = res.collect ? S.createOrder({ ...cart, collect: res.collect })
+      : S.createOrder(cart, { paid: true, payments: res.payments, adjust: res.adjust });
     cart = emptyCart(); saveCart();
     renderCart(el);
     el.querySelector('.cart').classList.remove('open');
-    afterPaid(o, res);
+    if (res.collect) afterSent(o, res); else afterPaid(o, res);
+  }
+
+  /** Delivery que cobra el repartidor: comprobante "A COBRAR" con el vuelto que lleva */
+  function afterSent(o, res) {
+    if (navigator.vibrate) navigator.vibrate(30);
+    const cash = PZ.ticket.collectOf(o);
+    const m = PZ.ticket.preview(o, { title: `🛵 Pedido #${o.number} · lo cobra el repartidor` });
+    if (cash) {
+      const box = document.createElement('div');
+      box.className = 'change-box';
+      box.style.marginBottom = '12px';
+      box.innerHTML = cash.change ? `El repartidor lleva de vuelto<b>${U.money(cash.change)}</b>` : `El repartidor cobra en efectivo<b>${U.money(cash.amount)}</b>`;
+      m.el.querySelector('.modal-body').prepend(box);
+    }
+    if (res.print) PZ.ticket.printOrder(o, { kitchen: res.kitchen });
+    else if (res.kitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: false });
   }
 
   /** Pantalla de éxito + impresión automática */
@@ -513,6 +531,12 @@
   /* ======================= Modal de cobro (reutilizable) ======================= */
   PZ.checkout = function (order, { isNew = false } = {}) {
     return new Promise((resolve) => {
+      // delivery en efectivo: lo puede cobrar el repartidor al entregar (queda "a cobrar")
+      const canCollect = order.type === 'delivery' && !order.tableBill;
+      /** quién cobra el efectivo: el repartidor o acá */
+      let who = canCollect && isNew ? 'driver' : 'here';
+      /** con cuánto paga (si ya se había anotado al mandarlo con el repartidor) */
+      let typed = order.collect && order.collect.tendered ? String(order.collect.tendered) : '';
       const st = S.data.settings;
       const P = st.payments;
       const methods = ['efectivo', 'transferencia', 'qr'].concat(P.enableCard ? ['tarjeta'] : []);
@@ -526,6 +550,7 @@
       let mpPaid = null;
       const base = order.total;
       const useMp = () => method === 'qr' && !mpManual && PZ.mp && PZ.mp.ready();
+      const driverMode = () => canCollect && who === 'driver' && method === 'efectivo' && !split;
 
       const adjustFor = (m) => {
         if (split) return { cashDiscount: 0, surcharge: 0 };
@@ -572,8 +597,11 @@
           const base = () => (split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value) || d) : d);
           const b0 = base();
           const suggestions = [...new Set([Math.ceil(b0 / 1000) * 1000, Math.ceil(b0 / 5000) * 5000, Math.ceil(b0 / 10000) * 10000, Math.ceil(b0 / 20000) * 20000])].filter((v) => v > b0).slice(0, 3);
+          const drv = driverMode();
           detail.innerHTML = `
-            <div class="opt-section" style="margin-top:0">¿Con cuánto paga el cliente?</div>
+            ${canCollect && !split ? `<div class="seg mb who"><button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Lo cobra el repartidor</button><button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
+            ${drv ? '<p class="small muted" style="margin:-4px 0 8px">Queda <b>a cobrar</b>: el comprobante sale para el repartidor con lo que tiene que cobrar y el vuelto que lleva. Cuando vuelve con la plata, lo cobrás desde Pedidos.</p>' : ''}` : ''}
+            <div class="opt-section" style="margin-top:0">${drv ? '¿Con cuánto va a pagar? (dejalo vacío si no sabe)' : '¿Con cuánto paga el cliente?'}</div>
             <div class="bills">
               <button data-b="${b0}">✓ Justo ${U.money(b0)}</button>
               ${suggestions.map((v) => `<button data-b="${v}">${U.money(v)}</button>`).join('')}
@@ -581,7 +609,7 @@
             </div>
             <label class="field tendered-field"><span>Monto que entrega (escribilo si es otro)</span>
               <input class="tendered" inputmode="numeric" placeholder="Ej: 23000" autocomplete="off"></label>
-            <div class="change-box"><span>Vuelto</span><b class="chg">${U.money(0)}</b></div>`;
+            <div class="change-box"><span>${drv ? 'Vuelto que lleva' : 'Vuelto'}</span><b class="chg">${U.money(0)}</b></div>`;
           const inp = detail.querySelector('.tendered');
           const chips = detail.querySelectorAll('[data-b]');
           const upd = () => {
@@ -589,11 +617,11 @@
             const box = detail.querySelector('.change-box');
             const diff = v - base();
             box.classList.toggle('neg', !!inp.value && diff < 0);
-            box.querySelector('span').textContent = !inp.value ? 'Vuelto' : diff < 0 ? 'Falta' : `Paga con ${U.money(v)} · vuelto`;
+            box.querySelector('span').textContent = !inp.value ? (drv ? 'Vuelto que lleva' : 'Vuelto') : diff < 0 ? 'Falta' : `Paga con ${U.money(v)} · ${drv ? 'lleva de vuelto' : 'vuelto'}`;
             detail.querySelector('.chg').textContent = U.money(inp.value ? Math.abs(diff) : 0);
             chips.forEach((c) => c.classList.toggle('on', c.dataset.b !== 'other' && Number(c.dataset.b) === v));
           };
-          inp.addEventListener('input', () => { detail.querySelector('.other').classList.remove('on'); upd(); });
+          inp.addEventListener('input', () => { typed = inp.value; detail.querySelector('.other').classList.remove('on'); upd(); });
           inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') E.querySelector('[data-a=ok]').click(); });
           chips.forEach((b) => b.onclick = () => {
             if (b.dataset.b === 'other') {
@@ -605,9 +633,15 @@
               inp.focus();
               return;
             }
-            inp.value = b.dataset.b;
+            inp.value = typed = b.dataset.b;
             upd();
           });
+          detail.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
+            who = /** @type {string} */ (b.getAttribute('data-w'));
+            if (who === 'driver') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+            draw();
+          });
+          if (typed && !split) { inp.value = typed; upd(); }
           const part = E.querySelector('.part');
           if (part) part.oninput = upd;
           setTimeout(() => inp.focus(), 50);
@@ -647,6 +681,7 @@
         const ok = E.querySelector('[data-a=ok]');
         ok.classList.toggle('mp-go', useMp());
         ok.textContent = useMp() ? `📱 Generar QR · ${U.money(split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value) || d) : d)}`
+          : driverMode() ? `🛵 Enviar · cobra ${U.money(d)}`
           : split && d > 0 ? `Agregar pago` : `✅ Confirmar ${U.money(split ? base : totalFor(method))}`;
       }
 
@@ -669,6 +704,23 @@
         const mpNow = mpPaid;
         mpPaid = null;
         if (!mpNow && useMp()) return chargeMp();
+        if (driverMode()) {
+          // no se cobra ahora: el pedido queda a cobrar y el comprobante sale para el repartidor
+          const amount = due();
+          const tv = U.parseMoney(detail.querySelector('.tendered').value);
+          if (tv && tv < amount) return PZ.toast(`Con ${U.money(tv)} no alcanza: faltan ${U.money(amount - tv)}`, 'warn');
+          resolved = true;
+          const out = {
+            collect: { method: 'efectivo', amount, tendered: tv || 0 },
+            payments: [],
+            adjust: { cashDiscount: 0, surcharge: 0 },
+            print: E.querySelector('.opt-print').checked,
+            kitchen: isNew && E.querySelector('.opt-kit') ? E.querySelector('.opt-kit').checked : false,
+          };
+          m.close();
+          resolve(out);
+          return;
+        }
         const ref = mpNow ? `MP ${mpNow.payment || mpNow.order}` : (detail.querySelector('.ref') || {}).value || '';
         const mpInfo = mpNow ? { mp: { order: mpNow.order, payment: mpNow.payment } } : {};
         const verified = detail.querySelector('.verified');
@@ -709,11 +761,13 @@
         m.close();
         resolve(out);
       };
+      if (who === 'driver') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
       draw();
     });
   };
 
   PZ.afterPaid = afterPaid;
+  PZ.afterSent = afterSent;
   PZ.productModal = productModal;
   PZ.setCart = (c) => { cart = { ...emptyCart(), ...c }; saveCart(); };
 
