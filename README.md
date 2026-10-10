@@ -34,7 +34,8 @@ Un negocio de una sola persona funciona igual: el dueño tiene todas las funcion
 | **Encargado** | Todo lo de su sucursal: menú, precios, equipo, reportes, anulaciones. |
 | **Cajero** | Vende, cobra (también las mesas), caja, clientes, pedidos web. |
 | **Mozo** | Atiende el salón: abre mesas, manda tandas a la cocina, pide la cuenta y marca lo servido. **No cobra** (lo valida el servidor). |
-| **Cocina / Delivery** | Mueven los pedidos en el tablero. |
+| **Cocina** | Mueve los pedidos en el tablero. |
+| **Delivery** | Entra con su usuario y contraseña a la app de entregas (`reparto.html`): ve solo sus entregas y las que están sin asignar, sale a entregar, comparte su ubicación y marca lo entregado. El servidor valida que no toque pedidos de otro repartidor. |
 
 ## Salón y mesas (en vivo)
 

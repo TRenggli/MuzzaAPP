@@ -99,6 +99,24 @@
     /** Puede cobrar (caja): el mozo y la cocina no */
     canCharge: () => !!A.current && ['owner', 'admin', 'cajero'].includes(A.current.role),
     isWaiter: () => !!A.current && A.current.role === 'mozo',
+    isDelivery: () => !!A.current && A.current.role === 'delivery',
+    /**
+     * ¿Este pedido le corresponde ver a quien está operando? El mozo ve solo
+     * las mesas; el repartidor, solo los deliveries suyos o sin asignar (los
+     * viejos, que tenían el nombre del repartidor en vez de su usuario, también).
+     * @param {any} o
+     */
+    sees(o) {
+      if (!A.current) return false;
+      if (A.current.role === 'mozo') return o.type === 'mesa';
+      if (A.current.role === 'delivery') {
+        if (o.type !== 'delivery') return false;
+        if (o.driverId) return o.driverId === A.current.id;
+        const d = String(o.driver || '').trim().toLowerCase();
+        return !d || d === String(A.current.name || '').trim().toLowerCase();
+      }
+      return true;
+    },
     isOwner: () => !!A.current && A.current.role === 'owner',
 
     /**

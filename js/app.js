@@ -254,6 +254,8 @@
       }
       A.use(m);
       localStorage.setItem('pz-org', m.org_id);
+      // El repartidor trabaja en su propio panel (o cualquiera que llegue con ?next=reparto)
+      if (m.role === 'delivery' || new URLSearchParams(location.search).get('next') === 'reparto') return App.goReparto();
       await App.loadOrg(m.org_id);
       if (A.isOwner()) {
         const last = localStorage.getItem('pz-mode-' + m.org_id);
@@ -328,7 +330,14 @@
       App.afterEnter();
     },
 
+    /** Panel del repartidor (página aparte, con la misma sesión) */
+    goReparto() {
+      App.loading('Abriendo tus entregas…');
+      location.replace('reparto.html');
+    },
+
     async openBranch(branchId) {
+      if (A.isDelivery()) return App.goReparto();
       App.loading('Calentando el horno…');
       if (cleanup) { try { cleanup(); } catch (e) { /* noop */ } cleanup = null; }
       await S.flush();
@@ -516,8 +525,8 @@
         chip.innerHTML = `<span class="c-ico">💰</span><span class="dot"></span><span class="c-txt">${s ? 'Caja abierta' : 'Caja cerrada'}</span>`;
         chip.title = s ? 'Caja abierta' : 'Caja cerrada';
       }
-      // el mozo solo sigue lo del salón
-      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status) && (!A.isWaiter() || o.type === 'mesa')).length
+      // el mozo solo sigue lo del salón y el repartidor, sus entregas
+      const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status) && A.sees(o)).length
         + (PZ.web && A.can('vender') ? PZ.web.pending().length : 0);
       r.querySelectorAll('.n-count').forEach((el) => {
         el.textContent = active;

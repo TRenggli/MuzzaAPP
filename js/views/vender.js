@@ -8,7 +8,7 @@
   const L = () => PZ.labels;
 
   const CART_KEY = 'pz-cart';
-  const emptyCart = () => ({ type: 'mostrador', items: [], customerId: null, customerName: '', phone: '', address: '', zoneId: null, deliveryFee: 0, table: '', tableId: null, discount: null, notes: '', eta: '', driver: '' });
+  const emptyCart = () => ({ type: 'mostrador', items: [], customerId: null, customerName: '', phone: '', address: '', zoneId: null, deliveryFee: 0, table: '', tableId: null, discount: null, notes: '', eta: '', driver: '', driverId: '' });
   let cart = (() => { try { return JSON.parse(sessionStorage.getItem(CART_KEY) || 'null') || emptyCart(); } catch (e) { return emptyCart(); } })();
   let activeCat = null;
   let query = '';
@@ -359,7 +359,7 @@
             <label class="field"><span>Zona de envío</span><select name="zone"><option value="">Sin cargo</option>${zones.map((z) => `<option value="${z.id}" ${cart.zoneId === z.id ? 'selected' : ''}>${U.esc(z.name)} · ${U.money(z.fee)}</option>`).join('')}</select></label>
             <label class="field"><span>Costo de envío</span><input name="fee" value="${cart.deliveryFee || 0}" inputmode="numeric"></label>
           </div>
-          <label class="field"><span>Repartidor</span><select name="driver"><option value="">Sin asignar</option>${S.data.settings.drivers.map((d) => { const name = typeof d === 'object' ? d.name : d; const code = typeof d === 'object' && d.code ? ' (' + d.code + ')' : ''; return `<option value="${U.esc(name)}" ${cart.driver === name ? 'selected' : ''}>${U.esc(name + code)}</option>`; }).join('')}</select></label>` : ''}
+          <label class="field"><span>Repartidor</span><select name="driver"><option value="">Sin asignar</option>${S.drivers().map((d) => `<option value="${U.esc(d.id)}" ${cart.driverId === d.id ? 'selected' : ''}>${U.esc(d.name)}</option>`).join('')}</select></label>` : ''}
         ${cart.type !== 'mesa' ? `<label class="field"><span>Hora de entrega / retiro (opcional)</span><input name="eta" type="time" value="${U.esc(cart.eta)}"></label>` : ''}
         <input type="hidden" name="cid" value="${cart.customerId || ''}">`,
       footer: `<button class="btn ghost" data-a="x">Cancelar</button><button class="btn primary" data-a="ok">Listo</button>`,
@@ -406,7 +406,11 @@
         }
         if (zoneSel) cart.zoneId = zoneSel.value || null;
         if (f('fee')) cart.deliveryFee = U.parseMoney(f('fee').value);
-        if (f('driver')) cart.driver = f('driver').value;
+        if (f('driver')) {
+          const d = S.user(f('driver').value);
+          cart.driverId = d ? d.id : '';
+          cart.driver = d ? d.name : '';
+        }
       }
       if (f('eta')) cart.eta = f('eta').value;
       // si cambiaron los datos de un cliente existente, se desvincula para no pisarlo

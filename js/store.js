@@ -530,6 +530,8 @@
     category: (id) => S.data.categories.find((c) => c.id === id),
     product: (id) => S.data.products.find((p) => p.id === id),
     user: (id) => S.data.users.find((u) => u.id === id),
+    /** Repartidores de esta sucursal: empleados activos con rol Delivery (cada uno entra con su usuario) */
+    drivers: () => S.data.users.filter((u) => u.role === 'delivery' && u.active && (!u.branchIds.length || u.branchIds.includes(S.ctx.branchId))),
     customer: (id) => S.data.customers.find((c) => c.id === id),
     zone: (id) => S.data.settings.zones.find((z) => z.id === id),
     branch: (id) => S.ctx.branches.find((b) => b.id === (id || S.ctx.branchId)),
@@ -633,6 +635,7 @@
         status: 'pendiente',
         statusTimes: { pendiente: now },
         driver: draft.driver || '',
+        ...(draft.driverId ? { driverId: draft.driverId } : {}),
         cashSessionId: null,
         notes: draft.notes || '',
         eta: draft.eta || '',

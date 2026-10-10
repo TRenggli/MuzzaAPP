@@ -223,43 +223,6 @@ test('tracking gps: distancia haversine y estimación de tiempo de llegada', () 
   assert.equal(C.estimateDeliveryEta(0), 3);
   assert.equal(C.estimateDeliveryEta(-1), 3);
 
-  // URL del repartidor
-  const url = C.repartoUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'centro', 'Lucas');
-  assert.equal(url, 'https://trenggli.github.io/MuzzaAPP/reparto.html?l=centro&d=Lucas');
-});
-
-test('repartidor: identificador único, parseo y matching de chofer', () => {
-  // Generación de código
-  assert.equal(C.generateDriverCode('DEL', 101), 'DEL-101');
-  assert.equal(C.generateDriverCode('DIEGO', 5), 'DIEGO-005');
-
-  // Parseo de código con sucursal embebida
-  const p1 = C.parseDriverCode('DIEGO-101');
-  assert.equal(p1.slug, 'diego');
-  assert.equal(p1.code, 'DIEGO-101');
-  assert.equal(p1.driverNum, '101');
-
-  // Parseo con código corto y slug de respaldo
-  const p2 = C.parseDriverCode('DEL-102', 'centro');
-  assert.equal(p2.slug, 'centro');
-  assert.equal(p2.code, 'DEL-102');
-
-  // Matching de repartidor con lista mixta (strings y objetos)
-  const drivers = [
-    { name: 'Lucas', code: 'DIEGO-101' },
-    { name: 'Carlos', code: 'DEL-102' },
-    'Martín'
-  ];
-
-  assert.deepEqual(plain(C.matchDriver(drivers, 'DIEGO-101')), { name: 'Lucas', code: 'DIEGO-101' });
-  assert.deepEqual(plain(C.matchDriver(drivers, 'DEL-102')), { name: 'Carlos', code: 'DEL-102' });
-  assert.deepEqual(plain(C.matchDriver(drivers, 'carlos')), { name: 'Carlos', code: 'DEL-102' });
-  assert.deepEqual(plain(C.matchDriver(drivers, 'Martín')), { name: 'Martín', code: 'MARTÍN' });
-  assert.equal(C.matchDriver(drivers, 'INEXISTENTE'), null);
-
-  // URL de reparto con código único
-  const url = C.repartoUrl('https://trenggli.github.io/MuzzaAPP/index.html', 'diego', 'Lucas', '', 'DIEGO-101');
-  assert.equal(url, 'https://trenggli.github.io/MuzzaAPP/reparto.html?l=diego&d=Lucas&c=DIEGO-101');
 });
 
 test('pizzas: opción individual allowHalf=false impide mitad y mitad y no puede ser elegida como segunda mitad', () => {

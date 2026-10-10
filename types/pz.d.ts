@@ -105,6 +105,8 @@ declare namespace PZ {
     status: OrderStatus | string;
     notes: string;
     voided: boolean;
+    /** repartidor asignado (usuario con rol Delivery); `driver` guarda su nombre */
+    driverId?: string;
     /** pedido que llegó por la carta online */
     web?: { id: string; number: number };
     /** delivery en efectivo que cobra el repartidor: cuánto cobra y con cuánto paga el cliente */

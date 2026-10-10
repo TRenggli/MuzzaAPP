@@ -35,8 +35,8 @@
   }
 
   function render(el) {
-    // el mozo ve solo lo del salón
-    const forMe = (o) => !PZ.auth.isWaiter() || o.type === 'mesa';
+    // el mozo ve solo lo del salón; el repartidor, solo sus deliveries y los sin asignar
+    const forMe = (o) => PZ.auth.sees(o);
     const active = S.data.orders.filter((o) => !o.voided && !['entregado', 'cancelado'].includes(o.status) && forMe(o));
     const pendingCount = active.filter((o) => o.status === 'pendiente').length;
     if (lastPending !== null && pendingCount > lastPending) beep();
@@ -45,7 +45,7 @@
     const prep = S.data.settings.prepMinutes || 35;
     const today = S.data.orders.filter((o) => o.status === 'entregado' && o.createdAt >= U.startOfDay().getTime() && forMe(o)).slice().reverse();
     // entregados sin cobrar (por ejemplo, el repartidor marcó "entregado" y todavía no rindió la plata)
-    const owed = PZ.auth.isWaiter() ? [] : S.data.orders.filter((o) => o.status === 'entregado' && !o.paid && !o.voided && !o.tableSessionId);
+    const owed = PZ.auth.isWaiter() ? [] : S.data.orders.filter((o) => o.status === 'entregado' && !o.paid && !o.voided && !o.tableSessionId && PZ.auth.sees(o));
     const web = PZ.web && PZ.auth.can('vender') ? PZ.web.pending() : [];
 
     if (lastWebPending !== null && web.length > lastWebPending) {
@@ -199,47 +199,24 @@
       return;
     }
     if (act === 'driver') {
-      const drivers = S.data.settings.drivers || [];
-      const slug = (S.data.branch && S.data.branch.slug) || '';
-      const matched = PZ.carta ? PZ.carta.matchDriver(drivers, o.driver || '') : null;
-      const driverCode = matched ? matched.code : '';
-      const repUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '', '', driverCode) : ('reparto.html?l=' + encodeURIComponent(slug));
+      const drivers = S.drivers();
       const m = PZ.modal({
         title: '🛵 Asignar repartidor', size: 'sm',
-        body: `<div class="opt-grid">${drivers.map((d) => {
-          const name = typeof d === 'object' ? d.name : d;
-          const code = typeof d === 'object' && d.code ? d.code : '';
-          return `<button class="opt ${o.driver === name ? 'on' : ''}" data-d="${U.esc(name)}" data-c="${U.esc(code)}" style="display:flex;align-items:center;justify-content:space-between">
-            <span>🛵 <b>${U.esc(name)}</b></span>
-            ${code ? `<span class="badge pri" style="font-family:monospace;font-size:0.75rem">${U.esc(code)}</span>` : ''}
-          </button>`;
-        }).join('')}</div>${drivers.length ? '' : '<p class="muted">Cargá repartidores en Configuración o en Equipo.</p>'}
-        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
-          <button class="btn ghost sm" data-act="copy-driver-link" style="justify-content:center">📲 Copiar link para el repartidor</button>
-          <a class="btn ghost sm" href="${U.esc(repUrl)}" target="_blank" rel="noopener" style="justify-content:center">📱 Abrir panel de repartidor ↗</a>
-        </div>`,
+        body: `<div class="opt-grid">${drivers.map((d) => `<button class="opt ${o.driverId === d.id ? 'on' : ''}" data-d="${U.esc(d.id)}" style="display:flex;align-items:center;justify-content:space-between">
+            <span>🛵 <b>${U.esc(d.name)}</b></span>
+          </button>`).join('')}</div>
+          ${drivers.length ? '' : '<p class="muted">Todavía no hay repartidores. Creá un usuario con rol Delivery en <a href="#/equipo">Equipo</a>.</p>'}
+          ${o.driver || o.driverId ? '<button class="btn ghost sm block" data-d="" style="margin-top:10px">Dejar sin asignar</button>' : ''}`,
       });
       m.el.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => {
         const btn = /** @type {HTMLElement} */ (b);
-        o.driver = btn.dataset.d || '';
+        const d = S.user(btn.dataset.d || '');
+        o.driverId = d ? d.id : '';
+        o.driver = d ? d.name : '';
         S.save();
         m.close();
         render(el);
       });
-      const copyBtn = m.el.querySelector('[data-act=copy-driver-link]');
-      if (copyBtn) {
-        copyBtn.onclick = async () => {
-          try {
-            const curMatched = PZ.carta ? PZ.carta.matchDriver(drivers, o.driver || '') : null;
-            const curCode = curMatched ? curMatched.code : '';
-            const currentRepUrl = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, o.driver || '', '', curCode) : ('reparto.html?l=' + encodeURIComponent(slug));
-            await navigator.clipboard.writeText(currentRepUrl);
-            PZ.toast(`Link copiado para ${o.driver || 'el repartidor'} 📲`);
-          } catch (e) {
-            PZ.toast('No se pudo copiar el link', 'warn');
-          }
-        };
-      }
       return;
     }
     if (act === 'cancel') {

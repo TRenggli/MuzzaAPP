@@ -52,7 +52,7 @@
         'Tocá el botón verde de cada tarjeta para pasarla al siguiente paso: <b>Recibido → Horno → Listo → En camino → Entregado</b>.',
         'Los pedidos que pasan el tiempo objetivo se marcan en <b>rojo</b>.',
         'Suena un aviso cuando entra un pedido nuevo. Si usan una tablet en la cocina, se actualiza sola.',
-        'Con 💬 le avisás al cliente por WhatsApp en qué estado está su pedido.',
+        'Con 💬 le avisás al cliente por WhatsApp en qué estado está su pedido. Con 🛵 asignás el repartidor (son los empleados con rol Delivery).',
         'Los pedidos de la <b>carta online</b> aparecen arriba en verde: <b>Aceptar</b> los manda a la cocina con todo cargado; <b>Rechazar</b> le avisa al cliente.',
         'Cuando el repartidor vuelve con la plata, tocá <b>Cobrar</b> en su pedido (ya viene cargado con cuánto pagó). Los que se entregaron y todavía no se cobraron aparecen en <b>Entregados sin cobrar</b>, para que no se pierda ninguno.',
         'Las tandas de las mesas dicen <b>Mesa N · Tanda K</b> y no se cobran acá: van a la cuenta de la mesa. Cuando están listas se marcan <b>Servida</b>.',
@@ -133,7 +133,8 @@
       tips: [
         '<b>Generar código</b> crea un enlace (y un QR) para que alguien se sume solo: elige su usuario y contraseña.',
         'También podés <b>crear el usuario</b> vos directamente.',
-        'Roles: <b>cajero</b> vende y cobra; <b>mozo</b> atiende las mesas (abre, pide tandas, pide la cuenta y marca servido, pero no cobra); <b>cocina</b> y <b>delivery</b> mueven los pedidos.',
+        'Roles: <b>cajero</b> vende y cobra; <b>mozo</b> atiende las mesas (abre, pide tandas, pide la cuenta y marca servido, pero no cobra); <b>cocina</b> mueve los pedidos; el <b>repartidor</b> (rol Delivery) entra con su usuario y contraseña a la app de entregas y ve solo las suyas.',
+        'Para un repartidor: <b>Crear usuario</b> con rol Delivery y después tocá 🛵 para mandarle por WhatsApp el link de la app y su usuario (la contraseña se la pasás aparte). Entra una sola vez en su celular.',
         'La tabla muestra cuánto cobró cada uno, las anulaciones, las diferencias en los cierres de caja y cuánto vende por cada $1 de sueldo.',
       ],
     },

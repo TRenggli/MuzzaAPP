@@ -100,37 +100,44 @@
     if (S.data) S.afterLoad();
   }
 
+  /** Link de la app del repartidor: entra con su usuario y va directo a sus entregas */
+  const driverLink = () => `${location.origin}${location.pathname.replace(/[^/]*$/, '')}index.html?next=reparto`;
+
+  /** Mensaje para el repartidor: el link y su usuario (la contraseña se la pasa el encargado por otro lado) */
   function shareDriverAccess(m) {
     if (!m) return;
-    const bid = (m.branch_ids && m.branch_ids[0]) || S.ctx.branchId;
-    const branch = S.ctx.branches.find((b) => b.id === bid) || (S.data ? S.data.branch : null);
-    const slug = branch ? branch.slug : 'diego';
-    const drivers = (S.data && S.data.settings && S.data.settings.drivers) || [];
-    const matched = PZ.carta ? PZ.carta.matchDriver(drivers, m.name) : null;
-    const code = matched ? matched.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101) : 'DEL-101');
-    const url = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, m.name, '', code) : `reparto.html?c=${code}`;
+    const url = driverLink();
     const orgName = S.ctx.org ? S.ctx.org.name : 'la pizzería';
-    const text = `¡Hola ${m.name}! Te paso tu acceso a la App de Repartos de ${orgName} 🛵\n\nEntrá directo desde acá:\n${url}\n\nTu código único de repartidor: *${code}*`;
+    const text = `¡Hola ${m.name}! Te paso tu acceso a la app de repartos de ${orgName} 🛵
+
+Entrá desde acá:
+${url}
+
+Tu usuario: *${m.username}*
+La contraseña te la da el encargado.
+
+Tip: abrilo en el celular y agregalo a la pantalla de inicio. Vas a entrar una sola vez.`;
 
     const modal = PZ.modal({
       title: `🛵 Acceso para ${U.esc(m.name)}`,
       size: 'sm',
       body: `
-        <p class="muted" style="margin-top:0">El repartidor entra directo sin contraseña usando su código único:</p>
-        <div class="code-big" style="font-size:2rem;text-align:center;padding:12px;background:var(--bg);border-radius:10px;font-family:monospace;font-weight:900;color:var(--primary);margin-bottom:12px">${U.esc(code)}</div>
-        <div class="invite-link" style="display:flex;gap:6px"><input readonly value="${U.esc(url)}" style="font-size:0.85rem;flex:1"><button class="btn sm ghost" data-cp>Copiar</button></div>
+        <p class="muted" style="margin-top:0">El repartidor entra con su <b>usuario y contraseña</b> y ve sus entregas. Pasale el link y el usuario; la contraseña dásela aparte.</p>
+        <div class="bank-box"><div class="bk-row"><span>Usuario</span><b>${U.esc(m.username)}</b></div></div>
+        <div class="invite-link" style="display:flex;gap:6px;margin-top:10px"><input readonly value="${U.esc(url)}" style="font-size:0.85rem;flex:1"><button class="btn sm ghost" data-cp>Copiar</button></div>
       `,
-      footer: `<button class="btn ghost" data-cp-txt>📋 Copiar mensaje</button><button class="btn primary" data-wa>💬 WhatsApp</button>`,
+      footer: `<button class="btn ghost" data-cp-txt>📋 Copiar mensaje</button><button class="btn primary" data-wa>💬 Mandar acceso</button>`,
     });
 
     modal.el.querySelector('[data-cp]').onclick = async () => {
       try { await navigator.clipboard.writeText(url); PZ.toast('Enlace copiado'); } catch (e) { modal.el.querySelector('input').select(); }
     };
     modal.el.querySelector('[data-cp-txt]').onclick = async () => {
-      try { await navigator.clipboard.writeText(text); PZ.toast('Mensaje copiado'); } catch (e) { PZ.toast(code, 'info', 5000); }
+      try { await navigator.clipboard.writeText(text); PZ.toast('Mensaje copiado'); } catch (e) { PZ.toast(m.username, 'info', 5000); }
     };
     modal.el.querySelector('[data-wa]').onclick = () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
   }
+  PZ.driverAccess = shareDriverAccess;
 
   function editUser(u, done, { fixedBranch = '' } = {}) {
     const R = A().ROLES;
@@ -139,10 +146,6 @@
     const branches = PZ.app.allowedBranches();
     const ids = u ? u.branch_ids || [] : fixedBranch ? [fixedBranch] : [];
     const all = u ? !ids.length : false;
-    const drivers = (S.data && S.data.settings && S.data.settings.drivers) || [];
-    const matched = u ? (PZ.carta ? PZ.carta.matchDriver(drivers, u.name) : null) : null;
-    let initialDriverCode = matched ? matched.code : (PZ.carta ? PZ.carta.generateDriverCode('DEL', 101 + drivers.length) : `DEL-${101 + drivers.length}`);
-
     const m = PZ.modal({
       title: u ? '✏️ ' + U.esc(u.name) : '➕ Nueva persona',
       body: `
@@ -152,13 +155,8 @@
           <label class="field"><span>Rol</span><select name="role">${roles.map((k) => `<option value="${k}" ${u && u.role === k ? 'selected' : !u && k === 'cajero' ? 'selected' : ''}>${R[k].label}</option>`).join('')}</select></label>
           <label class="field pass-field"><span>${u ? 'Nueva contraseña (vacío = no cambiar)' : 'Contraseña (mínimo 6)'}</span><input name="pass" type="password" autocomplete="new-password"></label>
         </div>
-        <div class="delivery-code-box ${u && u.role === 'delivery' ? '' : 'hidden'}" style="margin-top:12px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--line);">
-          <div class="bold small" style="color:var(--primary);margin-bottom:4px">🛵 Identificador Único de Repartidor</div>
-          <p class="small muted" style="margin:0 0 8px">El repartidor <b>no necesita usuario ni contraseña</b>. Entrará a la app de entregas solo con este código único:</p>
-          <div class="row-flex" style="gap:6px">
-            <input name="driver_code" value="${U.esc(initialDriverCode)}" placeholder="EJ: DEL-101" style="flex:2;font-family:monospace;font-weight:800;text-transform:uppercase">
-            <button type="button" class="btn sm ghost" data-cp-code style="flex:1">📲 Copiar link</button>
-          </div>
+        <div class="delivery-code-box ${u && u.role === 'delivery' ? '' : 'hidden'} small muted" style="margin-top:12px;padding:10px;background:var(--bg);border-radius:10px;border:1px solid var(--line);">
+          🛵 <b>Repartidor:</b> entra a la app de entregas con este usuario y contraseña. Después de crearlo, tocá 🛵 en la lista de Equipo para mandarle el acceso.
         </div>
         <div class="opt-section">Sucursales donde trabaja</div>
         ${owner ? `<label class="check"><input type="checkbox" name="all" ${all ? 'checked' : ''}> Todas las sucursales</label>` : ''}
@@ -182,22 +180,6 @@
     };
     if (roleSel) roleSel.onchange = updateRoleUI;
 
-    const cpCodeBtn = E.querySelector('[data-cp-code]');
-    if (cpCodeBtn) {
-      cpCodeBtn.onclick = async () => {
-        const codeInput = E.querySelector('[name=driver_code]');
-        const code = (codeInput ? codeInput.value.trim().toUpperCase() : '') || initialDriverCode;
-        const slug = (S.data && S.data.branch ? S.data.branch.slug : '') || 'diego';
-        const url = PZ.carta ? PZ.carta.repartoUrl(location.href, slug, v('name'), '', code) : `reparto.html?c=${code}`;
-        try {
-          await navigator.clipboard.writeText(url);
-          PZ.toast(`Link copiado: ${url}`);
-        } catch (e) {
-          PZ.toast(url, 'info', 5000);
-        }
-      };
-    }
-
     E.querySelector('[data-a=x]').onclick = () => m.close();
     const del = E.querySelector('[data-a=del]');
     if (del) del.onclick = async () => {
@@ -217,7 +199,6 @@
         const isDel = v('role') === 'delivery';
         let uname = v('username');
         if (isDel && !uname) uname = 'del.' + (PZ.carta ? PZ.carta.slugify(v('name')) : 'chofer');
-        if (isDel && !pass && !u) pass = 'MuzzaReparto!' + Math.floor(1000 + Math.random() * 9000);
 
         if (!u) {
           if (pass.length < 6) throw new Error('La contraseña debe tener al menos 6 caracteres');
@@ -228,22 +209,9 @@
           if (pass) await PZ.cloud.staff('password', { user_id: u.user_id, password: pass });
         }
 
-        // Sincronizar en la sucursal actual si es delivery
-        if (isDel && S.data && S.data.settings) {
-          const dCode = (E.querySelector('[name=driver_code]') ? E.querySelector('[name=driver_code]').value.trim().toUpperCase() : '') || initialDriverCode;
-          S.data.settings.drivers = S.data.settings.drivers || [];
-          const exIdx = S.data.settings.drivers.findIndex((d) => (typeof d === 'object' ? d.name.toLowerCase() === v('name').toLowerCase() : d.toLowerCase() === v('name').toLowerCase()));
-          if (exIdx >= 0) {
-            S.data.settings.drivers[exIdx] = { name: v('name'), code: dCode, active: true };
-          } else {
-            S.data.settings.drivers.push({ name: v('name'), code: dCode, active: true });
-          }
-          S.save();
-        }
-
         await reloadMembers();
         m.close();
-        PZ.toast(u ? 'Guardado' : (isDel ? `Listo. Repartidor creado con código ${initialDriverCode}` : `Listo. Ingresa con “${uname.toLowerCase()}”`), 'ok', 4000);
+        PZ.toast(u ? 'Guardado' : `Listo. Ingresa con “${uname.toLowerCase()}”`, 'ok', 4000);
         done();
       } catch (e) {
         PZ.toast(e.message || 'No se pudo guardar', 'err', 5000);
@@ -273,7 +241,7 @@
         <td class="right">${s.salary ? U.money(s.salary) : '—'}</td>
         <td class="right">${s.salary && s.sales ? '$' + U.num(Math.round((s.sales / s.salary) * 10) / 10) : '—'}</td>
         <td class="actions">
-          ${m.role === 'delivery' ? `<button class="btn sm ghost" data-share-driver="${m.user_id}" title="Acceso para el repartidor">🛵</button>` : ''}
+          ${m.role === 'delivery' ? `<button class="btn sm ghost" data-share-driver="${m.user_id}" title="Mandar acceso al repartidor">🛵</button>` : ''}
           ${m.role !== 'owner' && (A().isOwner() || m.role !== 'admin') && m.user_id !== A().current.id ? `<button class="btn sm ghost" data-e="${m.user_id}">✏️</button>` : ''}
         </td>
       </tr>`).join('')}
