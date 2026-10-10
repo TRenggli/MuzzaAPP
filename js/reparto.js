@@ -54,6 +54,41 @@
   const esc = U.esc;
   const money = U.money;
 
+  /* ---------------- Avisos (el mismo panel de la app: js/notifs.js) ----------------
+     Esta página no carga cloud.js ni la app: se le da al panel lo mínimo que usa. Quién puede leer qué
+     lo decide la base (RLS): el repartidor recibe solo lo suyo y los deliveries sin asignar. */
+  const PZ = /** @type {any} */ (window.PZ);
+  PZ.auth = { current: { id: '' } };
+  PZ.store = { ctx: { branches: [], branchId: '' }, branchName: () => '' };
+  PZ.views = {};
+  PZ.app = { mode: 'branch', allowedBranches: () => [], syncInfo() {} };
+  PZ.cloud = {
+    async notifications(orgId, sinceIso) {
+      const { data, error } = await sb.from('notifications').select('id, org_id, branch_id, kind, title, body, data, created_at')
+        .eq('org_id', orgId).gt('created_at', sinceIso).order('created_at', { ascending: false }).limit(300);
+      if (error) throw error;
+      return data || [];
+    },
+    async notificationState(orgId) {
+      const { data, error } = await sb.from('notification_state').select('read_until').eq('org_id', orgId).eq('user_id', PZ.auth.current.id).maybeSingle();
+      if (error) throw error;
+      return data ? data.read_until : null;
+    },
+    async markNotificationsRead(orgId, untilIso) {
+      const { error } = await sb.from('notification_state').upsert({ user_id: PZ.auth.current.id, org_id: orgId, read_until: untilIso }, { onConflict: 'user_id,org_id' });
+      if (error) throw error;
+    },
+  };
+  /** @type {any} */
+  let noticeChannel = null;
+  function startNotices(orgId) {
+    PZ.inbox.start(orgId);
+    if (noticeChannel) { sb.removeChannel(noticeChannel); noticeChannel = null; }
+    noticeChannel = sb.channel(`reparto-avisos-${orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` }, (/** @type {any} */ p) => PZ.inbox.onRemote(p))
+      .subscribe((/** @type {string} */ status) => { if (status === 'SUBSCRIBED') PZ.inbox.refresh(); });
+  }
+
   /* ---------------- Pantallas simples ---------------- */
   function shell(inner) {
     root.innerHTML = `
@@ -101,6 +136,7 @@
 
   async function signOut() {
     stopGps();
+    try { PZ.inbox.stop(); if (noticeChannel) sb.removeChannel(noticeChannel); } catch (e) { /* noop */ }
     try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { /* sin conexión: igual se borra acá */ }
     try { localStorage.removeItem('pz-reparto-branch'); } catch (e) { /* noop */ }
     location.href = 'index.html';
@@ -129,6 +165,7 @@
 
       /** el nombre y el rol salen de la sucursal elegida */
       me = { id: uid, name: '', role: '' };
+      PZ.auth.current.id = uid;
       branches.forEach((b) => { b.member = okOrgs.get(b.org_id); });
 
       let saved = '';
@@ -150,6 +187,8 @@
     me.name = branch.member.name || '';
     me.role = branch.member.role;
     try { localStorage.setItem('pz-reparto-branch', id); } catch (e) { /* noop */ }
+    PZ.store.ctx.branchId = id;
+    startNotices(branch.org_id);
     firstLoad = true;
     known = new Set();
     deliveries = [];
@@ -166,7 +205,11 @@
 
   /** La lista se refresca cada 15 s, al volver internet y al volver a la pantalla */
   function setupRefresh() {
-    const refresh = () => { if (branch && !document.hidden) loadDeliveries().then((changed) => { if (changed) render(); }); };
+    const refresh = () => {
+      if (!branch || document.hidden) return;
+      loadDeliveries().then((changed) => { if (changed) render(); });
+      PZ.inbox.refresh(); // también los avisos que se hayan perdido sin tiempo real
+    };
     setInterval(refresh, 15000);
     window.addEventListener('online', refresh);
     document.addEventListener('visibilitychange', refresh);
@@ -254,6 +297,7 @@
           <div class="bold" style="font-size:1.15rem;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
             <span>🛵 ${esc(me.name || 'Repartidor')}</span>
             ${onlyMine ? '' : `<span class="badge">${esc(ROLE_LABEL[me.role] || me.role)} · viendo todos</span>`}
+            <button class="icon-btn bell-btn" id="bell" title="Avisos" aria-label="Avisos">🔔<span class="bell-count hidden"></span></button>
             <button class="btn sm ghost" id="sign-out" style="padding:2px 8px;font-size:0.75rem">Salir</button>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
@@ -291,6 +335,8 @@
 
     const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = fn; };
     on('sign-out', signOut);
+    on('bell', () => PZ.inbox.open());
+    PZ.inbox.paintBell();
     on('refresh-btn', () => { loadDeliveries().then(render); });
     on('change-branch', (e) => { e.preventDefault(); stopGps(); pickBranch(); });
     on('enable-notifs-btn', async () => {

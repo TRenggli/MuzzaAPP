@@ -82,6 +82,8 @@ La campana 🔔 de la barra superior abre el **panel de avisos** de cada persona
 | **Repartidor** | Solo lo suyo: pedidos asignados, listos para salir, cancelados, y los deliveries listos sin asignar. |
 | **Mozo** | Solo lo suyo: sus mesas listas para servir. |
 
+La campana también está en la app del repartidor (`reparto.html`): usa el mismo panel y la misma regla del servidor.
+
 Además, cada equipo anota en su propio panel (sin salir del equipo) las alertas de sincronización: cambio rechazado, caja a la que se sumó, sin conexión en vivo, puesta al día y «otro equipo ya cobró». Pruebas: `supabase/tests/notificaciones.sql` (41 comprobaciones de visibilidad por rol, con rollback) y `tests/notifs.test.mjs`.
 
 ## Editor de comprobantes
