@@ -1,0 +1,224 @@
+{
+ "completa": {
+  "pago_delivery": {
+   "customerHTML": "0d708d94683e240a",
+   "customerHTMLCopia": "dafc5d8341d84d52",
+   "kitchenHTML": "cfaf5ff3e9c6db6d",
+   "plain": "*La Piedra Pizzería*\nComprobante de pago Nº 0001-00000012\n03/10/2026 15:40\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nDescuento: -$ 3.200\nEnvío: $ 1.500\n*TOTAL: $ 30.300*\nPagado con Efectivo: $ 30.300 (vuelto $ 9.700)\n✅ PAGADO\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "b20022659915fc4e"
+  },
+  "pago_mixto": {
+   "customerHTML": "06fa57d610c4eaa3",
+   "customerHTMLCopia": "0b730f93766c4154",
+   "kitchenHTML": "6a2796c0f4043e42",
+   "plain": "*La Piedra Pizzería*\nComprobante de pago Nº 0001-00000013\n03/10/2026 15:45\n\n3 x Muzzarella (Grande) — $ 30.000\n\nDesc. efectivo: -$ 1.000\nRecargo tarjeta: $ 500\n*TOTAL: $ 29.500*\nPagado con Transferencia: $ 10.000\nPagado con Tarjeta: $ 10.000\nPagado con Efectivo: $ 9.500\n✅ PAGADO\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "237b09f86f4dfd81"
+  },
+  "cobrar_efectivo": {
+   "customerHTML": "7b976a5b3601600c",
+   "customerHTMLCopia": "dc47d25ae1b4a880",
+   "kitchenHTML": "fda1cab62692379b",
+   "plain": "*La Piedra Pizzería*\nPedido #43\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nEnvío: $ 1.500\n*TOTAL: $ 33.500*\nDesc. pago en efectivo: -$ 500\n💵 Se paga en efectivo al recibir: *$ 33.000*\nPaga con $ 50.000 (vuelto $ 17.000)\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "e4d7465c432698dc"
+  },
+  "cobrar_justo": {
+   "customerHTML": "5859903f6d3dc281",
+   "customerHTMLCopia": "092b00402caa1249",
+   "kitchenHTML": "9b69880f5a07ff88",
+   "plain": "*La Piedra Pizzería*\nPedido #44\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\n💵 Se paga en efectivo al recibir: *$ 10.000*\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "e6cc3be46b4aeeea"
+  },
+  "cobrar_transferencia": {
+   "customerHTML": "1cfc9cb3db0018e8",
+   "customerHTMLCopia": "9589cf2aea3b9c8d",
+   "kitchenHTML": "b591d662f90ffabe",
+   "plain": "*La Piedra Pizzería*\nPedido #45\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n\n*TOTAL: $ 20.000*\nPodés transferir al alias *lapiedra.pizza* (La Piedra SRL)\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "d203d092ec93ce09"
+  },
+  "cuenta": {
+   "customerHTML": "43ecaa09c161d410",
+   "customerHTMLCopia": "e6a1f8d49c78d06a",
+   "kitchenHTML": "f2ff7ac0679b411a",
+   "plain": "*La Piedra Pizzería*\nCuenta · Mesa 5\n03/10/2026 14:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPodés transferir al alias *lapiedra.pizza* (La Piedra SRL)\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "ff5596363ae6aab1"
+  },
+  "cuenta_pagada": {
+   "customerHTML": "739b94fd72cb017d",
+   "customerHTMLCopia": "b416fef0fa9f4927",
+   "kitchenHTML": "2423ddee2ea8ca25",
+   "plain": "*La Piedra Pizzería*\nComprobante de pago Nº 0001-00000030 · Mesa 5\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPagado con QR / Mercado Pago: $ 32.000\n✅ PAGADO\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "b009fb59fe0f4184"
+  },
+  "anulado": {
+   "customerHTML": "258502009694bffe",
+   "customerHTMLCopia": "59733a0b95d1bfc2",
+   "kitchenHTML": "dc0f5397bced006a",
+   "plain": "*La Piedra Pizzería*\nComprobante de pago Nº 0001-00000014\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\nPagado con Efectivo: $ 10.000\n✅ PAGADO\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "4c6a18e4905aa332"
+  },
+  "mesa_tanda": {
+   "customerHTML": "aeb498953660d061",
+   "customerHTMLCopia": "65ea2e70c5b55b90",
+   "kitchenHTML": "1471c964aa4ac620",
+   "plain": "*La Piedra Pizzería*\nPedido #47\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPodés transferir al alias *lapiedra.pizza* (La Piedra SRL)\n\n¡Gracias por tu compra! 🍕\n_Comprobante no válido como factura_",
+   "escCustomer": null,
+   "escKitchen": "8fee8e70efc07370"
+  }
+ },
+ "angosta": {
+  "pago_delivery": {
+   "customerHTML": "d3ba590e99015b3f",
+   "customerHTMLCopia": "7c933a861a3faa1d",
+   "kitchenHTML": "d6673204d1f26626",
+   "plain": "*La Piedra Pizzería*\nRecibo Nº 0001-00000012\n03/10/2026 15:40\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nDescuento: -$ 3.200\nEnvío: $ 1.500\n*TOTAL: $ 30.300*\nPagado con Efectivo: $ 30.300 (vuelto $ 9.700)\n✅ PAGADO\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "f308be0128536a47",
+   "escKitchen": "9ff4dc7b5920c7ef"
+  },
+  "pago_mixto": {
+   "customerHTML": "c180aa9024f96aca",
+   "customerHTMLCopia": "03da42e037bd6b76",
+   "kitchenHTML": "cfbc9ca81208dac9",
+   "plain": "*La Piedra Pizzería*\nRecibo Nº 0001-00000013\n03/10/2026 15:45\n\n3 x Muzzarella (Grande) — $ 30.000\n\nDesc. efectivo: -$ 1.000\nRecargo tarjeta: $ 500\n*TOTAL: $ 29.500*\nPagado con Transferencia: $ 10.000\nPagado con Tarjeta: $ 10.000\nPagado con Efectivo: $ 9.500\n✅ PAGADO\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "e1d6f648a850b5a3",
+   "escKitchen": "a3c64cdfec523606"
+  },
+  "cobrar_efectivo": {
+   "customerHTML": "e649951d3b231a2a",
+   "customerHTMLCopia": "acf52bf0622ace6b",
+   "kitchenHTML": "228a59dccdf6411c",
+   "plain": "*La Piedra Pizzería*\nPedido #43\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nEnvío: $ 1.500\n*TOTAL: $ 33.500*\nDesc. pago en efectivo: -$ 500\n💵 Se paga en efectivo al recibir: *$ 33.000*\nPaga con $ 50.000 (vuelto $ 17.000)\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "1636da0acde1823f",
+   "escKitchen": "f216c0469bd0b283"
+  },
+  "cobrar_justo": {
+   "customerHTML": "18d2e61835d590a0",
+   "customerHTMLCopia": "a6735d134e645ad5",
+   "kitchenHTML": "ee81ebc457c6b4f6",
+   "plain": "*La Piedra Pizzería*\nPedido #44\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\n💵 Se paga en efectivo al recibir: *$ 10.000*\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "81e99e4ebeb78e2e",
+   "escKitchen": "aa6c65973adda17b"
+  },
+  "cobrar_transferencia": {
+   "customerHTML": "35f985ad45ad96c6",
+   "customerHTMLCopia": "0c627b589dc0ae7f",
+   "kitchenHTML": "c515ec36b1c69b60",
+   "plain": "*La Piedra Pizzería*\nPedido #45\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n\n*TOTAL: $ 20.000*\nPodés transferir al alias *lapiedra.pizza*\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "c3d984b30e735a21",
+   "escKitchen": "466a1b640a6c5e3e"
+  },
+  "cuenta": {
+   "customerHTML": "ac055e758ad94539",
+   "customerHTMLCopia": "6561ae1eeb5369e0",
+   "kitchenHTML": "d491f617df0b859f",
+   "plain": "*La Piedra Pizzería*\nCuenta · Mesa 5\n03/10/2026 14:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPodés transferir al alias *lapiedra.pizza*\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "290013fed33829aa",
+   "escKitchen": "2a492b03b5a2bda5"
+  },
+  "cuenta_pagada": {
+   "customerHTML": "87dfbac42ddf4c0b",
+   "customerHTMLCopia": "a969b76a3d6fc114",
+   "kitchenHTML": "d49f604bf60a05ee",
+   "plain": "*La Piedra Pizzería*\nRecibo Nº 0001-00000030 · Mesa 5\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPagado con QR / Mercado Pago: $ 32.000\n✅ PAGADO\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "cb7f8058c62bc31f",
+   "escKitchen": "da8434048d072057"
+  },
+  "anulado": {
+   "customerHTML": "a552467871278e6d",
+   "customerHTMLCopia": "25ed328c2dfb3e4b",
+   "kitchenHTML": "577bcedf7e22dfa6",
+   "plain": "*La Piedra Pizzería*\nRecibo Nº 0001-00000014\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\nPagado con Efectivo: $ 10.000\n✅ PAGADO\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "01b1541538a22156",
+   "escKitchen": "e9d8c8936ac4e43b"
+  },
+  "mesa_tanda": {
+   "customerHTML": "744b2b2d1a8238d4",
+   "customerHTMLCopia": "78000372f3574941",
+   "kitchenHTML": "963002faf20291f7",
+   "plain": "*La Piedra Pizzería*\nPedido #47\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPodés transferir al alias *lapiedra.pizza*\n\nVolvé pronto 🍕\n_Gracias_",
+   "escCustomer": "9b28585a3c1c3299",
+   "escKitchen": "9c8f6f434ce60c46"
+  }
+ },
+ "minima": {
+  "pago_delivery": {
+   "customerHTML": "0b746a25de0e1aba",
+   "customerHTMLCopia": "59597abe091f46f6",
+   "kitchenHTML": "cfaf5ff3e9c6db6d",
+   "plain": "*Pizza*\nTicket Nº 0001-00000012\n03/10/2026 15:40\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nDescuento: -$ 3.200\nEnvío: $ 1.500\n*TOTAL: $ 30.300*\nPagado con Efectivo: $ 30.300 (vuelto $ 9.700)\n✅ PAGADO\n\n 🍕",
+   "escCustomer": "d133bff963afb395",
+   "escKitchen": "b20022659915fc4e"
+  },
+  "pago_mixto": {
+   "customerHTML": "c586cc7a077b534a",
+   "customerHTMLCopia": "345573a00448746a",
+   "kitchenHTML": "6a2796c0f4043e42",
+   "plain": "*Pizza*\nTicket Nº 0001-00000013\n03/10/2026 15:45\n\n3 x Muzzarella (Grande) — $ 30.000\n\nDesc. efectivo: -$ 1.000\nRecargo tarjeta: $ 500\n*TOTAL: $ 29.500*\nPagado con Transferencia: $ 10.000\nPagado con Tarjeta: $ 10.000\nPagado con Efectivo: $ 9.500\n✅ PAGADO\n\n 🍕",
+   "escCustomer": "4acd727691018056",
+   "escKitchen": "237b09f86f4dfd81"
+  },
+  "cobrar_efectivo": {
+   "customerHTML": "31e3bad4690fbca8",
+   "customerHTMLCopia": "e67ae8b783d24347",
+   "kitchenHTML": "fda1cab62692379b",
+   "plain": "*Pizza*\nPedido #43\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\nEnvío: $ 1.500\n*TOTAL: $ 33.500*\nDesc. pago en efectivo: -$ 500\n💵 Se paga en efectivo al recibir: *$ 33.000*\nPaga con $ 50.000 (vuelto $ 17.000)\n\n 🍕",
+   "escCustomer": "76aa2acfaf1824c8",
+   "escKitchen": "e4d7465c432698dc"
+  },
+  "cobrar_justo": {
+   "customerHTML": "57aa635eb7754c79",
+   "customerHTMLCopia": "00669fc01a78a8ae",
+   "kitchenHTML": "9b69880f5a07ff88",
+   "plain": "*Pizza*\nPedido #44\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\n💵 Se paga en efectivo al recibir: *$ 10.000*\n\n 🍕",
+   "escCustomer": "1cefbcda1430f420",
+   "escKitchen": "e6cc3be46b4aeeea"
+  },
+  "cobrar_transferencia": {
+   "customerHTML": "e4aef6da6d718ac4",
+   "customerHTMLCopia": "0d19294fb096364a",
+   "kitchenHTML": "b591d662f90ffabe",
+   "plain": "*Pizza*\nPedido #45\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n\n*TOTAL: $ 20.000*\n\n 🍕",
+   "escCustomer": "720472bf737ece2b",
+   "escKitchen": "d203d092ec93ce09"
+  },
+  "cuenta": {
+   "customerHTML": "45a0c1b32ceece0d",
+   "customerHTMLCopia": "a3883a7858e5fe74",
+   "kitchenHTML": "f2ff7ac0679b411a",
+   "plain": "*Pizza*\nCuenta · Mesa 5\n03/10/2026 14:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\n\n 🍕",
+   "escCustomer": "cbc870e542a83609",
+   "escKitchen": "ff5596363ae6aab1"
+  },
+  "cuenta_pagada": {
+   "customerHTML": "f1cbf26fced2a11f",
+   "customerHTMLCopia": "92a17cad73d5a1fa",
+   "kitchenHTML": "2423ddee2ea8ca25",
+   "plain": "*Pizza*\nTicket Nº 0001-00000030 · Mesa 5\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\nPagado con QR / Mercado Pago: $ 32.000\n✅ PAGADO\n\n 🍕",
+   "escCustomer": "a8446e2d9b696372",
+   "escKitchen": "b009fb59fe0f4184"
+  },
+  "anulado": {
+   "customerHTML": "884002f1eb850530",
+   "customerHTMLCopia": "ed9d6172919a819c",
+   "kitchenHTML": "dc0f5397bced006a",
+   "plain": "*Pizza*\nTicket Nº 0001-00000014\n03/10/2026 15:30\n\n1 x Muzzarella (Grande) — $ 10.000\n\n*TOTAL: $ 10.000*\nPagado con Efectivo: $ 10.000\n✅ PAGADO\n\n 🍕",
+   "escCustomer": "25f377786a1ffd90",
+   "escKitchen": "4c6a18e4905aa332"
+  },
+  "mesa_tanda": {
+   "customerHTML": "9cbf741b7a90be79",
+   "customerHTMLCopia": "cbb06508993d4ac7",
+   "kitchenHTML": "1471c964aa4ac620",
+   "plain": "*Pizza*\nPedido #47\n03/10/2026 15:30\n\n2 x Muzzarella (Grande) — $ 20.000\n   + Huevo\n   » bien cocida\n1 x Fugazzeta — $ 12.000\n\n*TOTAL: $ 32.000*\n\n 🍕",
+   "escCustomer": "22dfdddb1c3de743",
+   "escKitchen": "8fee8e70efc07370"
+  }
+ }
+}

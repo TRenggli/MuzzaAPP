@@ -35,8 +35,23 @@
   };
 
   const pad = (n, len = 8) => String(n).padStart(len, '0');
+
+  /* ---------- Qué sale en cada comprobante ----------
+     Cada sucursal elige qué datos salen en cada tipo de comprobante (Configuración → Ticket e
+     impresora → «Qué sale en cada comprobante»). Un solo origen para los cinco formatos (pantalla,
+     térmica, WhatsApp, comanda en pantalla y comanda térmica): así sale igual en todos. */
+  /** Tipo de comprobante del cliente: pagado, a cobrar o pre-cuenta de una mesa @param {any} o @returns {'pago' | 'cobrar' | 'cuenta'} */
+  const kindOf = (o) => (o.paid ? 'pago' : o.tableBill ? 'cuenta' : 'cobrar');
+  /** @param {string} kind @returns {Record<string, any>} */
+  const layoutOf = (kind) => { const L = PZ.store.data.settings.ticket.layout; return (L && L[kind]) || {}; };
+  /** ¿Sale este bloque en este tipo de comprobante? Lo que no está definido sale (como siempre). */
+  const show = (kind, block) => layoutOf(kind)[block] !== false;
+  /** Título y mensaje al pie propios de ese tipo de comprobante (vacío = el de siempre) */
+  const customTitle = (kind) => String(layoutOf(kind).title || '').trim();
+  const footerOf = (kind) => String(layoutOf(kind).footer || '').trim() || PZ.store.data.settings.ticket.footer;
+
   /** Título del papel: lo elige cada sucursal (comprobante, recibo, ticket…) */
-  const docTitle = (o) => (o.paid ? (PZ.store.data.settings.ticket.docTitle || 'Comprobante de pago') : o.tableBill ? 'Cuenta de la mesa' : 'Comprobante de pedido');
+  const docTitle = (o) => customTitle(kindOf(o)) || (o.paid ? (PZ.store.data.settings.ticket.docTitle || 'Comprobante de pago') : o.tableBill ? 'Cuenta de la mesa' : 'Comprobante de pedido');
   /** "Pedido #12" o, para la cuenta completa de una mesa, "Mesa 3" */
   const orderRef = (o) => (o.tableBill ? String(o.number) : 'Pedido #' + o.number);
   /** Sello: la cuenta de mesa antes de cobrar no es un comprobante de pago */
@@ -96,6 +111,14 @@
     .paper .pay-info{border:1.5px solid #000;border-radius:1.5mm;padding:1.5mm;margin-top:1.5mm}
   `;
 
+  /** Texto del QR del ticket (vacío si no hay) */
+  function qrTextOf(t, b) {
+    let qr = '';
+    if (t.qrMode === 'instagram' && b.instagram) qr = 'https://instagram.com/' + b.instagram.replace(/^@/, '');
+    if (t.qrMode === 'custom' && t.qrText) qr = t.qrText;
+    return qr;
+  }
+
   /* ======================= Ticket del cliente ======================= */
   function customerHTML(o, { copy = '' } = {}) {
     const st = PZ.store.data.settings;
@@ -104,12 +127,14 @@
     const w58 = Number(t.width) === 58;
     const seller = PZ.store.user(o.userId);
     const L = PZ.labels;
-    const logo = t.showLogo ? (t.logo ? `<div class="logo"><img src="${t.logo}" alt=""></div>` : `<div class="logo">${PZ.brandLogo(w58 ? 40 : 52, true)}</div>`) : '';
+    const kind = kindOf(o);
+    const on = (block) => show(kind, block);
+    const logo = on('logo') && t.showLogo ? (t.logo ? `<div class="logo"><img src="${t.logo}" alt=""></div>` : `<div class="logo">${PZ.brandLogo(w58 ? 40 : 52, true)}</div>`) : '';
 
     const items = o.items.map((it) => `
       <div class="it">
         <div class="row"><span>${it.qty} x ${U.esc(it.name)}${it.variantName ? ' (' + U.esc(it.variantName) + ')' : ''}</span><span>${U.money(it.unitPrice * it.qty)}</span></div>
-        ${it.qty > 1 ? `<div class="sub">${U.money(it.unitPrice)} c/u</div>` : ''}
+        ${it.qty > 1 && on('precioUnit') ? `<div class="sub">${U.money(it.unitPrice)} c/u</div>` : ''}
         ${it.extras.map((e) => `<div class="sub">+ ${U.esc(e.name)}${e.price ? ' ' + U.money(e.price) : ''}</div>`).join('')}
         ${it.notes ? `<div class="sub">» ${U.esc(it.notes)}</div>` : ''}
       </div>`).join('');
@@ -128,7 +153,7 @@
 
     // lo cobra el repartidor: cuánto cobra y el vuelto que lleva (sin datos de transferencia)
     const cash = collectOf(o);
-    const cashInfo = cash ? `<div class="box">
+    const cashInfo = cash && on('cobroEfectivo') ? `<div class="box">
         ${cash.discount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(cash.discount)}</span></div>` : ''}
         <div class="row" style="font-size:1.15em"><span>COBRAR EN EFECTIVO</span><span>${U.money(cash.amount)}</span></div>
         ${cash.change ? `<div class="row"><span>Paga con</span><span>${U.money(cash.tendered)}</span></div>
@@ -136,52 +161,58 @@
         : cash.tendered ? '<div>Paga justo, sin vuelto</div>' : ''}
       </div>` : '';
 
-    const unpaidInfo = !o.paid && !cash && (st.payments.alias || st.payments.cbu)
+    const unpaidInfo = !o.paid && !cash && on('transferencia') && (st.payments.alias || st.payments.cbu)
       ? `<div class="pay-info small"><b>Podés pagar por transferencia:</b><br>${st.payments.alias ? 'Alias: <b>' + U.esc(st.payments.alias) + '</b><br>' : ''}${st.payments.cbu ? 'CBU/CVU: ' + U.esc(st.payments.cbu) + '<br>' : ''}${st.payments.holder ? 'Titular: ' + U.esc(st.payments.holder) : ''}</div>`
       : '';
 
-    let qrText = '';
-    if (t.qrMode === 'instagram' && b.instagram) qrText = 'https://instagram.com/' + b.instagram.replace(/^@/, '');
-    if (t.qrMode === 'custom' && t.qrText) qrText = t.qrText;
+    const qrText = qrTextOf(t, b);
+    const wantQr = !!qrText && on('qr');
+    const wantLegend = !!t.legend && on('leyenda');
+    // el domicilio y el CUIT comparten el renglón de abajo del nombre
+    const addrOn = on('direccion');
+    const cuitOn = on('cuit') && !!b.cuit;
+    const addrPart = addrOn ? `${U.esc(b.address)}${b.city ? ' · ' + U.esc(b.city) : ''}<br>
+        ${b.phone ? 'Tel/WhatsApp: ' + U.esc(b.phone) : ''}` : '';
+    const cuitPart = cuitOn ? (addrOn ? '<br>' : '') + 'CUIT: ' + U.esc(b.cuit) + (b.taxCondition ? ' · ' + U.esc(b.taxCondition) : '') : '';
+    const addrBlock = addrOn || cuitOn ? `<div class="c small" style="margin-top:1mm">
+        ${addrPart}
+        ${cuitPart}
+      </div>` : '';
 
     return `
     <div class="paper ${w58 ? 'w58' : ''}">
       ${logo}
-      <div class="biz">${U.esc(b.name)}</div>
-      ${b.slogan ? `<div class="slogan small">${U.esc(b.slogan)}</div>` : ''}
-      ${PZ.store.ctx.branches.length > 1 ? `<div class="c" style="font-weight:800;margin-top:.5mm">Sucursal ${U.esc(PZ.store.branchName())}</div>` : ''}
-      <div class="c small" style="margin-top:1mm">
-        ${U.esc(b.address)}${b.city ? ' · ' + U.esc(b.city) : ''}<br>
-        ${b.phone ? 'Tel/WhatsApp: ' + U.esc(b.phone) : ''}
-        ${b.cuit ? '<br>CUIT: ' + U.esc(b.cuit) + (b.taxCondition ? ' · ' + U.esc(b.taxCondition) : '') : ''}
-      </div>
+      ${on('negocio') ? `<div class="biz">${U.esc(b.name)}</div>` : ''}
+      ${on('negocio') && b.slogan ? `<div class="slogan small">${U.esc(b.slogan)}</div>` : ''}
+      ${on('sucursal') && PZ.store.ctx.branches.length > 1 ? `<div class="c" style="font-weight:800;margin-top:.5mm">Sucursal ${U.esc(PZ.store.branchName())}</div>` : ''}
+      ${addrBlock}
       <hr class="solid">
       <div class="doc"><span>${U.esc(docTitle(o).toUpperCase())}</span></div>
-      <div class="row"><span>${o.paid ? 'Nº ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido'}</span><span>${U.esc(orderRef(o))}</span></div>
-      <div class="row small"><span>Fecha: ${U.date(o.paidAt || o.createdAt)}</span><span>Hora: ${U.time(o.paidAt || o.createdAt)}</span></div>
-      <div class="row small"><span>${L.type[o.type] || o.type}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</span><span>Atendió: ${U.esc(seller ? seller.name : '-')}</span></div>
-      ${o.customerName ? `<div class="small">Cliente: <b>${U.esc(o.customerName)}</b>${o.phone ? ' · ' + U.esc(o.phone) : ''}</div>` : ''}
-      ${o.type === 'delivery' && o.address ? `<div class="small">Entrega: ${U.esc(o.address)}</div>` : ''}
+      ${on('numero') ? `<div class="row"><span>${o.paid ? 'Nº ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido'}</span><span>${U.esc(orderRef(o))}</span></div>` : ''}
+      ${on('numero') ? `<div class="row small"><span>Fecha: ${U.date(o.paidAt || o.createdAt)}</span><span>Hora: ${U.time(o.paidAt || o.createdAt)}</span></div>` : ''}
+      ${on('tipo') ? `<div class="row small"><span>${L.type[o.type] || o.type}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</span><span>Atendió: ${U.esc(seller ? seller.name : '-')}</span></div>` : ''}
+      ${on('cliente') && o.customerName ? `<div class="small">Cliente: <b>${U.esc(o.customerName)}</b>${o.phone ? ' · ' + U.esc(o.phone) : ''}</div>` : ''}
+      ${on('entrega') && o.type === 'delivery' && o.address ? `<div class="small">Entrega: ${U.esc(o.address)}</div>` : ''}
       ${copy ? `<div class="c small" style="font-weight:800;margin-top:1mm">— ${U.esc(copy)} —</div>` : ''}
       <hr>
       ${items}
       <hr>
       <div class="row"><span>Subtotal</span><span>${U.money(o.subtotal)}</span></div>
-      ${o.discountAmount ? `<div class="row"><span>Descuento${o.discount && o.discount.type === '%' ? ' ' + o.discount.value + '%' : ''}</span><span>-${U.money(o.discountAmount)}</span></div>` : ''}
-      ${o.cashDiscount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(o.cashDiscount)}</span></div>` : ''}
-      ${o.deliveryFee ? `<div class="row"><span>Envío</span><span>${U.money(o.deliveryFee)}</span></div>` : ''}
-      ${o.surcharge ? `<div class="row"><span>Recargo tarjeta</span><span>${U.money(o.surcharge)}</span></div>` : ''}
+      ${on('descuentos') && o.discountAmount ? `<div class="row"><span>Descuento${o.discount && o.discount.type === '%' ? ' ' + o.discount.value + '%' : ''}</span><span>-${U.money(o.discountAmount)}</span></div>` : ''}
+      ${on('descuentos') && o.cashDiscount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(o.cashDiscount)}</span></div>` : ''}
+      ${on('descuentos') && o.deliveryFee ? `<div class="row"><span>Envío</span><span>${U.money(o.deliveryFee)}</span></div>` : ''}
+      ${on('descuentos') && o.surcharge ? `<div class="row"><span>Recargo tarjeta</span><span>${U.money(o.surcharge)}</span></div>` : ''}
       <div class="row tot"><span>TOTAL</span><span>${U.money(o.total)}</span></div>
-      ${o.paid ? `<hr><div class="small" style="font-weight:800;margin-bottom:.5mm">FORMA DE PAGO</div>${pays}` : ''}
+      ${o.paid && on('formaPago') ? `<hr><div class="small" style="font-weight:800;margin-bottom:.5mm">FORMA DE PAGO</div>${pays}` : ''}
       ${cashInfo}
       <div class="c"><div class="stamp">${stampOf(o)}</div></div>
       ${o.tableBill && !o.paid ? '<div class="c small" style="font-weight:700">No válido como comprobante de pago</div>' : ''}
       ${unpaidInfo}
-      ${o.notes ? `<div class="small" style="margin-top:1.5mm">Nota: ${U.esc(o.notes)}</div>` : ''}
-      <hr>
-      <div class="c" style="font-weight:700">${U.esc(t.footer)}</div>
-      ${qrText ? `<div class="qr">${U.qrSvg(qrText, 3, 1)}</div><div class="c small">${t.qrMode === 'instagram' ? 'Seguinos ' + U.esc(b.instagram) : ''}</div>` : ''}
-      ${t.legend ? `<div class="legend">${U.esc(t.legend)}</div>` : ''}
+      ${o.notes && on('nota') ? `<div class="small" style="margin-top:1.5mm">Nota: ${U.esc(o.notes)}</div>` : ''}
+      ${on('pie') || wantQr || wantLegend ? '<hr>' : ''}
+      ${on('pie') ? `<div class="c" style="font-weight:700">${U.esc(footerOf(kind))}</div>` : ''}
+      ${wantQr ? `<div class="qr">${U.qrSvg(qrText, 3, 1)}</div><div class="c small">${t.qrMode === 'instagram' ? 'Seguinos ' + U.esc(b.instagram) : ''}</div>` : ''}
+      ${wantLegend ? `<div class="legend">${U.esc(t.legend)}</div>` : ''}
     </div>`;
   }
 
@@ -189,23 +220,24 @@
   function kitchenHTML(o) {
     const t = PZ.store.data.settings.ticket;
     const L = PZ.labels;
+    const on = (block) => show('comanda', block);
     return `
     <div class="paper ${Number(t.width) === 58 ? 'w58' : ''}">
-      <div class="c small" style="font-weight:800">COMANDA · COCINA</div>
+      <div class="c small" style="font-weight:800">${U.esc(customTitle('comanda') || 'COMANDA · COCINA')}</div>
       <div class="big">${U.esc(kitchenHead(o))}</div>
       ${o.tableSessionId ? `<div class="c" style="font-weight:800">TANDA ${o.batchNumber || 1} · #${o.number}</div>` : ''}
       ${o.tableSessionId ? '' : `<div class="c" style="font-weight:800;font-size:1.2em">${(L.type[o.type] || o.type).toUpperCase()}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}</div>`}
-      <div class="c small">${U.dateTime(o.createdAt)}${o.eta ? ' · Entrega: ' + U.esc(o.eta) : ''}</div>
-      ${o.customerName ? `<div class="c">${U.esc(o.customerName)}</div>` : ''}
+      ${on('hora') ? `<div class="c small">${U.dateTime(o.createdAt)}${o.eta ? ' · Entrega: ' + U.esc(o.eta) : ''}</div>` : ''}
+      ${on('cliente') && o.customerName ? `<div class="c">${U.esc(o.customerName)}</div>` : ''}
       <hr class="solid">
       ${o.items.map((it) => `
         <div class="kit-it">${it.qty} x ${U.esc(it.name)}${it.variantName ? ' <span class="sub">(' + U.esc(it.variantName) + ')</span>' : ''}
           ${it.extras.map((e) => `<div class="sub">+ ${U.esc(e.name)}</div>`).join('')}
           ${it.notes ? `<div class="box">» ${U.esc(it.notes)}</div>` : ''}
         </div>`).join('')}
-      ${o.notes ? `<hr><div class="box">NOTA: ${U.esc(o.notes)}</div>` : ''}
+      ${on('notas') && o.notes ? `<hr><div class="box">NOTA: ${U.esc(o.notes)}</div>` : ''}
       <hr class="solid">
-      <div class="c small">${kitchenFoot(o)}</div>
+      ${on('cobro') ? `<div class="c small">${kitchenFoot(o)}</div>` : ''}
     </div>`;
   }
 
@@ -382,36 +414,38 @@
     const w58 = Number(t.width) === 58;
     const e = new EscPos(w58 ? 32 : 48, !!t.escposAccents);
     const seller = PZ.store.user(o.userId);
+    const kind = kindOf(o);
+    const on = (block) => show(kind, block);
     e.align('c');
-    if (t.showLogo) { const c = await logoCanvas(w58 ? 384 : 576); if (c) e.image(c).ln(); }
-    e.bold(true).size(2, 2).ln(b.name.toUpperCase()).size(1, 1).bold(false);
-    if (b.slogan) e.ln(b.slogan);
-    if (PZ.store.ctx.branches.length > 1) e.bold(true).ln('Sucursal ' + PZ.store.branchName()).bold(false);
-    e.ln(`${b.address}${b.city ? ' - ' + b.city : ''}`);
-    if (b.phone) e.ln('Tel/WhatsApp: ' + b.phone);
-    if (b.cuit) e.ln('CUIT: ' + b.cuit + (b.taxCondition ? ' - ' + b.taxCondition : ''));
+    if (on('logo') && t.showLogo) { const c = await logoCanvas(w58 ? 384 : 576); if (c) e.image(c).ln(); }
+    if (on('negocio')) e.bold(true).size(2, 2).ln(b.name.toUpperCase()).size(1, 1).bold(false);
+    if (on('negocio') && b.slogan) e.ln(b.slogan);
+    if (on('sucursal') && PZ.store.ctx.branches.length > 1) e.bold(true).ln('Sucursal ' + PZ.store.branchName()).bold(false);
+    if (on('direccion')) e.ln(`${b.address}${b.city ? ' - ' + b.city : ''}`);
+    if (on('direccion') && b.phone) e.ln('Tel/WhatsApp: ' + b.phone);
+    if (on('cuit') && b.cuit) e.ln('CUIT: ' + b.cuit + (b.taxCondition ? ' - ' + b.taxCondition : ''));
     e.align('l').sep('=');
     e.bold(true).ln(docTitle(o).toUpperCase()).bold(false);
-    e.pair(o.paid ? 'N ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido', orderRef(o));
-    e.pair('Fecha: ' + U.date(o.paidAt || o.createdAt), 'Hora: ' + U.time(o.paidAt || o.createdAt));
-    e.pair((L.type[o.type] || o.type) + (o.type === 'mesa' && o.table ? ' ' + o.table : ''), 'Atendio: ' + (seller ? seller.name : '-'));
-    if (o.customerName) e.ln('Cliente: ' + o.customerName + (o.phone ? ' - ' + o.phone : ''));
-    if (o.type === 'delivery' && o.address) e.wrap('Entrega: ' + o.address);
+    if (on('numero')) e.pair(o.paid ? 'N ' + ticketId(o) : o.tableBill ? 'Cuenta' : 'Pedido', orderRef(o));
+    if (on('numero')) e.pair('Fecha: ' + U.date(o.paidAt || o.createdAt), 'Hora: ' + U.time(o.paidAt || o.createdAt));
+    if (on('tipo')) e.pair((L.type[o.type] || o.type) + (o.type === 'mesa' && o.table ? ' ' + o.table : ''), 'Atendio: ' + (seller ? seller.name : '-'));
+    if (on('cliente') && o.customerName) e.ln('Cliente: ' + o.customerName + (o.phone ? ' - ' + o.phone : ''));
+    if (on('entrega') && o.type === 'delivery' && o.address) e.wrap('Entrega: ' + o.address);
     e.sep();
     o.items.forEach((it) => {
       e.bold(true).pair(`${it.qty} x ${it.name}${it.variantName ? ' (' + it.variantName + ')' : ''}`, U.money(it.unitPrice * it.qty)).bold(false);
-      if (it.qty > 1) e.ln('   ' + U.money(it.unitPrice) + ' c/u');
+      if (it.qty > 1 && on('precioUnit')) e.ln('   ' + U.money(it.unitPrice) + ' c/u');
       it.extras.forEach((x) => e.ln('   + ' + x.name + (x.price ? ' ' + U.money(x.price) : '')));
       if (it.notes) e.wrap('» ' + it.notes, '   ');
     });
     e.sep();
     e.pair('Subtotal', U.money(o.subtotal));
-    if (o.discountAmount) e.pair('Descuento', '-' + U.money(o.discountAmount));
-    if (o.cashDiscount) e.pair('Desc. pago efectivo', '-' + U.money(o.cashDiscount));
-    if (o.deliveryFee) e.pair('Envio', U.money(o.deliveryFee));
-    if (o.surcharge) e.pair('Recargo tarjeta', U.money(o.surcharge));
+    if (on('descuentos') && o.discountAmount) e.pair('Descuento', '-' + U.money(o.discountAmount));
+    if (on('descuentos') && o.cashDiscount) e.pair('Desc. pago efectivo', '-' + U.money(o.cashDiscount));
+    if (on('descuentos') && o.deliveryFee) e.pair('Envio', U.money(o.deliveryFee));
+    if (on('descuentos') && o.surcharge) e.pair('Recargo tarjeta', U.money(o.surcharge));
     e.bold(true).size(1, 2).pair('TOTAL', U.money(o.total)).size(1, 1).bold(false);
-    if (o.paid) {
+    if (o.paid && on('formaPago')) {
       e.sep().bold(true).ln('FORMA DE PAGO').bold(false);
       o.payments.forEach((p) => {
         e.pair((L.method[p.method] || p.method) + (p.cardType ? ' de ' + p.cardType : ''), U.money(p.amount));
@@ -423,7 +457,7 @@
       });
     }
     const cash = collectOf(o);
-    if (cash) {
+    if (cash && on('cobroEfectivo')) {
       e.sep();
       if (cash.discount) e.pair('Desc. pago efectivo', '-' + U.money(cash.discount));
       e.bold(true).pair('COBRAR EN EFECTIVO', U.money(cash.amount)).bold(false);
@@ -432,32 +466,35 @@
     }
     e.align('c').ln().bold(true).size(2, 2).ln(stampOf(o)).size(1, 1).bold(false);
     if (o.tableBill && !o.paid) e.ln('No valido como comprobante de pago');
-    if (!o.paid && !cash && st.payments.alias) e.ln('Alias: ' + st.payments.alias);
-    if (o.notes) e.align('l').wrap('Nota: ' + o.notes).align('c');
-    e.sep().ln(t.footer);
-    let qrText = '';
-    if (t.qrMode === 'instagram' && b.instagram) qrText = 'https://instagram.com/' + b.instagram.replace(/^@/, '');
-    if (t.qrMode === 'custom' && t.qrText) qrText = t.qrText;
-    if (qrText) { e.qr(qrText, w58 ? 5 : 6).ln(); if (t.qrMode === 'instagram') e.ln('Seguinos ' + b.instagram); }
-    if (t.legend) e.bold(true).ln(t.legend).bold(false);
+    if (!o.paid && !cash && st.payments.alias && on('transferencia')) e.ln('Alias: ' + st.payments.alias);
+    if (o.notes && on('nota')) e.align('l').wrap('Nota: ' + o.notes).align('c');
+    const qrText = qrTextOf(t, b);
+    const wantQr = !!qrText && on('qr');
+    const wantLegend = !!t.legend && on('leyenda');
+    if (on('pie') || wantQr || wantLegend) e.sep();
+    if (on('pie')) e.ln(footerOf(kind));
+    if (wantQr) { e.qr(qrText, w58 ? 5 : 6).ln(); if (t.qrMode === 'instagram') e.ln('Seguinos ' + b.instagram); }
+    if (wantLegend) e.bold(true).ln(t.legend).bold(false);
     return e.feed(4).cut().bytes();
   }
 
   function escposKitchen(o) {
     const t = PZ.store.data.settings.ticket, L = PZ.labels;
     const e = new EscPos(Number(t.width) === 58 ? 32 : 48, !!t.escposAccents);
-    e.align('c').bold(true).ln('COMANDA - COCINA').size(3, 3).ln(kitchenHead(o)).size(2, 1)
-      .ln(o.tableSessionId ? `TANDA ${o.batchNumber || 1} - #${o.number}` : (L.type[o.type] || o.type).toUpperCase() + (o.type === 'mesa' && o.table ? ' ' + o.table : '')).size(1, 1).bold(false)
-      .ln(U.dateTime(o.createdAt) + (o.eta ? ' - Entrega: ' + o.eta : ''));
-    if (o.customerName) e.ln(o.customerName);
+    const on = (block) => show('comanda', block);
+    e.align('c').bold(true).ln(customTitle('comanda') || 'COMANDA - COCINA').size(3, 3).ln(kitchenHead(o)).size(2, 1)
+      .ln(o.tableSessionId ? `TANDA ${o.batchNumber || 1} - #${o.number}` : (L.type[o.type] || o.type).toUpperCase() + (o.type === 'mesa' && o.table ? ' ' + o.table : '')).size(1, 1).bold(false);
+    if (on('hora')) e.ln(U.dateTime(o.createdAt) + (o.eta ? ' - Entrega: ' + o.eta : ''));
+    if (on('cliente') && o.customerName) e.ln(o.customerName);
     e.align('l').sep('=');
     o.items.forEach((it) => {
       e.bold(true).size(1, 2).ln(`${it.qty} x ${it.name}${it.variantName ? ' (' + it.variantName + ')' : ''}`).size(1, 1).bold(false);
       it.extras.forEach((x) => e.ln('   + ' + x.name));
       if (it.notes) e.bold(true).wrap('>> ' + it.notes, '   ').bold(false);
     });
-    if (o.notes) e.sep().bold(true).wrap('NOTA: ' + o.notes).bold(false);
-    e.sep('=').align('c').ln(kitchenFoot(o));
+    if (on('notas') && o.notes) e.sep().bold(true).wrap('NOTA: ' + o.notes).bold(false);
+    e.sep('=').align('c');
+    if (on('cobro')) e.ln(kitchenFoot(o));
     return e.feed(4).cut().bytes();
   }
 
@@ -547,10 +584,12 @@
   /* ======================= Texto plano (WhatsApp) ======================= */
   function plainText(o) {
     const st = PZ.store.data.settings, L = PZ.labels;
+    const kind = kindOf(o);
+    const on = (block) => show(kind, block);
     const lines = [];
-    lines.push(`*${st.business.name}*`);
-    lines.push(o.paid ? `${docTitle(o)} Nº ${ticketId(o)}${o.tableBill ? ' · ' + o.number : ''}` : o.tableBill ? `Cuenta · ${o.number}` : `Pedido #${o.number}`);
-    lines.push(U.dateTime(o.paidAt || o.createdAt));
+    if (on('negocio')) lines.push(`*${st.business.name}*`);
+    if (on('numero')) lines.push(o.paid ? `${docTitle(o)} Nº ${ticketId(o)}${o.tableBill ? ' · ' + o.number : ''}` : o.tableBill ? `Cuenta · ${o.number}` : `Pedido #${o.number}`);
+    if (on('numero')) lines.push(U.dateTime(o.paidAt || o.createdAt));
     lines.push('');
     o.items.forEach((it) => {
       lines.push(`${it.qty} x ${it.name}${it.variantName ? ' (' + it.variantName + ')' : ''} — ${U.money(it.unitPrice * it.qty)}`);
@@ -558,25 +597,27 @@
       if (it.notes) lines.push(`   » ${it.notes}`);
     });
     lines.push('');
-    if (o.discountAmount) lines.push(`Descuento: -${U.money(o.discountAmount)}`);
-    if (o.cashDiscount) lines.push(`Desc. efectivo: -${U.money(o.cashDiscount)}`);
-    if (o.deliveryFee) lines.push(`Envío: ${U.money(o.deliveryFee)}`);
-    if (o.surcharge) lines.push(`Recargo tarjeta: ${U.money(o.surcharge)}`);
+    if (on('descuentos') && o.discountAmount) lines.push(`Descuento: -${U.money(o.discountAmount)}`);
+    if (on('descuentos') && o.cashDiscount) lines.push(`Desc. efectivo: -${U.money(o.cashDiscount)}`);
+    if (on('descuentos') && o.deliveryFee) lines.push(`Envío: ${U.money(o.deliveryFee)}`);
+    if (on('descuentos') && o.surcharge) lines.push(`Recargo tarjeta: ${U.money(o.surcharge)}`);
     lines.push(`*TOTAL: ${U.money(o.total)}*`);
     const cash = collectOf(o);
     if (o.paid) {
-      o.payments.forEach((p) => lines.push(`Pagado con ${L.method[p.method]}: ${U.money(p.amount)}${p.tendered > p.amount ? ` (vuelto ${U.money(p.tendered - p.amount)})` : ''}`));
+      if (on('formaPago')) o.payments.forEach((p) => lines.push(`Pagado con ${L.method[p.method]}: ${U.money(p.amount)}${p.tendered > p.amount ? ` (vuelto ${U.money(p.tendered - p.amount)})` : ''}`));
       lines.push('✅ PAGADO');
     } else if (cash) {
-      if (cash.discount) lines.push(`Desc. pago en efectivo: -${U.money(cash.discount)}`);
-      lines.push(`💵 Se paga en efectivo al recibir: *${U.money(cash.amount)}*`);
-      if (cash.change) lines.push(`Paga con ${U.money(cash.tendered)} (vuelto ${U.money(cash.change)})`);
-    } else if (st.payments.alias) {
+      if (on('cobroEfectivo')) {
+        if (cash.discount) lines.push(`Desc. pago en efectivo: -${U.money(cash.discount)}`);
+        lines.push(`💵 Se paga en efectivo al recibir: *${U.money(cash.amount)}*`);
+        if (cash.change) lines.push(`Paga con ${U.money(cash.tendered)} (vuelto ${U.money(cash.change)})`);
+      }
+    } else if (st.payments.alias && on('transferencia')) {
       lines.push(`Podés transferir al alias *${st.payments.alias}*${st.payments.holder ? ' (' + st.payments.holder + ')' : ''}`);
     }
     lines.push('');
-    lines.push(st.ticket.footer + ' 🍕');
-    if (st.ticket.legend) lines.push(`_${st.ticket.legend}_`);
+    if (on('pie')) lines.push(footerOf(kind) + ' 🍕');
+    if (st.ticket.legend && on('leyenda')) lines.push(`_${st.ticket.legend}_`);
     return lines.join('\n');
   }
 
@@ -589,6 +630,8 @@
     plainText,
     collectOf,
     ticketId,
+    kindOf,
+    show,
     escpos: { customer: escposCustomer, kitchen: escposKitchen, close: escposClose },
 
     async printOrder(o, { kitchen = false, customer = true } = {}) {

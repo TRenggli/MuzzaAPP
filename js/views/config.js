@@ -6,6 +6,9 @@
   const U = PZ.util;
   const S = PZ.store;
   let tab = 'negocio';
+  /** Editor de comprobantes: qué tipo se está editando y si el ejemplo "A cobrar" lo cobra el repartidor */
+  let layKind = 'pago';
+  let layCash = false;
 
   const TABS = [
     ['negocio', '🏪 Negocio'], ['ticket', '🧾 Ticket e impresora'], ['cobros', '💳 Cobros'], ['delivery', '🛵 Delivery'],
@@ -45,6 +48,136 @@
         after && after();
       });
     });
+  }
+
+  /* ---------------- Qué sale en cada comprobante ---------------- */
+  /** Pedido de ejemplo de cada tipo, armado en memoria (nunca se guarda) */
+  function sampleOrder(kind) {
+    const now = Date.now();
+    const me = PZ.auth.current;
+    const item = (name, variantName, price, qty, extra = {}) => ({ id: U.uid('it-'), productId: '', variantId: '', variantName, name, extras: [], qty, unitPrice: price, total: price * qty, cost: 0, notes: '', ...extra });
+    const items = [item('Muzzarella', 'Grande', 10000, 2, { extras: [{ id: 'e', name: 'Huevo', price: 1000 }], notes: 'bien cocida' }), item('Fugazzeta', '', 12000, 1)];
+    /** @type {any} */
+    const base = {
+      id: 'ejemplo', number: 123, ticketNumber: null, createdAt: now - 15 * 60000, paidAt: null, userId: me ? me.id : null, type: 'delivery', table: '',
+      customerName: 'María Gómez', phone: '341 555-1234', address: 'San Martín 123, 4°B', zoneId: null, items,
+      subtotal: 32000, discount: { type: '%', value: 10 }, discountAmount: 3200, cashDiscount: 0, surcharge: 0, deliveryFee: 1500, total: 30300,
+      payments: [], paid: false, status: 'pendiente', notes: 'Timbre roto, llamar al llegar', voided: false, eta: '21:30',
+    };
+    if (kind === 'pago') return { ...base, ticketNumber: 45, paidAt: now, paid: true, status: 'entregado', payments: [{ method: 'efectivo', amount: 30300, tendered: 40000 }] };
+    if (kind === 'cuenta') {
+      return { ...base, tableBill: true, number: 'Mesa 4', type: 'mesa', table: '4', customerName: '', phone: '', address: '', discount: null, discountAmount: 0, deliveryFee: 0,
+        subtotal: 32000, total: 32000, status: 'entregado', notes: '3 tandas · 4 personas', eta: '' };
+    }
+    // a cobrar y comanda: el delivery que paga al recibir
+    return layCash || kind === 'comanda' ? { ...base, collect: { method: 'efectivo', amount: 30300, tendered: 40000 } } : base;
+  }
+
+  /** Por qué un bloque no se ve en el ejemplo (falta un dato o está apagado en otro lado) */
+  function blockHint(key) {
+    const st = S.data.settings;
+    if (key === 'sucursal' && S.ctx.branches.length < 2) return 'Solo sale si el negocio tiene más de una sucursal';
+    if (key === 'cuit' && !st.business.cuit) return 'Cargá el CUIT en la pestaña Negocio';
+    if (key === 'logo' && !st.ticket.showLogo) return 'Está apagado «Mostrar logo» más arriba';
+    if (key === 'qr' && !(st.ticket.qrMode === 'custom' ? st.ticket.qrText : st.ticket.qrMode === 'instagram' && st.business.instagram)) return 'Elegí un QR más arriba (o cargá el Instagram)';
+    if (key === 'leyenda' && !st.ticket.legend) return 'Escribí la leyenda legal más arriba';
+    if (key === 'transferencia' && !(st.payments.alias || st.payments.cbu)) return 'Cargá el alias en la pestaña Cobros';
+    if (key === 'cobroEfectivo' && !layCash) return 'Probalo con «Lo cobra el repartidor» en la vista previa';
+    return '';
+  }
+
+  function layoutEditor(host) {
+    const t = S.data.settings.ticket;
+    if (!t.layout) t.layout = PZ.seed.ticketLayout();
+    const kinds = PZ.seed.TICKET_KINDS;
+    const kind = kinds.find((k) => k.id === layKind) || kinds[0];
+    if (!t.layout[kind.id]) t.layout[kind.id] = PZ.seed.ticketLayout()[kind.id];
+    const lay = t.layout[kind.id];
+    const blocks = PZ.seed.TICKET_BLOCKS.filter((x) => x.kinds.includes(kind.id));
+    const groups = Array.from(new Set(blocks.map((x) => x.group)));
+    const defaultTitle = { pago: t.docTitle || 'Comprobante de pago', cobrar: 'Comprobante de pedido', cuenta: 'Cuenta de la mesa', comanda: 'COMANDA · COCINA' }[kind.id];
+
+    const paper = () => {
+      const o = sampleOrder(kind.id);
+      return kind.id === 'comanda' ? PZ.ticket.kitchenHTML(o) : PZ.ticket.customerHTML(o);
+    };
+
+    host.innerHTML = `
+      <h3>🧾 Qué sale en cada comprobante</h3>
+      <p class="muted small" style="margin-top:0">Elegí qué datos salen en cada tipo de comprobante de <b>${U.esc(S.branchName())}</b>. Vale para la pantalla, la impresora y el WhatsApp. Los cambios se ven al instante en la vista previa (con un pedido de ejemplo: no se guarda ninguna venta).</p>
+      <div class="seg lay-kinds">${kinds.map((k) => `<button data-lk="${k.id}" class="${k.id === kind.id ? 'on' : ''}">${k.icon} ${k.label}</button>`).join('')}</div>
+      <p class="small muted" style="margin:6px 0 0">${U.esc(kind.hint)}</p>
+      <div class="lay-grid">
+        <div class="lay-controls">
+          ${groups.map((g) => `<div class="opt-section">${g}</div>${blocks.filter((x) => x.group === g).map((x) => {
+            const hint = blockHint(x.key);
+            return `<label class="check"><input type="checkbox" data-blk="${x.key}" ${lay[x.key] !== false ? 'checked' : ''}> ${U.esc(x.label)}${hint ? `<span class="small muted"> · ${U.esc(hint)}</span>` : ''}</label>`;
+          }).join('')}`).join('')}
+          <div class="opt-section">Textos</div>
+          <label class="field"><span>Título del papel</span><input data-lt="title" value="${U.esc(lay.title || '')}" placeholder="${U.esc(defaultTitle)}"></label>
+          ${kind.id !== 'comanda' ? `<label class="field"><span>Mensaje al pie</span><input data-lt="footer" value="${U.esc(lay.footer || '')}" placeholder="${U.esc(t.footer || '')}"></label>` : ''}
+          <p class="small muted" style="margin:0 0 8px">Si lo dejás vacío se usa el de siempre (el que se ve en gris).</p>
+          <div class="row-flex">
+            <button class="btn ghost sm" data-a="lay-reset">↩️ Restablecer este comprobante</button>
+          </div>
+          ${PZ.auth.isOwner() && S.ctx.branches.filter((b) => b.id !== S.ctx.branchId && b.active !== false).length
+            ? '<div class="opt-section">Todas las sucursales</div><button class="btn ghost" data-a="lay-all">📋 Copiar este diseño a todas las sucursales</button><p class="small muted" style="margin:6px 0 0">Copia los cuatro comprobantes de esta sucursal a las demás. Cada sucursal puede después ajustar el suyo.</p>'
+            : ''}
+        </div>
+        <div class="lay-preview">
+          <div class="row-flex space-between" style="margin-bottom:6px"><b>👀 Vista previa en vivo</b><span class="small muted">ejemplo · no se guarda</span></div>
+          ${kind.id === 'cobrar' ? `<div class="seg mb"><button data-lc="0" class="${layCash ? '' : 'on'}">Cobro al recibir</button><button data-lc="1" class="${layCash ? 'on' : ''}">🛵 Lo cobra el repartidor</button></div>` : ''}
+          <div class="ticket-stage" style="max-height:none">${paper()}</div>
+        </div>
+      </div>`;
+
+    const refreshPaper = () => { const stage = host.querySelector('.ticket-stage'); if (stage) stage.innerHTML = paper(); };
+    const saved = () => { S.save(); };
+    host.querySelectorAll('[data-lk]').forEach((x) => x.onclick = () => { layKind = /** @type {HTMLElement} */ (x).dataset.lk || 'pago'; layoutEditor(host); });
+    host.querySelectorAll('[data-lc]').forEach((x) => x.onclick = () => { layCash = /** @type {HTMLElement} */ (x).dataset.lc === '1'; layoutEditor(host); });
+    host.querySelectorAll('[data-blk]').forEach((x) => {
+      const inp = /** @type {HTMLInputElement} */ (x);
+      inp.onchange = () => { lay[inp.dataset.blk || ''] = inp.checked; saved(); refreshPaper(); };
+    });
+    host.querySelectorAll('[data-lt]').forEach((x) => {
+      const inp = /** @type {HTMLInputElement} */ (x);
+      inp.oninput = () => { lay[inp.dataset.lt || ''] = inp.value; saved(); refreshPaper(); };
+    });
+    const reset = /** @type {HTMLElement | null} */ (host.querySelector('[data-a=lay-reset]'));
+    if (reset) reset.onclick = async () => {
+      if (!(await PZ.confirm(`¿Restablecer el comprobante «${kind.label}» a como sale de fábrica?`, { ok: 'Restablecer' }))) return;
+      t.layout[kind.id] = PZ.seed.ticketLayout()[kind.id];
+      S.save();
+      PZ.toast('Comprobante restablecido');
+      layoutEditor(host);
+    };
+    const all = /** @type {HTMLElement | null} */ (host.querySelector('[data-a=lay-all]'));
+    if (all) all.onclick = () => copyLayoutToAll(all);
+  }
+
+  /** El dueño copia el diseño de esta sucursal a todas las demás */
+  async function copyLayoutToAll(btn) {
+    const others = S.ctx.branches.filter((b) => b.id !== S.ctx.branchId && b.active !== false);
+    if (!others.length) return;
+    if (!navigator.onLine) return PZ.toast('Hace falta conexión para copiarlo a las otras sucursales', 'warn');
+    const names = others.map((b) => b.name).join(', ');
+    if (!(await PZ.confirm(`Se va a reemplazar el diseño de los comprobantes de ${others.length === 1 ? 'la sucursal' : 'las sucursales'} ${names} por el de ${S.branchName()}. ¿Copiar?`, { ok: 'Copiar a todas' }))) return;
+    btn.disabled = true;
+    try {
+      // primero queda guardado el de esta sucursal
+      S.diff();
+      await S.flush();
+      const layout = JSON.parse(JSON.stringify(S.data.settings.ticket.layout));
+      const failed = [];
+      let ok = 0;
+      for (const b of others) {
+        try { await PZ.cloud.saveSettings(b.id, { ticket: { layout } }); ok++; } catch (e) { console.warn('copiar diseño', b.name, e); failed.push(b.name); }
+      }
+      S.log('configuración', `Diseño de comprobantes copiado a ${ok} sucursal${ok === 1 ? '' : 'es'}`);
+      S.save();
+      if (failed.length) PZ.toast(`Se copió a ${ok}, pero falló en: ${failed.join(', ')}`, 'warn', 6000);
+      else PZ.toast(`Diseño copiado a ${ok} sucursal${ok === 1 ? '' : 'es'} ✅`);
+    } finally { btn.disabled = false; }
   }
 
   const SECTIONS = {
@@ -94,9 +227,7 @@
 
     ticket(b, el) {
       const t = S.data.settings.ticket;
-      const sample = S.data.orders.filter((o) => o.paid && !o.voided).slice(-1)[0];
-      b.innerHTML = `<div class="dash" style="margin-top:0">
-        <div class="card">
+      b.innerHTML = `<div class="card">
           <h3>🖨️ Impresora</h3>
           <div class="opt-grid mb">
             ${[['browser', '🖥️ Del sistema / PDF', 'Usa el diálogo de impresión. Funciona con cualquier impresora instalada (USB, WiFi) o para guardar PDF.'],
@@ -128,11 +259,9 @@
           </div>
           <button class="btn primary mt" data-a="test">🖨️ Imprimir ticket de prueba</button>
         </div>
-        <div class="card"><h3>👀 Vista previa</h3>
-          <div class="ticket-stage" style="max-height:none">${sample ? PZ.ticket.customerHTML(sample) : '<p class="muted">Hacé una venta para ver la vista previa.</p>'}</div>
-        </div>
-      </div>`;
+        <div class="card mt lay-card"></div>`;
       bind(b, () => render(el));
+      layoutEditor(/** @type {HTMLElement} */ (b.querySelector('.lay-card')));
       b.querySelectorAll('[data-pm]').forEach((x) => x.onclick = () => { t.printMode = x.dataset.pm; S.save(); render(el); });
       const bt = b.querySelector('[data-a=bt]');
       if (bt) bt.onclick = () => PZ.ticket.connectBluetooth();

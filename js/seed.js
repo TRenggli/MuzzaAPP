@@ -5,7 +5,66 @@
 (function (PZ) {
   const U = PZ.util;
 
+  /**
+   * Qué datos puede mostrar cada comprobante. Cada sucursal elige cuáles salen (Configuración →
+   * Ticket e impresora → «Qué sale en cada comprobante»). Una casilla sin definir cuenta como encendida,
+   * así los diseños viejos siguen saliendo igual.
+   *   · pago    → comprobante de un pedido cobrado
+   *   · cobrar  → comprobante de un pedido a cobrar (por ejemplo, el delivery que paga al recibir)
+   *   · cuenta  → pre-cuenta de una mesa (todavía sin cobrar)
+   *   · comanda → papel de la cocina
+   */
+  const TICKET_KINDS = [
+    { id: 'pago', label: 'Pagado', icon: '✅', hint: 'El pedido ya está cobrado' },
+    { id: 'cobrar', label: 'A cobrar', icon: '💵', hint: 'Pedido sin cobrar (ej: delivery que paga al recibir)' },
+    { id: 'cuenta', label: 'Pre-cuenta', icon: '🍽️', hint: 'Cuenta de una mesa antes de cobrar' },
+    { id: 'comanda', label: 'Comanda', icon: '👨‍🍳', hint: 'El papel que va a la cocina' },
+  ];
+  const ALL = ['pago', 'cobrar', 'cuenta'];
+  const TICKET_BLOCKS = [
+    { key: 'logo', group: 'Encabezado', label: 'Logo', kinds: ALL },
+    { key: 'negocio', group: 'Encabezado', label: 'Nombre del local y lema', kinds: ALL },
+    { key: 'sucursal', group: 'Encabezado', label: 'Nombre de la sucursal', kinds: ALL },
+    { key: 'direccion', group: 'Encabezado', label: 'Dirección y teléfono', kinds: ALL },
+    { key: 'cuit', group: 'Encabezado', label: 'CUIT y condición fiscal', kinds: ALL },
+    { key: 'numero', group: 'Pedido', label: 'Número y fecha', kinds: ALL },
+    { key: 'tipo', group: 'Pedido', label: 'Tipo de pedido y quién atendió', kinds: ALL },
+    { key: 'cliente', group: 'Pedido', label: 'Cliente y teléfono', kinds: ALL },
+    { key: 'entrega', group: 'Pedido', label: 'Dirección de entrega', kinds: ALL },
+    { key: 'precioUnit', group: 'Pedido', label: 'Precio unitario (c/u)', kinds: ALL },
+    { key: 'descuentos', group: 'Pedido', label: 'Descuentos, recargos y envío', kinds: ALL },
+    { key: 'nota', group: 'Pedido', label: 'Nota del pedido', kinds: ALL },
+    { key: 'formaPago', group: 'Cobro', label: 'Forma de pago y vuelto', kinds: ['pago'] },
+    { key: 'cobroEfectivo', group: 'Cobro', label: 'Cuánto cobrar en efectivo y vuelto a llevar', kinds: ['cobrar'] },
+    { key: 'transferencia', group: 'Cobro', label: 'Datos para pagar por transferencia', kinds: ['cobrar', 'cuenta'] },
+    { key: 'pie', group: 'Pie', label: 'Mensaje al pie', kinds: ALL },
+    { key: 'qr', group: 'Pie', label: 'Código QR', kinds: ALL },
+    { key: 'leyenda', group: 'Pie', label: 'Leyenda legal', kinds: ALL },
+    // comanda de cocina
+    { key: 'hora', group: 'Pedido', label: 'Hora y entrega', kinds: ['comanda'] },
+    { key: 'cliente', group: 'Pedido', label: 'Cliente', kinds: ['comanda'] },
+    { key: 'notas', group: 'Pedido', label: 'Nota del pedido', kinds: ['comanda'] },
+    { key: 'cobro', group: 'Pie', label: 'Pie de cobro (A COBRAR / PAGADO)', kinds: ['comanda'] },
+  ];
+  /** Diseño por defecto: todo encendido y sin textos propios (sale exactamente lo de siempre) */
+  const ticketLayout = () => {
+    /** @type {Record<string, Record<string, boolean | string>>} */
+    const layout = {};
+    TICKET_KINDS.forEach((k) => {
+      /** @type {Record<string, boolean | string>} */
+      const l = {};
+      TICKET_BLOCKS.filter((b) => b.kinds.includes(k.id)).forEach((b) => { l[b.key] = true; });
+      l.title = '';
+      if (k.id !== 'comanda') l.footer = '';
+      layout[k.id] = l;
+    });
+    return layout;
+  };
+
   PZ.seed = {
+    TICKET_KINDS,
+    TICKET_BLOCKS,
+    ticketLayout,
     settings(businessName = 'Mi Pizzería', branchName = '') {
       return {
         business: {
@@ -34,6 +93,7 @@
           printKitchen: true,
           printMode: 'browser',
           escposAccents: false,
+          layout: ticketLayout(),
         },
         payments: {
           alias: '', cbu: '', holder: '', bank: '', qrImage: null, qrLink: '',

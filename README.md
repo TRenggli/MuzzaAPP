@@ -69,6 +69,12 @@ En **Carta online** el encargado elige la dirección, el WhatsApp que recibe, el
 
 Con la cuenta de Mercado Pago del negocio conectada (Configuración → Cobros), al cobrar con **QR** se genera un código con el **monto exacto** y el cobro **se registra solo** cuando se acredita. El Access Token queda guardado en el servidor: ninguna persona del equipo lo puede ver. Sin Mercado Pago conectado sigue funcionando el QR fijo y la confirmación manual.
 
+## Editor de comprobantes
+
+Cada sucursal elige **qué datos salen en cada tipo de comprobante** (*Configuración → Ticket e impresora → Qué sale en cada comprobante*): **Pagado**, **A cobrar**, **Pre-cuenta** y **Comanda**. Con casillas por bloque (logo, nombre y lema, sucursal, dirección y teléfono, CUIT, número y fecha, tipo y quién atendió, cliente, dirección de entrega, precio unitario, descuentos y envío, forma de pago y vuelto, cuánto cobrar en efectivo, datos de transferencia, nota, mensaje al pie, QR y leyenda; en la comanda: hora y entrega, cliente, nota y pie de cobro) y título y mensaje al pie propios de cada tipo. Hay vista previa en vivo con un pedido de ejemplo (no se guarda nada), botón **Restablecer** y, para el dueño, **Copiar este diseño a todas las sucursales**.
+
+Un solo origen para los cinco formatos (`kindOf` y `show` en `js/ticket.js`): pantalla, impresora térmica, texto de WhatsApp, comanda en pantalla y comanda térmica salen igual. El diseño por defecto reproduce exactamente lo que salía antes (`tests/ticket-layout.test.mjs` lo compara byte a byte con `tests/fixtures/ticket-golden.json`, generado con el código anterior).
+
 ## Comprobantes sin posnet integrado
 
 El comprobante se imprime **siempre**, se pague como se pague (efectivo, transferencia, QR o tarjeta en un posnet de cualquier marca). En *Configuración → Ticket e impresora* se elige si el papel dice **Comprobante de pago, Recibo, Ticket o Comprobante de venta**. Con tarjeta se elige débito o crédito y queda impreso.

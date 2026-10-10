@@ -154,6 +154,7 @@
       intro: 'Los datos de la sucursal que salen en el ticket, la impresora y los cobros.',
       tips: [
         '<b>Ticket e impresora</b>: elegí cómo imprimir (impresora del sistema, Bluetooth o la app RawBT), el ancho del papel y hacé una prueba.',
+        '<b>Qué sale en cada comprobante</b> (abajo, en Ticket e impresora): elegí con casillas qué datos salen en el comprobante <b>Pagado</b>, <b>A cobrar</b>, <b>Pre-cuenta</b> y en la <b>Comanda</b>, y cambiá el título y el mensaje al pie de cada uno. La vista previa se actualiza al instante y vale igual para la pantalla, la impresora y el WhatsApp. El dueño puede <b>copiar el diseño a todas las sucursales</b>.',
         '<b>Cobros</b>: cargá el alias y CBU para transferencias y la imagen del QR de Mercado Pago. Si conectás Mercado Pago, el QR sale con el monto y el cobro se registra solo.',
         '<b>Apariencia</b>: el "sabor" de colores se guarda en cada equipo.',
       ],
