@@ -76,6 +76,8 @@
   const App = (PZ.app = {
     /** @type {'platform' | 'org' | 'branch' | null} */
     mode: null,
+    /** ya se avisó del corte del tiempo real actual */
+    _liveAlerted: false,
     /** @type {string | null} */
     currentView: null,
 
@@ -302,6 +304,7 @@
     /* ---------- Cambiar de nivel (sin cerrar sesión) ---------- */
     async openPlatform() {
       await App.leaveBranch();
+      PZ.inbox.stop();
       A.current = null;
       App.mode = 'platform';
       PZ.cloud.unsubscribe();
@@ -322,6 +325,7 @@
       if (!A.isOwner()) return;
       await App.leaveBranch();
       App.mode = 'org';
+      PZ.inbox.start(A.current.orgId);
       localStorage.setItem('pz-mode-' + A.current.orgId, 'org');
       PZ.cloud.subscribeOrg(A.current.orgId, S.onRemoteHook);
       App.renderShell();
@@ -343,6 +347,7 @@
       await S.flush();
       await S.open(A.current.orgId, branchId);
       App.mode = 'branch';
+      if (!A.current.support) PZ.inbox.start(A.current.orgId);
       localStorage.setItem('pz-branch-' + A.current.orgId, branchId);
       if (A.isOwner() && !A.current.support) localStorage.setItem('pz-mode-' + A.current.orgId, 'branch');
       if (!A.current.support) PZ.cloud.sb.rpc('touch_login', { p_org: A.current.orgId }).then(() => {}, () => {});
@@ -452,6 +457,7 @@
               <div class="spacer"></div>
               ${chips}
               <span class="clock"></span>
+              ${mode === 'platform' ? '' : '<button class="icon-btn bell-btn" data-a="inbox" title="Avisos" aria-label="Avisos">🔔<span class="bell-count hidden"></span></button>'}
               <button class="icon-btn theme-btn" data-a="theme" title="Modo oscuro / claro" aria-label="Cambiar tema">${App.isDark() ? '☀️' : '🌙'}</button>
               <button class="icon-btn help-btn" data-a="help" title="Ayuda de esta pantalla" aria-label="Ayuda">❓</button>
               <button class="user-pill" data-a="user" aria-label="Mi usuario">${PZ.profile.avatar(PZ.profile.me, name, 32)}<span class="u-name">${U.esc(name)}</span></button>
@@ -482,6 +488,7 @@
       on('operate', () => App.branchPicker());
       on('platform', () => App.openPlatform());
       on('sync', App.syncInfo);
+      on('inbox', () => PZ.inbox.open());
       on('theme', App.toggleDark);
       on('help', () => PZ.help.open(App.currentView));
       on('cash', () => (A.can('caja') ? App.go('caja') : null));
@@ -514,6 +521,7 @@
       clockTimer = setInterval(tick, 15000);
       App.refreshChrome();
       App.refreshSync(S.status);
+      PZ.inbox.paintBell();
     },
 
     refreshChrome() {
@@ -549,7 +557,14 @@
       else if (st.state === 'retry') { cls = 'warn'; ico = '⚠️'; txt = `Reintentando (${st.pending})`; }
       else if (st.state === 'error') { cls = 'err'; ico = '⚠️'; txt = 'Error al guardar'; }
       else if (st.pending) { cls = 'busy'; ico = '⏳'; txt = `${st.pending} por enviar`; }
-      else if (PZ.cloud.liveDown()) { cls = 'warn'; ico = '⚠️'; txt = 'Sin conexión en vivo'; }
+      else if (PZ.cloud.liveDown()) {
+        cls = 'warn'; ico = '⚠️'; txt = 'Sin conexión en vivo';
+        if (!App._liveAlerted) {
+          App._liveAlerted = true;
+          PZ.inbox.notifyLocal('sync_live', '📡 Sin conexión en vivo', 'Los cambios de otros equipos pueden demorar. Se ponen al día solos cuando vuelva la conexión.', { action: 'sync' });
+        }
+      }
+      if (PZ.cloud.realtime === 'SUBSCRIBED') App._liveAlerted = false;
       el.title = cls === 'warn' && txt === 'Sin conexión en vivo'
         ? 'Los cambios de otros equipos pueden demorar. Se ponen al día solos cuando vuelva la conexión.'
         : '';
@@ -645,6 +660,7 @@
       if (S.status.pending && !(await PZ.confirm(`Hay ${S.status.pending} cambio(s) que todavía no se enviaron a la nube. Se envían la próxima vez que ingreses en este equipo. ¿Salir igual?`))) return;
       if (cleanup) { try { cleanup(); } catch (e) { /* noop */ } cleanup = null; }
       await S.flush();
+      PZ.inbox.stop();
       await A.logout();
       App.mode = null;
       location.hash = '';

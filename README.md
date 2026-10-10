@@ -69,6 +69,21 @@ En **Carta online** el encargado elige la dirección, el WhatsApp que recibe, el
 
 Con la cuenta de Mercado Pago del negocio conectada (Configuración → Cobros), al cobrar con **QR** se genera un código con el **monto exacto** y el cobro **se registra solo** cuando se acredita. El Access Token queda guardado en el servidor: ninguna persona del equipo lo puede ver. Sin Mercado Pago conectado sigue funcionando el QR fijo y la confirmación manual.
 
+## Avisos en vivo por rol
+
+La campana 🔔 de la barra superior abre el **panel de avisos** de cada persona (`js/notifs.js`). Los avisos del negocio los crea **el servidor** (disparadores de la base, migración 021) y cada uno lleva a qué roles o a qué persona va; **la base decide quién puede leer qué** (RLS con el rol y las sucursales actuales de quien consulta), así que un cajero no recibe, por ejemplo, el resumen de facturación del dueño ni por la consulta ni por el tiempo real. Se guardan 30 días y lo leído se recuerda por persona.
+
+| Rol | Recibe |
+|---|---|
+| **Dueño** | Todo, de todas las sucursales: pedidos, cobros, anulaciones, descuentos grandes, caja con diferencias, stock, y el **resumen de ayer y el cierre del mes del negocio entero** (todas las mañanas, 03:00 de Buenos Aires, con `pg_cron`). |
+| **Encargado** | Lo de su(s) sucursal(es): operación, anulaciones, descuentos grandes, caja con diferencias, stock y el resumen de su sucursal. |
+| **Cajero** | Su sucursal: pedidos nuevos, listos, en camino y entregados, cobros, caja abierta/cerrada (sin diferencias), cobros después del cierre, stock, mesas que piden la cuenta y pedidos online. |
+| **Cocina** | Pedidos nuevos y cancelados de su sucursal, **sin importes**. |
+| **Repartidor** | Solo lo suyo: pedidos asignados, listos para salir, cancelados, y los deliveries listos sin asignar. |
+| **Mozo** | Solo lo suyo: sus mesas listas para servir. |
+
+Además, cada equipo anota en su propio panel (sin salir del equipo) las alertas de sincronización: cambio rechazado, caja a la que se sumó, sin conexión en vivo, puesta al día y «otro equipo ya cobró». Pruebas: `supabase/tests/notificaciones.sql` (41 comprobaciones de visibilidad por rol, con rollback) y `tests/notifs.test.mjs`.
+
 ## Editor de comprobantes
 
 Cada sucursal elige **qué datos salen en cada tipo de comprobante** (*Configuración → Ticket e impresora → Qué sale en cada comprobante*): **Pagado**, **A cobrar**, **Pre-cuenta** y **Comanda**. Con casillas por bloque (logo, nombre y lema, sucursal, dirección y teléfono, CUIT, número y fecha, tipo y quién atendió, cliente, dirección de entrega, precio unitario, descuentos y envío, forma de pago y vuelto, cuánto cobrar en efectivo, datos de transferencia, nota, mensaje al pie, QR y leyenda; en la comanda: hora y entrega, cliente, nota y pie de cobro) y título y mensaje al pie propios de cada tipo. Hay vista previa en vivo con un pedido de ejemplo (no se guarda nada), botón **Restablecer** y, para el dueño, **Copiar este diseño a todas las sucursales**.

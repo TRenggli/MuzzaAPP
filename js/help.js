@@ -16,6 +16,7 @@
       intro: 'El resumen del día de tu sucursal: cuánto se vendió, qué pedidos están en curso y qué requiere atención.',
       tips: [
         'Tocá <b>Nueva venta</b> para empezar a cobrar.',
+        'La campana 🔔 de arriba es tu panel de <b>avisos en vivo</b>: pedidos nuevos, cobros, caja, stock y alertas. Cada persona ve solo lo que corresponde a su rol (un cajero no ve el resumen de facturación ni las diferencias de caja; la cocina no ve importes). Se guardan 30 días.',
         'El recuadro <b>Atención</b> te avisa si la caja está cerrada, si hay pedidos demorados o insumos por acabarse.',
         'La barra de abajo (en el celular) o la de la izquierda (en la compu) te lleva a cada sección.',
       ],

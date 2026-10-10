@@ -321,6 +321,7 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `org_id=eq.${orgId}` }, () => onEvent('orders'))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'branches', filter: `org_id=eq.${orgId}` }, () => onEvent('branches'))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` }, () => onEvent('members'))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` }, (p) => PZ.inbox && PZ.inbox.onRemote(p))
         .subscribe((status) => C.setRealtime(status));
     },
 
@@ -328,6 +329,7 @@
     setRealtime(status) {
       if (status !== C.realtime) C.realtimeSince = Date.now();
       C.realtime = status;
+      if (status === 'SUBSCRIBED' && PZ.inbox) PZ.inbox.refresh();
       clearTimeout(C._downTimer);
       if (status !== 'SUBSCRIBED') C._downTimer = setTimeout(() => PZ.store && PZ.store.emitStatus(), C.LIVE_GRACE + 100);
       PZ.store && PZ.store.emitStatus();
@@ -431,6 +433,29 @@
       return data;
     },
 
+    /* ---------------- Avisos ---------------- */
+    /** Los avisos que esta persona puede leer (la base filtra por su rol y sus sucursales) */
+    async notifications(orgId, sinceIso) {
+      const { data, error } = await sb.from('notifications').select('id, org_id, branch_id, kind, title, body, data, created_at')
+        .eq('org_id', orgId).gt('created_at', sinceIso).order('created_at', { ascending: false }).limit(300);
+      if (error) throw error;
+      return data || [];
+    },
+    /** Hasta cuándo leyó esta persona (ISO) o null si nunca */
+    async notificationState(orgId) {
+      const s = await C.session();
+      if (!s) return null;
+      const { data, error } = await sb.from('notification_state').select('read_until').eq('org_id', orgId).eq('user_id', s.user.id).maybeSingle();
+      if (error) throw error;
+      return data ? data.read_until : null;
+    },
+    async markNotificationsRead(orgId, untilIso) {
+      const s = await C.session();
+      if (!s) return;
+      const { error } = await sb.from('notification_state').upsert({ user_id: s.user.id, org_id: orgId, read_until: untilIso }, { onConflict: 'user_id,org_id' });
+      if (error) throw error;
+    },
+
     /* ---------------- Ponerse al día ---------------- */
     /**
      * Lo que cambió en la nube desde `sinceIso`: los pedidos de la sucursal y los
@@ -482,6 +507,7 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'branches', filter: `org_id=eq.${orgId}` }, (p) => onEvent('branches', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` }, (p) => onEvent('members', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'online_orders', filter: `branch_id=eq.${branchId}` }, (p) => PZ.web && PZ.web.onRemote(p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` }, (p) => PZ.inbox && PZ.inbox.onRemote(p))
         .subscribe((status) => {
           C.setRealtime(status);
           // cada vez que el canal (re)conecta se trae lo que se perdió mientras estuvo caído

@@ -408,13 +408,17 @@
         S.status.error = '';
         if (adoptedCash) {
           const n = adoptedCash.moved;
-          PZ.toast(`Ya había una caja abierta en otro equipo: te sumaste a esa${n ? ` (${n} ${n === 1 ? 'registro pasó' : 'registros pasaron'} a esa caja)` : ''}.`, 'warn', 9000);
+          const msg = `Ya había una caja abierta en otro equipo: te sumaste a esa${n ? ` (${n} ${n === 1 ? 'registro pasó' : 'registros pasaron'} a esa caja)` : ''}.`;
+          PZ.toast(msg, 'warn', 9000);
+          if (PZ.inbox) PZ.inbox.notifyLocal('sync_cash', '🔗 Te sumaste a la caja ya abierta', msg, { view: 'caja' });
         }
         if (hadConflict) {
           S.status.error = 'Hay cambios rechazados que requieren revisión';
-          PZ.toast(replaced.length
+          const msg = replaced.length
             ? `El pedido #${replaced.map((o) => o.number).join(', #')} cambió en otro equipo y se rechazó un cambio tuyo: se actualizó con lo que hay en el servidor. Quedó en Conflictos.`
-            : 'Un cambio fue rechazado y quedó en Conflictos para recuperarlo.', 'err', 9000);
+            : 'Un cambio fue rechazado y quedó en Conflictos para recuperarlo.';
+          PZ.toast(msg, 'err', 9000);
+          if (PZ.inbox) PZ.inbox.notifyLocal('sync_conflict', '⚠️ Cambio rechazado por el servidor', msg, { action: 'sync' });
         }
         S.status.lastSync = Date.now();
         retryDelay = 3000;
@@ -590,6 +594,12 @@
           });
           apply('docs', docs);
           apply('orders', orders);
+          // los avisos también se ponen al día (los resúmenes de la mañana no vienen de un cambio de datos)
+          if (PZ.inbox) PZ.inbox.refresh();
+          // si estuvo un rato sin conexión y se enteró de algo, queda anotado en sus avisos
+          if (n && reason !== 'periódica' && Date.now() - lastContact > 30000 && PZ.inbox) {
+            PZ.inbox.notifyLocal('sync_catchup', '🔄 Te pusiste al día', `Se actualizaron ${n} cambio${n === 1 ? '' : 's'} de otros equipos mientras no tenías conexión en vivo.`);
+          }
           lastContact = Date.now();
           S.status.lastSync = lastContact;
           if (n) S.emitStatus();

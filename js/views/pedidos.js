@@ -253,7 +253,12 @@
   async function alreadyHandled(o) {
     await S.syncOrder(o.id);
     if (o.voided) { PZ.toast(`El pedido #${o.number} fue anulado en otro equipo`, 'warn', 5000); return true; }
-    if (o.paid) { PZ.toast(`El pedido #${o.number} ya lo cobró ${S.paidByName(o)}`, 'warn', 6000); return true; }
+    if (o.paid) {
+      const msg = `El pedido #${o.number} ya lo cobró ${S.paidByName(o)}`;
+      PZ.toast(msg, 'warn', 6000);
+      if (PZ.inbox) PZ.inbox.notifyLocal('sync_race', '💸 ' + msg, 'Otro equipo se te adelantó: este equipo no registró un segundo cobro.', { view: 'pedidos' });
+      return true;
+    }
     return false;
   }
 

@@ -267,7 +267,9 @@
       await Promise.all(pend.map((o) => S.syncOrder(o.id)));
       if (S.tableBalance(s) > 0) return false;
       const last = S.tableOrders(s).filter((o) => o.paid).sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0))[0];
-      PZ.toast(`La mesa ${tableNum(s)} ya la cobró ${last ? S.paidByName(last) : 'otro equipo'}`, 'warn', 6000);
+      const msg = `La mesa ${tableNum(s)} ya la cobró ${last ? S.paidByName(last) : 'otro equipo'}`;
+      PZ.toast(msg, 'warn', 6000);
+      if (PZ.inbox) PZ.inbox.notifyLocal('sync_race', '💸 ' + msg, 'Otro equipo se te adelantó: este equipo no registró un segundo cobro.', { view: 'salon' });
       if (m) m.close();
       render(el);
       return true;
