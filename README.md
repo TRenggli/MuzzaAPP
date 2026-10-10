@@ -105,6 +105,12 @@ Desde la plataforma se activan o desactivan por negocio: **Delivery, Mesas, Stoc
 
 Cada equipo guarda una copia de su sucursal, encola los cambios y sincroniza al volver la conexión. Los números de pedido y comprobante se reservan por bloques para vender offline sin repetir. Si dos equipos cambian el mismo pedido, se combinan campo por campo.
 
+**Sucursal sincronizada entre sus equipos** (`supabase/tests/sync.sql`, `tests/sync-vivo.test.mjs`):
+- Todo llega en tiempo real. Si un equipo pierde señal o se bloquea, **se pone al día solo**: pide a la nube lo que cambió desde lo último que vio (`S.catchUp`) al reconectar el canal, al volver internet, al volver a la pantalla (si estuvo oculta 15 s o más) y cada 60 s como red de seguridad. Si el corte duró más de 6 horas trae todo de nuevo (sin ventanas abiertas). Si pasan 10 s sin tiempo real, el encabezado avisa «Sin conexión en vivo».
+- **Cobros en carrera:** antes de cobrar se mira el pedido en la nube; si otra caja ya lo cobró, aparece «ya lo cobró X» y no se cobra dos veces. Si el servidor rechaza un cambio para siempre, la copia del equipo se reemplaza por la del servidor y el cambio queda en *Sincronización → Cambios rechazados*.
+- **Una sola caja abierta por sucursal** (índice único). Si dos equipos abren a la vez, el segundo se suma a la que ya existe y le pasa sus ventas. Un cobro hecho cuando su caja ya se cerró pasa a la caja abierta o queda marcado «cobrado después del cierre».
+- **Configuración sin pisarse:** viaja como parche (`save_settings_patch`): dos encargados editando cosas distintas se combinan; gana el último solo en el mismo dato.
+
 ## Publicarlo
 
 Sitio estático: GitHub Pages, Netlify o Vercel lo sirven 24/7 (no depende de ninguna compu prendida). En el celular: Chrome → ⋮ → *Instalar app*.
@@ -113,7 +119,7 @@ Sitio estático: GitHub Pages, Netlify o Vercel lo sirven 24/7 (no depende de ni
 
 ```
 js/cloud.js            Supabase: sesión, datos, tiempo real, finanzas, códigos
-js/store.js            datos de la sucursal + sincronización offline + gastos
+js/store.js            datos de la sucursal + sincronización offline + puesta al día + gastos
 js/auth.js             niveles, roles, permisos y módulos
 js/app.js              ingreso, códigos, cambio de nivel, navegación
 js/views/plataforma.js panel del creador

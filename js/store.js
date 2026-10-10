@@ -80,6 +80,21 @@
   let retryTimer;
   /** Operaciones rechazadas por el servidor. Nunca se descartan en silencio. */
   let conflicts = new Map();
+  /** Último `updated_at` del servidor visto en esta sucursal (ms). Desde ahí se pide lo que falta. */
+  let seen = 0;
+  /** Última vez (ms) que este equipo confirmó estar al día con la nube */
+  let lastContact = 0;
+  /** @type {Promise<number> | null} */
+  let catching = null;
+  let fullPending = false;
+  /** @type {ReturnType<typeof setInterval> | undefined} */
+  let liveTimer;
+  // Puesta al día: margen por diferencias de reloj / transacciones lentas, cuánto corte justifica
+  // traer todo de nuevo, y cuánto tiene que haber estado oculta la pantalla para revisar al volver
+  const CATCHUP_MARGIN_MS = 2 * 60000;
+  const FULL_REFRESH_MS = 6 * 3600000;
+  const HIDDEN_MIN_MS = 15000;
+  const POLL_MS = 60000;
   const listeners = new Set();
   const statusListeners = new Set();
 
@@ -153,6 +168,7 @@
         throw new Error('Sin conexión y sin datos guardados en este dispositivo. Conectate a internet para el primer ingreso.');
       }
       PZ.cloud.subscribe(orgId, branchId, S.onRemote);
+      S.startLive();
       S.ensurePools();
       S.flush();
     },
@@ -166,8 +182,10 @@
       S.ctx.members = meta.members;
 
       const d = S.emptyData();
+      d.settings = deepMerge(PZ.seed.settings(meta.org ? meta.org.name : ''), bd.branch.settings || {});
+      // lo que se cambió en la configuración y todavía no se envió se conserva encima de lo que hay en la nube
       const pendingSettings = outbox.get('settings');
-      d.settings = pendingSettings && S.data ? S.data.settings : deepMerge(PZ.seed.settings(meta.org ? meta.org.name : ''), bd.branch.settings || {});
+      if (pendingSettings) applyPatch(d.settings, pendingSettings.patch || (S.data ? S.data.settings : {}));
 
       const grouped = {};
       bd.docs.forEach((r) => {
@@ -196,6 +214,12 @@
       S.data = d;
       S.rebuildShadow();
       S.afterLoad();
+      // desde acá se pide lo que cambie (ver catchUp)
+      seen = 0;
+      bd.docs.forEach(stamp);
+      bd.orders.forEach(stamp);
+      if (!seen) seen = Date.now();
+      lastContact = Date.now();
       S.status.lastSync = Date.now();
       S.cache();
       S.emit();
@@ -292,7 +316,9 @@
       }
       const st = JSON.stringify(S.data.settings);
       if (shadow.get('settings') !== st) {
-        queue('settings', { name: 'settings' });
+        // solo viaja lo que cambió: dos encargados editando cosas distintas no se pisan
+        const patch = patchOf(JSON.parse(shadow.get('settings') || '{}'), S.data.settings);
+        if (patch) queue('settings', { name: 'settings', patch });
         shadow.set('settings', st);
       }
       S.cache(true);
@@ -311,9 +337,10 @@
       const docs = [];
       const orders = [];
       const dels = [];
-      let settings = false;
+      /** @type {any} */
+      let settingsOp = null;
       batch.forEach((op) => {
-        if (op.name === 'settings') { settings = true; return; }
+        if (op.name === 'settings') { settingsOp = op; return; }
         const cfg = COLS[op.name];
         if (op.del) { if (cfg.col) dels.push(op); return; }
         if (cfg.table === 'orders') orders.push({ org_id: orgId, id: op.id, branch_id: branchId, data: op.patch });
@@ -321,14 +348,24 @@
       });
       const pending = [];
       let hadConflict = false;
+      /** ventas que el servidor rechazó para siempre: se vuelve a traer su versión de la nube */
+      const rejectedOrders = [];
+      /** @type {any} */
+      let adoptedCash = null;
       const send = async (op, fn) => {
         try { await fn(); }
         catch (e) {
           const permanent = e && e.code && /^(42|23|22|P0)/.test(e.code);
           if (permanent) {
+            // otro equipo ya abrió la caja: este equipo se suma a esa y le pasa lo que todavía no salió
+            if (op.name === 'cashSessions' && e.code === '23505') {
+              const got = await S.adoptOpenSession(op.id, [...docs, ...orders]).catch((x) => { console.warn('adoptar caja', x); return null; });
+              if (got) { adoptedCash = got; return; }
+            }
             hadConflict = true;
             conflicts.set(keyOf(op.name, op.id || 'settings'), { ...op, error: e.message || 'Cambio rechazado', at: Date.now() });
             S.status.error = e.message || 'Cambio rechazado';
+            if (op.name === 'orders') rejectedOrders.push(op.id);
             return;
           }
           pending.push(op);
@@ -339,7 +376,12 @@
         // Una operación por llamada: un rechazo no se lleva por delante el
         // resto del lote. El costo es deliberado: las ventas son más valiosas
         // que ahorrar una llamada de red.
-        for (const row of docs.filter((r) => r.col !== 'stock_move')) {
+        // las cajas primero: si otra ya estaba abierta, lo que dependa de esta se reasigna antes de enviarse
+        for (const row of docs.filter((r) => r.col === 'cash_session')) {
+          const op = Array.from(batch.values()).find((x) => x.name === 'cashSessions' && !x.del && x.id === localId(row.id));
+          await send(op, () => PZ.cloud.upsertDocs([row]));
+        }
+        for (const row of docs.filter((r) => r.col !== 'stock_move' && r.col !== 'cash_session')) {
           const op = Array.from(batch.values()).find((x) => x.name !== 'settings' && !x.del && x.id === localId(row.id) && COLS[x.name].col === row.col);
           await send(op, () => PZ.cloud.upsertDocs([row]));
         }
@@ -352,12 +394,27 @@
           await send(op, () => PZ.cloud.upsertOrders([row]));
         }
         for (const op of dels) await send(op, () => PZ.cloud.deleteDoc(orgId, COLS[op.name].col, remoteId(op.name, op.id)));
-        if (settings) await send({ name: 'settings', id: 'settings' }, () => PZ.cloud.saveSettings(branchId, S.data.settings));
+        if (settingsOp) {
+          const patch = settingsOp.patch || JSON.parse(JSON.stringify(S.data.settings));
+          await send({ ...settingsOp, patch }, () => PZ.cloud.saveSettings(branchId, patch));
+        }
+        // una venta rechazada para siempre: se reemplaza la copia de este equipo por la del servidor
+        const replaced = [];
+        for (const id of rejectedOrders) {
+          const o = await S.pullOrder(id).catch(() => null);
+          if (o) replaced.push(o);
+        }
         S.status.state = hadConflict ? 'error' : 'ok';
         S.status.error = '';
+        if (adoptedCash) {
+          const n = adoptedCash.moved;
+          PZ.toast(`Ya había una caja abierta en otro equipo: te sumaste a esa${n ? ` (${n} ${n === 1 ? 'registro pasó' : 'registros pasaron'} a esa caja)` : ''}.`, 'warn', 9000);
+        }
         if (hadConflict) {
           S.status.error = 'Hay cambios rechazados que requieren revisión';
-          PZ.toast('Un cambio fue rechazado y quedó en Conflictos para recuperarlo.', 'err', 7000);
+          PZ.toast(replaced.length
+            ? `El pedido #${replaced.map((o) => o.number).join(', #')} cambió en otro equipo y se rechazó un cambio tuyo: se actualizó con lo que hay en el servidor. Quedó en Conflictos.`
+            : 'Un cambio fue rechazado y quedó en Conflictos para recuperarlo.', 'err', 9000);
         }
         S.status.lastSync = Date.now();
         retryDelay = 3000;
@@ -387,7 +444,8 @@
 
     onOnline() {
       retryDelay = 3000;
-      S.flush();
+      // primero se envía lo pendiente y después se trae lo que pasó mientras no había internet
+      Promise.resolve(S.flush()).then(() => S.catchUp('volvió internet'), () => {});
       S.ensurePools();
       S.emitStatus();
     },
@@ -403,6 +461,17 @@
       const op = conflicts.get(key);
       if (!op) return false;
       conflicts.delete(key); queue(key, op); S.cache(true); S.flush(); return true;
+    },
+
+    /** Descarta un cambio rechazado (después de revisarlo) */
+    dismissConflict(name, id) {
+      const ok = conflicts.delete(keyOf(name, id));
+      if (ok) {
+        S.cache(true);
+        if (!conflicts.size && S.status.state === 'error') { S.status.state = 'ok'; S.status.error = ''; }
+        S.emitStatus();
+      }
+      return ok;
     },
 
     cache(immediate = false) {
@@ -422,6 +491,8 @@
       if (!S.data) return;
       const row = p.new && Object.keys(p.new).length ? p.new : null;
       const old = p.old || {};
+      // lo que llega en vivo también cuenta como "visto" (solo lo de esta sucursal)
+      if (row && (table === 'orders' ? row.branch_id === S.ctx.branchId : table === 'docs' && (!row.branch_id || row.branch_id === S.ctx.branchId))) stamp(row);
       if (table === 'members') {
         const m = row || old;
         const i = S.ctx.members.findIndex((x) => x.user_id === m.user_id);
@@ -435,10 +506,17 @@
         const i = S.ctx.branches.findIndex((x) => x.id === b.id);
         if (p.eventType === 'DELETE') { if (i >= 0) S.ctx.branches.splice(i, 1); }
         else if (i >= 0) S.ctx.branches[i] = row; else S.ctx.branches.push(row);
-        if (row && row.id === S.ctx.branchId && !outbox.has('settings')) {
-          const next = deepMerge(PZ.seed.settings(), row.settings || {});
+        if (row && row.id === S.ctx.branchId) {
+          // la configuración de la nube pasa a ser la base; lo que se cambió acá y todavía no se
+          // envió (en cola o recién tocado) se conserva encima
+          const base = deepMerge(PZ.seed.settings(), row.settings || {});
+          const next = JSON.parse(JSON.stringify(base));
+          const queued = outbox.get('settings');
+          if (queued && queued.patch) applyPatch(next, queued.patch);
+          const fresh = patchOf(JSON.parse(shadow.get('settings') || '{}'), S.data.settings);
+          if (fresh) applyPatch(next, fresh);
           replaceInPlace(S.data.settings, next);
-          shadow.set('settings', JSON.stringify(S.data.settings));
+          shadow.set('settings', JSON.stringify(base));
         }
         return S.emit();
       }
@@ -476,6 +554,170 @@
       clearTimeout(S._remoteTimer);
       S._remoteTimer = setTimeout(() => S.emit(), 120);
       if (S.onRemoteHook) S.onRemoteHook(name, id, p.eventType);
+    },
+
+    /* =================== Ponerse al día =================== */
+    // Si un celular se bloquea o pierde señal, los avisos en tiempo real de ese rato se
+    // pierden. catchUp pide a la nube solo lo que cambió desde la última vez que se vio algo
+    // y lo aplica con onRemote (que respeta lo que todavía no se envió).
+
+    /**
+     * Trae lo que cambió en la nube desde la última vez y lo aplica.
+     * Si el corte fue largo (más de 6 horas) vuelve a traer todo, pero nunca con una
+     * ventana abierta (se redibujaría debajo): en ese caso lo posterga.
+     * @param {string} [reason]
+     * @returns {Promise<number>} cuántos cambios aplicó (-1 si trajo todo de nuevo)
+     */
+    catchUp(reason = '') {
+      if (!S.data || !S.ctx.branchId || !navigator.onLine || !PZ.cloud.changesSince) return Promise.resolve(0);
+      if (catching) return catching;
+      const { orgId, branchId } = S.ctx;
+      const run = async () => {
+        try {
+          if (!lastContact || Date.now() - lastContact > FULL_REFRESH_MS || fullPending) {
+            if (typeof document !== 'undefined' && document.querySelector('.modal-back')) { fullPending = true; return 0; }
+            fullPending = false;
+            await S.refresh();
+            return -1;
+          }
+          const since = new Date(Math.max(0, seen - CATCHUP_MARGIN_MS)).toISOString();
+          const { orders, docs } = await PZ.cloud.changesSince(orgId, branchId, since);
+          let n = 0;
+          const apply = (table, rows) => rows.forEach((r) => {
+            if (S.isCurrent(table, r)) { stamp(r); return; }
+            S.onRemote(table, { eventType: 'UPDATE', new: r, old: {} });
+            n++;
+          });
+          apply('docs', docs);
+          apply('orders', orders);
+          lastContact = Date.now();
+          S.status.lastSync = lastContact;
+          if (n) S.emitStatus();
+          return n;
+        } catch (e) {
+          console.warn('catchUp', reason, e);
+          return 0;
+        }
+      };
+      // (si `run` termina sin esperar nada, `catching` se limpia igual: .finally corre después de asignarlo)
+      catching = run().finally(() => { catching = null; });
+      return catching;
+    },
+
+    /** ¿Lo que llegó de la nube ya es igual a lo que este equipo tiene? (así no se redibuja por nada) */
+    isCurrent(table, row) {
+      let name;
+      let id;
+      if (table === 'orders') { name = 'orders'; id = row.id; }
+      else {
+        name = COL_TO_NAME[row.col];
+        if (!name) return true;
+        if (COLS[name].scope === 'branch' && row.branch_id !== S.ctx.branchId) return true;
+        id = localId(row.id);
+      }
+      const mine = (S.data[name] || []).find((x) => x.id === id);
+      if (!mine || outbox.has(keyOf(name, id))) return false;
+      return deepEq(JSON.parse(JSON.stringify(mine)), { ...row.data, id });
+    },
+
+    /** Arranca los avisos periódicos de puesta al día (cada 60 s mientras la pantalla está visible) */
+    startLive() {
+      S.stopLive();
+      if (typeof setInterval === 'undefined') return;
+      liveTimer = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        S.catchUp('periódica');
+      }, POLL_MS);
+    },
+    stopLive() {
+      if (liveTimer !== undefined && typeof clearInterval !== 'undefined') clearInterval(liveTimer);
+      liveTimer = undefined;
+    },
+
+    /** Desde cuándo está oculta la pantalla (ms) */
+    hiddenAt: 0,
+    /** La pantalla se ocultó o volvió: si estuvo oculta 15 s o más, se revisa si cambió algo */
+    onVisibility(hidden) {
+      if (hidden) { S.hiddenAt = Date.now(); return; }
+      const away = S.hiddenAt ? Date.now() - S.hiddenAt : 0;
+      S.hiddenAt = 0;
+      if (away >= HIDDEN_MIN_MS) S.catchUp('volvió a la pantalla');
+    },
+
+    /**
+     * Antes de cobrar: trae ese pedido de la nube por si otro equipo ya lo cobró o lo anuló.
+     * Si no hay internet o tarda, se sigue con lo que hay (el servidor igual rechaza el segundo cobro).
+     * @param {string} id @param {number} [timeout]
+     */
+    async syncOrder(id, timeout = 4000) {
+      if (!navigator.onLine || !PZ.cloud.orderById) return S.order(id);
+      try {
+        const row = await Promise.race([
+          PZ.cloud.orderById(S.ctx.orgId, id),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('tardó demasiado')), timeout)),
+        ]);
+        if (row && row.branch_id === S.ctx.branchId) S.onRemote('orders', { eventType: 'UPDATE', new: row, old: {} });
+      } catch (e) { /* sin red o lento: se sigue con lo local */ }
+      return S.order(id);
+    },
+
+    /** Quién cobró un pedido, para avisar "ya lo cobró X" */
+    paidByName(o) { const u = o && o.paidBy ? S.user(o.paidBy) : null; return u ? u.name : 'otro equipo'; },
+
+    /**
+     * El servidor rechazó un cambio de esta venta para siempre (por ejemplo, ya estaba cobrada):
+     * se descarta lo que había en cola y se reemplaza la copia de este equipo por la de la nube.
+     * El cambio rechazado queda en Conflictos.
+     */
+    async pullOrder(id) {
+      if (!PZ.cloud.orderById) return null;
+      const row = await PZ.cloud.orderById(S.ctx.orgId, id);
+      if (!row || row.branch_id !== S.ctx.branchId) return null;
+      outbox.delete(keyOf('orders', id));
+      S.onRemote('orders', { eventType: 'UPDATE', new: row, old: {} });
+      return S.order(id) || null;
+    },
+
+    /**
+     * Dos equipos abrieron la caja casi a la vez: el servidor dejó una sola. Este equipo adopta la
+     * que ya existe y le pasa las ventas y movimientos que todavía no salieron.
+     * @param {string} mineId id de la caja que este equipo quiso abrir
+     * @param {any[]} pendingRows filas de este envío que todavía no salieron (se corrigen antes de enviarlas)
+     * @returns {Promise<{ to: string, moved: number } | null>}
+     */
+    async adoptOpenSession(mineId, pendingRows = []) {
+      const { orgId, branchId } = S.ctx;
+      const remote = await PZ.cloud.openCashSession(orgId, branchId);
+      if (!remote) return null;
+      const to = localId(remote.id);
+      if (to === mineId) return null;
+      // la caja propia sobra (nunca llegó a la nube)
+      const i = S.data.cashSessions.findIndex((x) => x.id === mineId);
+      const mine = i >= 0 ? S.data.cashSessions[i] : null;
+      if (i >= 0) S.data.cashSessions.splice(i, 1);
+      shadow.delete(keyOf('cashSessions', mineId));
+      outbox.delete(keyOf('cashSessions', mineId));
+      S.onRemote('docs', { eventType: 'UPDATE', new: remote, old: {} });
+      // lo que dependía de ella pasa a la caja que ya estaba abierta
+      let moved = 0;
+      const move = (name, field, rows, idOf) => {
+        // solo lo que todavía no salió (en este envío o en la cola); lo que ya llegó a la nube no se toca
+        const ids = new Set();
+        const fix = (patch, id) => { if (patch && patch[field] === mineId) { patch[field] = to; ids.add(id); } };
+        outbox.forEach((op) => { if (op.name === name && !op.del) fix(op.patch, op.id); });
+        rows.forEach((r) => fix(r.data, idOf(r)));
+        (S.data[name] || []).forEach((x) => {
+          if (!ids.has(x.id)) return;
+          x[field] = to;
+          shadow.set(keyOf(name, x.id), JSON.stringify(x));
+          moved++;
+        });
+      };
+      move('orders', 'cashSessionId', pendingRows.filter((r) => !r.col), (r) => r.id);
+      move('cashMoves', 'sessionId', pendingRows.filter((r) => r.col === 'cash_move'), (r) => localId(r.id));
+      S.log('caja', `Este equipo se sumó a la caja ya abierta${mine ? ` (la suya, con ${U.money(mine.openingAmount)}, se descartó)` : ''}`);
+      S.save();
+      return { to, moved };
     },
 
     /* =================== Numeración =================== */
@@ -789,7 +1031,12 @@
       };
     },
 
-    closeSession(counted, notes = '') {
+    /**
+     * Cierra la caja. Primero se pone al día con la nube: así el cierre incluye las ventas que
+     * otros equipos cobraron en este turno y todavía no habían llegado a este.
+     */
+    async closeSession(counted, notes = '') {
+      await S.catchUp('cierre de caja');
       const s = S.currentSession();
       if (!s) return null;
       const sum = S.sessionSummary(s);
@@ -1255,8 +1502,63 @@
 
   function queue(key, op) {
     const prev = outbox.get(key);
-    if (!prev || op.del || prev.del || op.name === 'settings') outbox.set(key, op);
+    if (op.name === 'settings' && prev && prev.patch && op.patch) {
+      // dos cambios de configuración seguidos viajan juntos
+      const joined = JSON.parse(JSON.stringify(prev.patch));
+      applyPatch(joined, op.patch);
+      prev.patch = joined;
+    } else if (!prev || op.del || prev.del || op.name === 'settings') outbox.set(key, op);
     else prev.patch = { ...prev.patch, ...op.patch };
+  }
+
+  /** Anota el `updated_at` del servidor de una fila (para saber desde cuándo pedir lo que falta) */
+  function stamp(row) {
+    const t = row && row.updated_at ? Date.parse(row.updated_at) : NaN;
+    if (t > seen) seen = t;
+  }
+
+  const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+  /** Igualdad de datos sin importar el orden de las claves */
+  function deepEq(a, b) {
+    if (a === b) return true;
+    if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => deepEq(x, b[i]));
+    if (isObj(a) && isObj(b)) {
+      const ka = Object.keys(a).filter((k) => a[k] !== undefined);
+      const kb = Object.keys(b).filter((k) => b[k] !== undefined);
+      return ka.length === kb.length && ka.every((k) => deepEq(a[k], b[k]));
+    }
+    return false;
+  }
+
+  /**
+   * Configuración: solo viaja lo que cambió. Se compara hasta 4 niveles (ej: ticket → layout →
+   * comprobante → bloque), igual que la combinación del servidor (save_settings_patch).
+   * Lo que se borró viaja como null. Devuelve null si no hay cambios.
+   */
+  const SETTINGS_DEPTH = 4;
+  function patchOf(before, after, depth = SETTINGS_DEPTH) {
+    /** @type {Record<string, any>} */
+    const out = {};
+    let any = false;
+    new Set([...Object.keys(before || {}), ...Object.keys(after || {})]).forEach((k) => {
+      const a = before ? before[k] : undefined;
+      const b = after ? after[k] : undefined;
+      if (deepEq(a, b)) return;
+      any = true;
+      if (b === undefined) out[k] = null;
+      else if (depth > 1 && isObj(a) && isObj(b)) out[k] = patchOf(a, b, depth - 1);
+      else out[k] = JSON.parse(JSON.stringify(b));
+    });
+    return any ? out : null;
+  }
+  /** Aplica un parche de configuración sobre un objeto (misma regla que el servidor) */
+  function applyPatch(target, patch, depth = SETTINGS_DEPTH) {
+    Object.keys(patch || {}).forEach((k) => {
+      const v = patch[k];
+      if (depth > 1 && isObj(v) && isObj(target[k])) applyPatch(target[k], v, depth - 1);
+      else target[k] = v === undefined ? null : JSON.parse(JSON.stringify(v));
+    });
+    return target;
   }
 
   function sortCol(name, arr) {
@@ -1279,5 +1581,10 @@
       out[k] = bv && typeof bv === 'object' && !Array.isArray(bv) && ov && typeof ov === 'object' && !Array.isArray(ov) ? deepMerge(bv, ov) : ov;
     }
     return out;
+  }
+
+  // Al volver a la pantalla (el celular se había bloqueado o cambiado de app) se revisa si cambió algo
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('visibilitychange', () => PZ.store.onVisibility(document.hidden));
   }
 })(window.PZ);

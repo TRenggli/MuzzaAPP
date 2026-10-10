@@ -260,11 +260,25 @@
     if (!s) return;
     if (!A().canCharge()) return PZ.toast('La cuenta la cobra la caja', 'warn');
     if (PZ.cash && !(await PZ.cash.ensureOpen())) return;
+    // otra caja pudo cobrar la cuenta mientras tanto: se mira en la nube antes de cobrar y antes de registrar
+    const alreadyPaid = async () => {
+      const pend = S.tablePending(s);
+      if (!pend.length) return false;
+      await Promise.all(pend.map((o) => S.syncOrder(o.id)));
+      if (S.tableBalance(s) > 0) return false;
+      const last = S.tableOrders(s).filter((o) => o.paid).sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0))[0];
+      PZ.toast(`La mesa ${tableNum(s)} ya la cobró ${last ? S.paidByName(last) : 'otro equipo'}`, 'warn', 6000);
+      if (m) m.close();
+      render(el);
+      return true;
+    };
+    if (await alreadyPaid()) return;
     const snapshot = S.tablePending(s).map((o) => o.id);
     const due = S.tableBalance(s);
     if (!due) return PZ.toast('No hay saldo para cobrar', 'warn');
     const res = await PZ.checkout({ tableBill: true, number: `Mesa ${tableNum(s)}`, total: due, items: [] });
     if (!res) return;
+    if (await alreadyPaid()) return;
     let bill;
     try {
       bill = S.payTable(s.id, res.payments, res.adjust, snapshot);

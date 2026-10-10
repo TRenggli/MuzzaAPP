@@ -114,7 +114,7 @@ test('salón conserva tandas de una mesa y solo cierra con saldo cero', () => {
   assert.equal(S.closeTableSession(session.id), true);
 });
 
-test('cierre de caja: efectivo esperado = fondo + ventas en efectivo + ingresos − retiros', () => {
+test('cierre de caja: efectivo esperado = fondo + ventas en efectivo + ingresos − retiros', async () => {
   const { S } = setup();
   S.openSession(20000);
   const it = () => [S.makeItem({ product: P(S, 'p-muz'), variant: V(S, 'p-muz', 'grande') })];
@@ -131,7 +131,7 @@ test('cierre de caja: efectivo esperado = fondo + ventas en efectivo + ingresos 
   assert.equal(sum.expectedCash, 20000 + 14000 + 5000 - 3000);
   assert.equal(S.data.expenses.length, 1, 'el retiro con categoría quedó como gasto');
   assert.equal(S.data.expenses[0].source, 'caja');
-  const closed = S.closeSession(35500);
+  const closed = await S.closeSession(35500);
   assert.equal(closed.diff, -500, 'faltan $500');
 });
 

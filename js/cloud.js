@@ -22,6 +22,8 @@
     channel: null,
     /** estado del tiempo real ('SUBSCRIBED', …) @type {string} */
     realtime: '',
+    /** desde cuándo está en ese estado (ms) */
+    realtimeSince: Date.now(),
     /** errores ya reportados (para no inundar el registro) @type {Map<string, number>} */
     _reported: new Map(),
 
@@ -319,8 +321,25 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `org_id=eq.${orgId}` }, () => onEvent('orders'))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'branches', filter: `org_id=eq.${orgId}` }, () => onEvent('branches'))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` }, () => onEvent('members'))
-        .subscribe((status) => { C.realtime = status; PZ.store && PZ.store.emitStatus(); });
+        .subscribe((status) => C.setRealtime(status));
     },
+
+    /** Registra el estado del canal en vivo y avisa a la pantalla (también cuando pasan 10 s caído) */
+    setRealtime(status) {
+      if (status !== C.realtime) C.realtimeSince = Date.now();
+      C.realtime = status;
+      clearTimeout(C._downTimer);
+      if (status !== 'SUBSCRIBED') C._downTimer = setTimeout(() => PZ.store && PZ.store.emitStatus(), C.LIVE_GRACE + 100);
+      PZ.store && PZ.store.emitStatus();
+    },
+    /** Tiempo (ms) sin canal en vivo antes de avisar "Sin conexión en vivo" */
+    LIVE_GRACE: 10000,
+    /** ¿Lleva más de 10 s sin tiempo real estando con internet? */
+    liveDown() {
+      return !!C.channel && C.realtime !== 'SUBSCRIBED' && Date.now() - C.realtimeSince > C.LIVE_GRACE;
+    },
+    /** @type {any} */
+    _downTimer: null,
 
     /* ---------------- Lectura ---------------- */
     async memberships() {
@@ -357,9 +376,9 @@
         return out;
       };
       const [docs, orders, active, branch] = await Promise.all([
-        all(() => sb.from('docs').select('col, id, branch_id, data').eq('org_id', orgId).eq('branch_id', branchId).order('col').order('id')),
-        all(() => sb.from('orders').select('id, data').eq('branch_id', branchId).gte('created_at', since).order('created_at')),
-        sb.from('orders').select('id, data').eq('branch_id', branchId).lt('created_at', since).not('status', 'in', '(entregado,cancelado)').eq('voided', false),
+        all(() => sb.from('docs').select('col, id, branch_id, data, updated_at').eq('org_id', orgId).eq('branch_id', branchId).order('col').order('id')),
+        all(() => sb.from('orders').select('id, data, updated_at').eq('branch_id', branchId).gte('created_at', since).order('created_at')),
+        sb.from('orders').select('id, data, updated_at').eq('branch_id', branchId).lt('created_at', since).not('status', 'in', '(entregado,cancelado)').eq('voided', false),
         sb.from('branches').select('*').eq('id', branchId).single(),
       ]);
       if (branch.error) throw branch.error;
@@ -401,9 +420,57 @@
       const { error } = await sb.rpc('delete_doc', { p_org: orgId, p_col: col, p_id: id });
       if (error) throw error;
     },
-    async saveSettings(branchId, settings) {
-      const { error } = await sb.from('branches').update({ settings }).eq('id', branchId);
+    /**
+     * Guarda cambios de la configuración combinándolos en el servidor con lo que
+     * haya: dos encargados editando cosas distintas no se pisan.
+     * @param {string} branchId @param {Record<string, any>} patch
+     */
+    async saveSettings(branchId, patch) {
+      const { data, error } = await sb.rpc('save_settings_patch', { p_branch: branchId, p_patch: patch });
       if (error) throw error;
+      return data;
+    },
+
+    /* ---------------- Ponerse al día ---------------- */
+    /**
+     * Lo que cambió en la nube desde `sinceIso`: los pedidos de la sucursal y los
+     * documentos del negocio (de la sucursal o compartidos). Se usa para ponerse
+     * al día después de un corte, cuando los avisos en tiempo real se perdieron.
+     * (Las bajas de documentos se ven al reabrir la app; los pedidos nunca se borran.)
+     * @param {string} orgId @param {string} branchId @param {string} sinceIso
+     */
+    async changesSince(orgId, branchId, sinceIso) {
+      const page = async (q) => {
+        let out = [];
+        for (let from = 0; ; from += 1000) {
+          const { data, error } = await q().range(from, from + 999);
+          if (error) throw error;
+          out = out.concat(data);
+          if (data.length < 1000) break;
+        }
+        return out;
+      };
+      const [orders, docs] = await Promise.all([
+        page(() => sb.from('orders').select('id, branch_id, data, updated_at').eq('branch_id', branchId).gt('updated_at', sinceIso).order('updated_at')),
+        page(() => sb.from('docs').select('col, id, branch_id, data, updated_at').eq('org_id', orgId).gt('updated_at', sinceIso)
+          .or(`branch_id.is.null,branch_id.eq.${branchId}`).order('updated_at')),
+      ]);
+      return { orders, docs };
+    },
+
+    /** Un pedido tal como está en la nube (null si todavía no llegó) */
+    async orderById(orgId, id) {
+      const { data, error } = await sb.from('orders').select('id, branch_id, data, updated_at').eq('org_id', orgId).eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+
+    /** La caja abierta de la sucursal en la nube (null si no hay) */
+    async openCashSession(orgId, branchId) {
+      const { data, error } = await sb.from('docs').select('col, id, branch_id, data, updated_at').eq('org_id', orgId).eq('branch_id', branchId)
+        .eq('col', 'cash_session').is('data->>closedAt', null).limit(1);
+      if (error) throw error;
+      return data && data[0] ? data[0] : null;
     },
 
     /* ---------------- Tiempo real ---------------- */
@@ -415,7 +482,11 @@
         .on('postgres_changes', { event: '*', schema: 'public', table: 'branches', filter: `org_id=eq.${orgId}` }, (p) => onEvent('branches', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `org_id=eq.${orgId}` }, (p) => onEvent('members', p))
         .on('postgres_changes', { event: '*', schema: 'public', table: 'online_orders', filter: `branch_id=eq.${branchId}` }, (p) => PZ.web && PZ.web.onRemote(p))
-        .subscribe((status) => { C.realtime = status; PZ.store && PZ.store.emitStatus(); });
+        .subscribe((status) => {
+          C.setRealtime(status);
+          // cada vez que el canal (re)conecta se trae lo que se perdió mientras estuvo caído
+          if (status === 'SUBSCRIBED' && PZ.store && PZ.store.catchUp) PZ.store.catchUp('reconexión');
+        });
     },
     unsubscribe() {
       if (C.channel) { sb.removeChannel(C.channel); C.channel = null; }

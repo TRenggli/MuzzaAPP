@@ -66,6 +66,8 @@
         'Si sacás plata del cajón, registralo en <b>Retiro / gasto</b>. Si es un gasto (verdura, proveedor), elegí la categoría y queda en Gastos.',
         'Al <b>cerrar</b> contá los billetes: el sistema te dice si sobra o falta plata e imprime el cierre Z.',
         'Una caja cerrada ya no se puede modificar.',
+        'Hay <b>una sola caja abierta por sucursal</b>, compartida por todos los equipos. Si dos abren a la vez, el segundo se suma a la que ya estaba abierta. Antes de cerrar, el equipo se pone al día con las ventas de los demás.',
+        'Si aparece <b>Cobrado después del cierre</b>, son ventas que otro equipo cobró cuando la caja ya se había cerrado y no había otra abierta: sumalas al efectivo que corresponda.',
       ],
     },
     historial: {

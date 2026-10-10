@@ -249,12 +249,23 @@
     }
   };
 
+  /** ¿Otro equipo ya cobró o anuló este pedido? Lo actualiza y avisa. Devuelve true si ya no se puede cobrar. */
+  async function alreadyHandled(o) {
+    await S.syncOrder(o.id);
+    if (o.voided) { PZ.toast(`El pedido #${o.number} fue anulado en otro equipo`, 'warn', 5000); return true; }
+    if (o.paid) { PZ.toast(`El pedido #${o.number} ya lo cobró ${S.paidByName(o)}`, 'warn', 6000); return true; }
+    return false;
+  }
+
   async function pay(o) {
     if (o.tableSessionId) { PZ.toast('Esta tanda se cobra junto con la cuenta de la mesa (Salón)', 'warn'); return false; }
     if (!(await PZ.cash.ensureOpen())) return false;
+    // otra caja pudo cobrarlo mientras tanto: se mira en la nube antes de cobrar y antes de registrar
+    if (await alreadyHandled(o)) return false;
     S.computeTotals(o);
     const res = await PZ.checkout(o);
     if (!res) return false;
+    if (await alreadyHandled(o)) return false;
     if (res.collect) {
       o.collect = res.collect;
       S.log('venta', `Pedido #${o.number}: lo cobra el repartidor en efectivo`);

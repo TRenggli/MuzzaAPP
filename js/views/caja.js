@@ -65,6 +65,7 @@
         </div>
       </div>
       <div class="card mt"><h3>🧾 Ventas del turno</h3>${ordersTable(sum.orders.slice().reverse())}</div>
+      ${lateCard()}
       <div class="card mt"><h3>📚 Cierres anteriores</h3>${historyTable()}</div>`;
 
     const on = (a, fn) => { el.querySelector(`[data-a=${a}]`).onclick = fn; };
@@ -73,6 +74,19 @@
     on('partial', () => PZ.ticket.printClose(s));
     on('close', () => closeModal(() => render(el)));
     bindTables(el);
+  }
+
+  /** Cobros que entraron cuando su caja ya estaba cerrada y no había otra abierta (otro equipo cerró mientras tanto) */
+  function lateOrders() {
+    return S.data.orders.filter((o) => o.lateCash && o.paid && !o.voided).sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
+  }
+  function lateCard() {
+    const list = lateOrders();
+    if (!list.length) return '';
+    const total = list.reduce((a, o) => a + o.total, 0);
+    return `<div class="card mt owed"><h3>⏰ Cobrado después del cierre <span class="badge warn">${list.length}</span></h3>
+      <p class="muted small" style="margin-top:4px">Se cobraron cuando la caja de su turno ya estaba cerrada y todavía no había otra abierta. No están en ningún cierre: sumalas al efectivo que corresponda (${U.money(total)} en total).</p>
+      ${ordersTable(list)}</div>`;
   }
 
   function ordersTable(list) {
@@ -115,6 +129,7 @@
           <button class="btn lg" data-a="open">🔓 Abrir caja</button>
         </div>
       </div>
+      ${lateCard()}
       <div class="card"><h3>📚 Cierres anteriores</h3>${historyTable()}</div>`;
     el.querySelector('[data-a=open]').onclick = () => {
       S.openSession(U.parseMoney(el.querySelector('.amt').value));
@@ -185,7 +200,11 @@
       if (!counted.value) return PZ.toast('Cargá el efectivo contado', 'warn');
       const pending = S.data.orders.filter((o) => !o.voided && !o.paid).length;
       if (pending && !(await PZ.confirm(`Hay ${pending} pedido(s) sin cobrar. ¿Cerrar la caja igual?`))) return;
-      const closed = S.closeSession(U.parseMoney(counted.value), E.querySelector('.notes').value.trim());
+      const btn = E.querySelector('[data-a=ok]');
+      btn.disabled = true;
+      // se pone al día con la nube antes de calcular, así entran las ventas de otros equipos
+      const closed = await S.closeSession(U.parseMoney(counted.value), E.querySelector('.notes').value.trim());
+      if (!closed) { m.close(); return PZ.toast('La caja ya estaba cerrada', 'warn'); }
       m.close();
       PZ.toast('Caja cerrada');
       PZ.ticket.printClose(closed);

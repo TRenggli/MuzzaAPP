@@ -363,6 +363,7 @@
     async leaveBranch() {
       if (App.mode === 'branch' && S.data) {
         if (cleanup) { try { cleanup(); } catch (e) { /* noop */ } cleanup = null; }
+        S.stopLive();
         S.diff();
         await S.flush();
       }
@@ -537,7 +538,7 @@
     },
 
     refreshSync(st) {
-      const el = root().querySelector('.sync-chip');
+      const el = /** @type {HTMLElement | null} */ (root().querySelector('.sync-chip'));
       if (!el) return;
       const offline = !navigator.onLine;
       let cls = 'ok';
@@ -548,13 +549,23 @@
       else if (st.state === 'retry') { cls = 'warn'; ico = '⚠️'; txt = `Reintentando (${st.pending})`; }
       else if (st.state === 'error') { cls = 'err'; ico = '⚠️'; txt = 'Error al guardar'; }
       else if (st.pending) { cls = 'busy'; ico = '⏳'; txt = `${st.pending} por enviar`; }
+      else if (PZ.cloud.liveDown()) { cls = 'warn'; ico = '⚠️'; txt = 'Sin conexión en vivo'; }
+      el.title = cls === 'warn' && txt === 'Sin conexión en vivo'
+        ? 'Los cambios de otros equipos pueden demorar. Se ponen al día solos cuando vuelva la conexión.'
+        : '';
       el.className = 'sync-chip ' + cls;
       el.innerHTML = `<span>${ico}</span><span class="s-txt">${txt}</span>`;
     },
 
     syncInfo() {
       const st = S.status;
-      PZ.modal({
+      const conflicts = App.mode === 'branch' ? S.conflicts() : [];
+      const WHAT = { orders: 'Pedido', cashSessions: 'Caja', cashMoves: 'Movimiento de caja', settings: 'Configuración', customers: 'Cliente', products: 'Producto', ingredients: 'Insumo', expenses: 'Gasto', tableSessions: 'Cuenta de mesa' };
+      const label = (c) => {
+        const o = c.name === 'orders' ? S.order(c.id) : null;
+        return `${WHAT[c.name] || c.name}${o ? ' #' + o.number : ''}`;
+      };
+      const m = PZ.modal({
         title: '☁️ Sincronización',
         size: 'sm',
         body: `
@@ -565,8 +576,23 @@
             <div class="bk-row"><span>Última sincronización</span><b>${st.lastSync ? U.time(st.lastSync) : '—'}</b></div>
           </div>
           <p class="small muted">Todo se guarda primero en este equipo y se sube a la nube apenas hay internet. Si se corta la conexión, podés seguir vendiendo e imprimiendo: se sincroniza solo al volver.</p>
-          ${st.error ? `<div class="alert-row">⚠️ ${U.esc(st.error)}</div>` : ''}`,
+          ${App.mode === 'branch' ? '<button class="btn ghost block" data-a="catch">🔄 Ponerme al día ahora</button>' : ''}
+          ${st.error ? `<div class="alert-row">⚠️ ${U.esc(st.error)}</div>` : ''}
+          ${conflicts.length ? `<div class="opt-section">Cambios rechazados por el servidor</div>
+            <p class="small muted" style="margin-top:0">Otro equipo pudo cambiar lo mismo antes. Revisalos: podés reintentar el cambio o descartarlo.</p>
+            ${conflicts.map((c) => `<div class="alert-row" style="display:block"><b>${U.esc(label(c))}</b> · ${U.time(c.at)}<div class="small">${U.esc(c.error)}</div>
+              <div class="row-flex mt"><button class="btn sm ghost" data-cr="${U.esc(c.name)}|${U.esc(c.id || 'settings')}">Reintentar</button><button class="btn sm ghost" data-cd="${U.esc(c.name)}|${U.esc(c.id || 'settings')}">Descartar</button></div></div>`).join('')}` : ''}`,
       });
+      const key = (b, a) => String(b.dataset[a]).split('|');
+      const go = m.el.querySelector('[data-a=catch]');
+      if (go) go.onclick = async () => {
+        go.disabled = true;
+        const n = await S.catchUp('manual');
+        PZ.toast(n === 0 ? 'Ya estabas al día ✅' : n < 0 ? 'Datos actualizados desde la nube' : `Se actualizaron ${n} cambio${n === 1 ? '' : 's'}`);
+        go.disabled = false;
+      };
+      m.el.querySelectorAll('[data-cr]').forEach((b) => b.onclick = () => { const [n, i] = key(b, 'cr'); S.retryConflict(n, i); m.close(); PZ.toast('Reintentando…'); });
+      m.el.querySelectorAll('[data-cd]').forEach((b) => b.onclick = () => { const [n, i] = key(b, 'cd'); S.dismissConflict(n, i); m.close(); PZ.toast('Descartado'); });
     },
 
     userMenu() {

@@ -7,7 +7,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
-export function loadApp({ online = true, Notification = undefined } = {}) {
+import { makeServer } from './server.mjs';
+
+/**
+ * @param {{ online?: boolean, Notification?: any, server?: ReturnType<typeof makeServer> | null, document?: boolean }} [opts]
+ *   server: nube compartida con otras instancias (cada instancia es un equipo)
+ *   document: agrega un `document` mínimo (para la puesta al día: ventanas abiertas y pantalla oculta)
+ */
+export function loadApp({ online = true, Notification = undefined, server = null, document = false } = {}) {
   const mem = new Map();
   const localStorage = {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -24,6 +31,8 @@ export function loadApp({ online = true, Notification = undefined } = {}) {
     addEventListener() {},
     ...(Notification ? { Notification } : {}),
   };
+  const page = { hidden: false, modal: false };
+  if (document) ctx.document = { get hidden() { return page.hidden; }, addEventListener() {}, querySelector: () => (page.modal ? {} : null) };
   ctx.window = ctx;
   ctx.globalThis = ctx;
   ctx.PZ_CONFIG = { supabaseUrl: 'http://test', supabaseKey: 'x', staffDomain: 'staff.pizzeria.local', version: 'test' };
@@ -49,18 +58,20 @@ export function loadApp({ online = true, Notification = undefined } = {}) {
     unsubscribe() {},
   };
 
+  const client = server ? server.attach(PZ) : null;
+
   const S = PZ.store;
   S.cache = () => {}; // sin IndexedDB en las pruebas
   S.ctx.orgId = 'org-1';
   S.ctx.branchId = 'br-1';
   S.ctx.branches = [{ id: 'br-1', name: 'Centro', active: true }];
-  S.ctx.members = [];
+  S.ctx.members = server ? JSON.parse(JSON.stringify(server.members)) : [];
   S.data = S.emptyData(PZ.seed.settings('Pizzería Test'));
   PZ.auth.current = { id: 'u-owner', name: 'Dueño', role: 'owner', branchIds: [], orgId: 'org-1' };
 
   const plain = (x) => JSON.parse(JSON.stringify(x));
   const setOnline = (v) => { ctx.navigator.onLine = v; };
-  return { PZ, S, U: PZ.util, sent, plain, localStorage, setOnline, ctx };
+  return { PZ, S, U: PZ.util, sent, plain, localStorage, setOnline, ctx, client, page };
 }
 
 /** Menú mínimo con receta, para probar precios y costos */
