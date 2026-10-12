@@ -139,13 +139,13 @@
       <div class="row-flex" style="gap:6px">
         <span class="badge pri">${L.typeIcon[o.type]} ${L.type[o.type]}${o.type === 'mesa' && o.table ? ' ' + U.esc(o.table) : ''}${tableAcc && o.batchNumber ? ' · Tanda ' + o.batchNumber : ''}</span>
         ${o.web ? `<span class="badge">📲 W-${o.web.number}</span>` : ''}
-        ${o.paid ? '<span class="badge ok">Pagado</span>' : tableAcc ? '<span class="badge">🧾 Va a la cuenta de la mesa</span>' : cash ? `<span class="badge warn">🛵 Cobra el repartidor ${U.money(cash.amount)}</span>` : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
+        ${o.paid ? '<span class="badge ok">Pagado</span>' : tableAcc ? '<span class="badge">🧾 Va a la cuenta de la mesa</span>' : cash ? `<span class="badge warn">${isDelivery ? '🛵 Cobra el repartidor ' : '🥡 A cobrar al retirar '}${U.money(cash.amount)}</span>` : `<span class="badge warn">A cobrar ${U.money(o.total)}</span>`}
         ${o.eta ? `<span class="badge">🕒 ${U.esc(o.eta)}</span>` : ''}
       </div>
       ${o.customerName ? `<div style="margin-top:6px;font-weight:800">${U.esc(o.customerName)}</div>` : ''}
       ${isDelivery && o.address ? `<div class="small"><a href="${mapUrl}" target="_blank" rel="noopener">📍 ${U.esc(o.address)}</a></div>` : ''}
       ${isDelivery && o.driver ? `<div class="small muted">Repartidor: ${U.esc(o.driver)}</div>` : ''}
-      ${cash ? `<div class="small">💵 En efectivo${cash.change ? ` · paga con ${U.money(cash.tendered)} · lleva ${U.money(cash.change)} de vuelto` : cash.tendered ? ' · paga justo' : ''}</div>` : ''}
+      ${cash ? `<div class="small">💵 En efectivo${cash.change ? ` · paga con ${U.money(cash.tendered)} · ${isDelivery ? 'lleva' : 'tener'} ${U.money(cash.change)} de vuelto` : cash.tendered ? ' · paga justo' : ''}</div>` : ''}
       <div class="oc-items">${o.items.map((it) => `<div><b>${it.qty}x</b> ${U.esc(it.name)}${it.variantName ? ' <span class="muted">(' + U.esc(it.variantName) + ')</span>' : ''}${it.extras.length ? `<div class="small muted">+ ${it.extras.map((e) => U.esc(e.name)).join(', ')}</div>` : ''}${it.notes ? `<div class="oc-note">» ${U.esc(it.notes)}</div>` : ''}</div>`).join('')}</div>
       ${o.notes ? `<div class="oc-note">📝 ${U.esc(o.notes)}</div>` : ''}
       <div class="oc-actions">
@@ -180,7 +180,7 @@
     if (act === 'print') {
       const m = PZ.modal({
         title: `🖨️ Pedido #${o.number}`, size: 'sm',
-        body: `<div class="cards"><button class="btn block" data-p="k">👨‍🍳 Comanda de cocina</button><button class="btn block" data-p="c">🧾 ${o.paid ? 'Comprobante de pago' : 'Comprobante de pedido (para el repartidor)'}</button><button class="btn ghost block" data-p="v">👀 Ver comprobante</button></div>`,
+        body: `<div class="cards"><button class="btn block" data-p="k">👨‍🍳 Comanda de cocina</button><button class="btn block" data-p="c">🧾 ${o.paid ? 'Comprobante de pago' : o.type === 'delivery' ? 'Comprobante de pedido (para el repartidor)' : 'Comprobante de pedido (a cobrar)'}</button><button class="btn ghost block" data-p="v">👀 Ver comprobante</button></div>`,
       });
       m.el.querySelector('[data-p=k]').onclick = () => { m.close(); PZ.ticket.printOrder(o, { kitchen: true, customer: false }); };
       m.el.querySelector('[data-p=c]').onclick = () => { m.close(); PZ.ticket.printOrder(o); };
@@ -273,7 +273,7 @@
     if (await alreadyHandled(o)) return false;
     if (res.collect) {
       o.collect = res.collect;
-      S.log('venta', `Pedido #${o.number}: lo cobra el repartidor en efectivo`);
+      S.log('venta', `Pedido #${o.number}: ${o.type === 'delivery' ? 'lo cobra el repartidor en efectivo' : 'se cobra al retirar en efectivo'}`);
       S.save();
       PZ.afterSent(o, { ...res, kitchen: false });
       return false;

@@ -151,13 +151,13 @@
         }).join('')
       : '';
 
-    // lo cobra el repartidor: cuánto cobra y el vuelto que lleva (sin datos de transferencia)
+    // lo cobra el repartidor o se cobra al retirar: cuánto cobra y el vuelto
     const cash = collectOf(o);
     const cashInfo = cash && on('cobroEfectivo') ? `<div class="box">
         ${cash.discount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(cash.discount)}</span></div>` : ''}
         <div class="row" style="font-size:1.15em"><span>COBRAR EN EFECTIVO</span><span>${U.money(cash.amount)}</span></div>
         ${cash.change ? `<div class="row"><span>Paga con</span><span>${U.money(cash.tendered)}</span></div>
-        <div class="row" style="font-size:1.15em"><span>LLEVAR DE VUELTO</span><span>${U.money(cash.change)}</span></div>`
+        <div class="row" style="font-size:1.15em"><span>${o.type === 'delivery' ? 'LLEVAR DE VUELTO' : 'TENER DE VUELTO'}</span><span>${U.money(cash.change)}</span></div>`
         : cash.tendered ? '<div>Paga justo, sin vuelto</div>' : ''}
       </div>` : '';
 
@@ -461,7 +461,7 @@
       e.sep();
       if (cash.discount) e.pair('Desc. pago efectivo', '-' + U.money(cash.discount));
       e.bold(true).pair('COBRAR EN EFECTIVO', U.money(cash.amount)).bold(false);
-      if (cash.change) e.pair('Paga con', U.money(cash.tendered)).bold(true).size(1, 2).pair('LLEVAR DE VUELTO', U.money(cash.change)).size(1, 1).bold(false);
+      if (cash.change) e.pair('Paga con', U.money(cash.tendered)).bold(true).size(1, 2).pair(o.type === 'delivery' ? 'LLEVAR DE VUELTO' : 'TENER DE VUELTO', U.money(cash.change)).size(1, 1).bold(false);
       else if (cash.tendered) e.ln('Paga justo, sin vuelto');
     }
     e.align('c').ln().bold(true).size(2, 2).ln(stampOf(o)).size(1, 1).bold(false);

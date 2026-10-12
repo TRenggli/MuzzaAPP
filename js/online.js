@@ -115,6 +115,9 @@
       Object.assign(w, { status: 'aceptado', order_id: remoteOrder.id });
       const payTxt = `${PAY[d.payment] || d.payment}${d.payment === 'efectivo' && d.cashWith ? ` (trae ${U.money(d.cashWith)})` : ''}`;
       const o = { ...remoteOrder, id: remoteOrder.id };
+      if (d.payment === 'efectivo') {
+        o.collect = { method: 'efectivo', amount: o.total, tendered: Number(d.cashWith) || 0 };
+      }
       if (!S.order(o.id)) S.data.orders.push(o);
       S.rebuildShadow();
       S.cache(true);
@@ -129,7 +132,7 @@
       S.save();
       W.emit();
       const st = S.data.settings;
-      if (st.ticket.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' });
+      if (st.ticket.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' || o.type === 'retiro' });
       const on = st.online || {};
       const pickupMins = on.pickupMinutes || st.pickupMinutes || st.prepMinutes || 15;
       const deliveryMins = on.deliveryMinutes || st.deliveryMinutes || ((st.prepMinutes || 35) + 15);

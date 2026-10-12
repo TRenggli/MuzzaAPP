@@ -20,6 +20,7 @@ function setup() {
 }
 const item = (S, id = 'p-muz', v = 'grande', qty = 1) => S.makeItem({ product: S.product(id), variant: S.product(id).variants.find((x) => x.id === v), qty });
 const delivery = (S, extra = {}) => ({ type: 'delivery', items: [item(S)], customerName: 'Juan', phone: '3415550000', address: 'San Martín 123', deliveryFee: 500, ...extra });
+const retiro = (S, extra = {}) => ({ type: 'retiro', items: [item(S)], customerName: 'Pedro', phone: '3415551111', ...extra });
 
 test('el delivery que cobra el repartidor queda a cobrar, con el monto y el vuelto anotados', () => {
   const { S, T } = setup();
@@ -106,3 +107,42 @@ test('el pedido viaja a la nube con el dato de quién cobra', async () => {
   const row2 = sent.orders.filter((r) => r.id === later.id).pop();
   assert.deepEqual(row2.data.collect, { method: 'efectivo', amount: 10500, tendered: 0 });
 });
+
+test('los pedidos para retirar en el local muestran A COBRAR en el ticket y no PAGADO', () => {
+  const { S, T, U } = setup();
+  // Pedido para retirar que queda a cobrar en efectivo
+  const o = S.createOrder(retiro(S, { collect: { method: 'efectivo', amount: 10000, tendered: 20000 } }));
+  assert.equal(o.paid, false, 'no figura pagado hasta que el cliente retire y abone');
+  assert.equal(o.type, 'retiro');
+  const cash = T.collectOf(o);
+  assert.equal(cash.amount, 10000);
+  assert.equal(cash.change, 10000);
+
+  const html = T.customerHTML(o);
+  assert.match(html, /A COBRAR/, 'el sello del ticket debe decir A COBRAR');
+  assert.doesNotMatch(html, /PAGADO/, 'no debe decir PAGADO');
+  assert.match(html, /COBRAR EN EFECTIVO/);
+  assert.ok(html.includes(U.money(20000)), 'monto con el que paga');
+  assert.match(html, /TENER DE VUELTO/);
+  assert.ok(html.includes(U.money(10000)), 'vuelto a tener listo');
+  assert.match(html, /Para retirar/);
+});
+
+test('cuando el cliente retira el pedido y paga, el ticket pasa a PAGADO', () => {
+  const { S, T } = setup();
+  S.openSession(0);
+  const o = S.createOrder(retiro(S, { collect: { method: 'efectivo', amount: 10000, tendered: 10000 } }));
+  assert.equal(o.paid, false);
+  assert.match(T.customerHTML(o), /A COBRAR/);
+
+  // El cliente retira y paga
+  S.payOrder(o.id, [{ method: 'efectivo', amount: 10000, tendered: 10000, change: 0 }]);
+  assert.equal(o.paid, true);
+  assert.equal(T.collectOf(o), null, 'ya no está a cobrar');
+
+  const html = T.customerHTML(o);
+  assert.match(html, /PAGADO/);
+  assert.doesNotMatch(html, /A COBRAR/);
+  assert.doesNotMatch(html, /COBRAR EN EFECTIVO/);
+});
+

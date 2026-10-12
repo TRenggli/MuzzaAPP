@@ -468,7 +468,7 @@
     el.querySelector('.cart').classList.remove('open');
     PZ.toast(t ? `Mesa ${t.number}: tanda ${o.batchNumber} enviada a cocina (se cobra desde Salón)` : `Pedido #${o.number} enviado a cocina`);
     const st = S.data.settings.ticket;
-    if (st.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' });
+    if (st.printKitchen) PZ.ticket.printOrder(o, { kitchen: true, customer: o.type === 'delivery' || o.type === 'retiro' });
   }
 
   function validateCart() {
@@ -499,16 +499,19 @@
     if (res.collect) afterSent(o, res); else afterPaid(o, res);
   }
 
-  /** Delivery que cobra el repartidor: comprobante "A COBRAR" con el vuelto que lleva */
+  /** Pedido que queda a cobrar (delivery o retiro): comprobante "A COBRAR" con el vuelto */
   function afterSent(o, res) {
     if (navigator.vibrate) navigator.vibrate(30);
     const cash = PZ.ticket.collectOf(o);
-    const m = PZ.ticket.preview(o, { title: `🛵 Pedido #${o.number} · lo cobra el repartidor` });
+    const isDel = o.type === 'delivery';
+    const m = PZ.ticket.preview(o, { title: isDel ? `🛵 Pedido #${o.number} · lo cobra el repartidor` : `🥡 Pedido #${o.number} · a cobrar al retirar` });
     if (cash) {
       const box = document.createElement('div');
       box.className = 'change-box';
       box.style.marginBottom = '12px';
-      box.innerHTML = cash.change ? `El repartidor lleva de vuelto<b>${U.money(cash.change)}</b>` : `El repartidor cobra en efectivo<b>${U.money(cash.amount)}</b>`;
+      box.innerHTML = isDel
+        ? (cash.change ? `El repartidor lleva de vuelto<b>${U.money(cash.change)}</b>` : `El repartidor cobra en efectivo<b>${U.money(cash.amount)}</b>`)
+        : (cash.change ? `El cliente paga con ${U.money(cash.tendered)} · tener de vuelto<b>${U.money(cash.change)}</b>` : `Cobrar en efectivo al retirar<b>${U.money(cash.amount)}</b>`);
       m.el.querySelector('.modal-body').prepend(box);
     }
     if (res.print) PZ.ticket.printOrder(o, { kitchen: res.kitchen });
@@ -535,11 +538,13 @@
   /* ======================= Modal de cobro (reutilizable) ======================= */
   PZ.checkout = function (order, { isNew = false } = {}) {
     return new Promise((resolve) => {
-      // delivery en efectivo: lo puede cobrar el repartidor al entregar (queda "a cobrar")
-      const canCollect = order.type === 'delivery' && !order.tableBill;
-      /** quién cobra el efectivo: el repartidor o acá */
-      let who = canCollect && isNew ? 'driver' : 'here';
-      /** con cuánto paga (si ya se había anotado al mandarlo con el repartidor) */
+      // delivery y retiro en efectivo: pueden quedar "a cobrar"
+      const isDelivery = order.type === 'delivery';
+      const isRetiro = order.type === 'retiro';
+      const canCollect = (isDelivery || isRetiro) && !order.tableBill;
+      /** quién cobra el efectivo: el repartidor ('driver'), al retirar ('pickup') o acá ('here') */
+      let who = canCollect && isNew ? (isDelivery ? 'driver' : 'pickup') : 'here';
+      /** con cuánto paga (si ya se había anotado al mandarlo o al tomar el pedido) */
       let typed = order.collect && order.collect.tendered ? String(order.collect.tendered) : '';
       const st = S.data.settings;
       const P = st.payments;
@@ -554,7 +559,7 @@
       let mpPaid = null;
       const base = order.total;
       const useMp = () => method === 'qr' && !mpManual && PZ.mp && PZ.mp.ready();
-      const driverMode = () => canCollect && who === 'driver' && method === 'efectivo' && !split;
+      const collectMode = () => canCollect && (who === 'driver' || who === 'pickup') && method === 'efectivo' && !split;
 
       const adjustFor = (m) => {
         if (split) return { cashDiscount: 0, surcharge: 0 };
@@ -601,11 +606,17 @@
           const base = () => (split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value) || d) : d);
           const b0 = base();
           const suggestions = [...new Set([Math.ceil(b0 / 1000) * 1000, Math.ceil(b0 / 5000) * 5000, Math.ceil(b0 / 10000) * 10000, Math.ceil(b0 / 20000) * 20000])].filter((v) => v > b0).slice(0, 3);
-          const drv = driverMode();
+          const clt = collectMode();
           detail.innerHTML = `
-            ${canCollect && !split ? `<div class="seg mb who"><button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Lo cobra el repartidor</button><button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
-            ${drv ? '<p class="small muted" style="margin:-4px 0 8px">Queda <b>a cobrar</b>: el comprobante sale para el repartidor con lo que tiene que cobrar y el vuelto que lleva. Cuando vuelve con la plata, lo cobrás desde Pedidos.</p>' : ''}` : ''}
-            <div class="opt-section" style="margin-top:0">${drv ? '¿Con cuánto va a pagar? (dejalo vacío si no sabe)' : '¿Con cuánto paga el cliente?'}</div>
+            ${canCollect && !split ? `<div class="seg mb who">${isDelivery
+              ? `<button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Lo cobra el repartidor</button>`
+              : `<button data-w="pickup" class="${who === 'pickup' ? 'on' : ''}">🥡 Cobrar al retirar</button>`
+            }<button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
+            ${clt ? `<p class="small muted" style="margin:-4px 0 8px">${isDelivery
+              ? 'Queda <b>a cobrar</b>: el comprobante sale para el repartidor con lo que tiene que cobrar y el vuelto que lleva. Cuando vuelve con la plata, lo cobrás desde Pedidos.'
+              : 'Queda <b>a cobrar</b>: el comprobante sale con "A COBRAR" para cuando el cliente venga a retirar. Cuando pague en el local, lo cobrás desde Pedidos.'
+            }</p>` : ''}` : ''}
+            <div class="opt-section" style="margin-top:0">${clt ? '¿Con cuánto va a pagar? (dejalo vacío si no sabe)' : '¿Con cuánto paga el cliente?'}</div>
             <div class="bills">
               <button data-b="${b0}">✓ Justo ${U.money(b0)}</button>
               ${suggestions.map((v) => `<button data-b="${v}">${U.money(v)}</button>`).join('')}
@@ -613,7 +624,7 @@
             </div>
             <label class="field tendered-field"><span>Monto que entrega (escribilo si es otro)</span>
               <input class="tendered" inputmode="numeric" placeholder="Ej: 23000" autocomplete="off"></label>
-            <div class="change-box"><span>${drv ? 'Vuelto que lleva' : 'Vuelto'}</span><b class="chg">${U.money(0)}</b></div>`;
+            <div class="change-box"><span>${clt ? (isDelivery ? 'Vuelto que lleva' : 'Tener de vuelto') : 'Vuelto'}</span><b class="chg">${U.money(0)}</b></div>`;
           const inp = detail.querySelector('.tendered');
           const chips = detail.querySelectorAll('[data-b]');
           const upd = () => {
@@ -621,7 +632,7 @@
             const box = detail.querySelector('.change-box');
             const diff = v - base();
             box.classList.toggle('neg', !!inp.value && diff < 0);
-            box.querySelector('span').textContent = !inp.value ? (drv ? 'Vuelto que lleva' : 'Vuelto') : diff < 0 ? 'Falta' : `Paga con ${U.money(v)} · ${drv ? 'lleva de vuelto' : 'vuelto'}`;
+            box.querySelector('span').textContent = !inp.value ? (clt ? (isDelivery ? 'Vuelto que lleva' : 'Tener de vuelto') : 'Vuelto') : diff < 0 ? 'Falta' : `Paga con ${U.money(v)} · ${clt ? (isDelivery ? 'lleva de vuelto' : 'tener de vuelto') : 'vuelto'}`;
             detail.querySelector('.chg').textContent = U.money(inp.value ? Math.abs(diff) : 0);
             chips.forEach((c) => c.classList.toggle('on', c.dataset.b !== 'other' && Number(c.dataset.b) === v));
           };
@@ -642,7 +653,7 @@
           });
           detail.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
             who = /** @type {string} */ (b.getAttribute('data-w'));
-            if (who === 'driver') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+            if (who === 'driver' || who === 'pickup') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
             draw();
           });
           if (typed && !split) { inp.value = typed; upd(); }
@@ -685,7 +696,7 @@
         const ok = E.querySelector('[data-a=ok]');
         ok.classList.toggle('mp-go', useMp());
         ok.textContent = useMp() ? `📱 Generar QR · ${U.money(split ? Math.min(d, U.parseMoney((E.querySelector('.part') || {}).value) || d) : d)}`
-          : driverMode() ? `🛵 Enviar · cobra ${U.money(d)}`
+          : collectMode() ? (isDelivery ? `🛵 Enviar · cobra ${U.money(d)}` : `🥡 Guardar · a cobrar ${U.money(d)}`)
           : split && d > 0 ? `Agregar pago` : `✅ Confirmar ${U.money(split ? base : totalFor(method))}`;
       }
 
@@ -708,8 +719,8 @@
         const mpNow = mpPaid;
         mpPaid = null;
         if (!mpNow && useMp()) return chargeMp();
-        if (driverMode()) {
-          // no se cobra ahora: el pedido queda a cobrar y el comprobante sale para el repartidor
+        if (collectMode()) {
+          // no se cobra ahora: el pedido queda a cobrar y el comprobante sale con A COBRAR
           const amount = due();
           const tv = U.parseMoney(detail.querySelector('.tendered').value);
           if (tv && tv < amount) return PZ.toast(`Con ${U.money(tv)} no alcanza: faltan ${U.money(amount - tv)}`, 'warn');
@@ -765,7 +776,7 @@
         m.close();
         resolve(out);
       };
-      if (who === 'driver') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+      if (who === 'driver' || who === 'pickup') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
       draw();
     });
   };
