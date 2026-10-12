@@ -76,6 +76,8 @@
   const App = (PZ.app = {
     /** @type {'platform' | 'org' | 'branch' | null} */
     mode: null,
+    /** @type {any} */
+    demoSession: null,
     /** ya se avisó del corte del tiempo real actual */
     _liveAlerted: false,
     /** @type {string | null} */
@@ -131,6 +133,10 @@
       clearInterval(clockTimer);
       // no dejar ventanas abiertas de la sesión anterior
       document.querySelectorAll('.modal-back').forEach((m) => m.remove());
+      const demoStr = localStorage.getItem('pz-demo-session');
+      /** @type {any} */
+      let ds = null;
+      try { ds = demoStr ? JSON.parse(demoStr) : null; } catch (e) {}
       root().innerHTML = `
         <div class="login">
           <div class="floaters">${App.floaters()}</div>
@@ -143,6 +149,8 @@
             <label class="field"><span>Contraseña</span><input name="pass" type="password" autocomplete="current-password" required></label>
             <button class="btn primary lg block mt" type="submit">Ingresar 🍕</button>
             <button class="btn ghost block mt" type="button" data-a="code">🔑 Tengo un código de sucursal</button>
+            ${ds ? `<button class="btn ghost block mt" type="button" data-a="demo-continue" style="border-color:var(--primary);color:var(--primary);font-weight:800">🚀 Continuar en mi demo (${U.esc(ds.orgName || 'Demo')})</button>` : ''}
+            <p class="center small mt" style="margin-bottom:0"><a href="landing.html#pricing" style="color:var(--ink-soft);font-weight:700">🎁 Iniciar o cambiar prueba gratis de 30 días</a></p>
             <div class="flavor-dots" title="Elegí el sabor del sistema">${flavorDots(App.theme())}</div>
             ${navigator.onLine ? '' : '<div class="demo-hint">📴 Sin conexión. Si ya ingresaste antes en este equipo, tu sesión sigue activa.</div>'}
           </form>
@@ -152,6 +160,8 @@
       const err = q(form, '.err-msg');
       App.bindFlavors(form);
       q(form, '[data-a=code]').onclick = () => App.renderJoin();
+      const demoBtn = q(form, '[data-a=demo-continue]');
+      if (demoBtn && ds) demoBtn.onclick = () => App.startDemo(ds);
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         err.classList.add('hidden');
@@ -306,8 +316,10 @@
       await App.leaveBranch();
       PZ.inbox.stop();
       A.current = null;
+      App.demoSession = null;
       App.mode = 'platform';
       PZ.cloud.unsubscribe();
+      PZ.inbox.start('platform');
       App.renderShell();
       App.go('p-negocios');
       App.route();
@@ -374,6 +386,118 @@
       }
     },
 
+    /** Inicia la aplicación en modo demo con período de prueba de 30 días */
+    async startDemo(ds) {
+      App.demoSession = ds;
+      const U = PZ.util;
+      const orgId = 'org-demo';
+      const branchId = 'b-demo';
+      const uid = 'usr-demo-' + (ds.id || 'owner');
+      const ownerName = ds.ownerName || 'Dueño/a';
+      const orgName = ds.orgName || 'Mi Pizzería';
+
+      A.current = {
+        id: uid,
+        name: ownerName,
+        username: (ownerName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'demo'),
+        role: 'owner',
+        branchIds: [branchId],
+        orgId,
+        support: false
+      };
+
+      const plan = ds.plan || 'local';
+      const features = ds.features || {
+        delivery: true,
+        mesas: plan !== 'emprender',
+        stock: true,
+        gastos: true,
+        carta: true,
+        mercadopago: plan !== 'emprender',
+        maxBranches: plan === 'cadena' ? 10 : 1
+      };
+
+      S.ctx.orgId = orgId;
+      S.ctx.branchId = branchId;
+      S.ctx.role = 'owner';
+      S.ctx.org = {
+        id: orgId,
+        name: orgName,
+        status: 'active',
+        features,
+        isDemo: true,
+        trialEndsAt: ds.expiresAt
+      };
+      S.ctx.branches = [{
+        id: branchId,
+        org_id: orgId,
+        name: 'Casa central',
+        active: true,
+        settings: PZ.seed.settings(orgName, 'Casa central')
+      }];
+      S.ctx.members = [{
+        org_id: orgId,
+        user_id: uid,
+        name: ownerName,
+        username: A.current.username,
+        role: 'owner',
+        active: true
+      }];
+
+      localStorage.setItem('pz-pool-' + branchId, JSON.stringify({ order: [[1, 500]], ticket: [[1, 500]] }));
+      S.data = S.emptyData(S.ctx.branches[0].settings);
+      const cat = PZ.seed.catalog();
+      S.data.categories = cat.categories;
+      S.data.products = cat.products;
+      S.data.ingredients = PZ.seed.ingredients(true);
+      S.data.customers = PZ.seed.customers();
+      if (features.mesas !== false) {
+        S.data.diningAreas = [{ id: 'da-1', name: 'Salón Principal', order: 1 }];
+        S.data.diningTables = [
+          { id: 'dt-1', areaId: 'da-1', name: 'Mesa 1', capacity: 4, shape: 'square', active: true },
+          { id: 'dt-2', areaId: 'da-1', name: 'Mesa 2', capacity: 2, shape: 'square', active: true },
+          { id: 'dt-3', areaId: 'da-1', name: 'Mesa 3', capacity: 6, shape: 'square', active: true },
+          { id: 'dt-4', areaId: 'da-1', name: 'Mesa 4', capacity: 4, shape: 'square', active: true },
+        ];
+        S.data.tableSessions = [];
+      }
+      S.data.demo = true;
+      S.rebuildShadow();
+
+      localStorage.setItem('pz-demo-active', '1');
+      PZ.inbox.start(orgId);
+
+      // Aviso de bienvenida y por vencimiento para el usuario
+      const msLeft = (ds.expiresAt || (Date.now() + 30 * 864e5)) - Date.now();
+      const daysLeft = Math.ceil(msLeft / 864e5);
+      const planPrice = ds.price || (plan === 'emprender' ? 120000 : plan === 'cadena' ? 500000 : 250000);
+
+      if (!localStorage.getItem('pz-demo-welcome-' + (ds.id || 'owner'))) {
+        localStorage.setItem('pz-demo-welcome-' + (ds.id || 'owner'), '1');
+        PZ.inbox.notifyLocal(
+          'demo_lead',
+          '🎉 ¡Bienvenido a tu prueba de 30 días!',
+          `Tenés 30 días para probar el Plan ${plan.toUpperCase()} (${U.money(planPrice)}/mes) en "${orgName}". Los datos cargados se conservan al activar tu plan oficial.`
+        );
+      }
+
+      if (daysLeft <= 7) {
+        PZ.inbox.notifyLocal(
+          'trial_deadline',
+          '⏳ Período de prueba por vencer',
+          `Quedan ${daysLeft > 0 ? daysLeft + ' día' + (daysLeft === 1 ? '' : 's') : '0 días (vencido)'} de tu prueba gratuita del plan ${plan.toUpperCase()} (${U.money(planPrice)}/mes). Comunicate para mantener tu sistema activo y conservar tus datos.`,
+          { action: 'trial_renew' }
+        );
+      }
+
+      App.mode = 'branch';
+      App.renderShell();
+      history.replaceState(null, '', '#/inicio');
+      App.route();
+      App.afterEnter();
+      PZ.toast(`¡Bienvenido a tu demo de ${orgName}! Prueba de 30 días activa 🍕`, 'ok', 5000);
+    },
+
     /** Pantalla de elección (negocio / sucursal) */
     pick(title, options) {
       return new Promise((resolve) => {
@@ -427,7 +551,27 @@
       const name = mode === 'platform' ? ((A.me && A.me.user_metadata && A.me.user_metadata.name) || 'Admin') : u.name;
       const roleLabel = mode === 'platform' ? 'Plataforma' : u.support ? 'Soporte' : A.ROLES[u.role].label;
 
+      const ds = App.demoSession;
+      let trialBannerHtml = '';
+      if (ds) {
+        const msLeft = (ds.expiresAt || (Date.now() + 30 * 864e5)) - Date.now();
+        const daysLeft = Math.ceil(msLeft / 864e5);
+        const planName = (ds.plan || 'local').toUpperCase();
+        const priceStr = U.money(ds.price || (ds.plan === 'emprender' ? 120000 : ds.plan === 'cadena' ? 500000 : 250000));
+        const urgent = daysLeft <= 7;
+        const waMsg = `Hola, estoy usando la demo de MuzzaAPP para "${ds.orgName}" y me quedan ${daysLeft} días de prueba del plan ${planName} (${priceStr}/mes). Quiero coordinar el pago para continuar.`;
+        trialBannerHtml = `
+          <div class="demo-trial-banner ${urgent ? 'urgent' : ''}">
+            <span>🎁 <b>Modo Demo · Plan ${planName} (${priceStr}/mes):</b> ${daysLeft > 0 ? `quedan <b>${daysLeft} día${daysLeft === 1 ? '' : 's'}</b> de prueba gratuita.` : '<b>período de prueba finalizado.</b>'}</span>
+            <a href="https://wa.me/?text=${encodeURIComponent(waMsg)}" target="_blank" rel="noopener" class="btn sm ${urgent ? 'primary' : 'ghost'}">Coordinar plan por WhatsApp 💬</a>
+          </div>`;
+      }
+
       let chips = '';
+      if (ds) {
+        const daysLeft = Math.ceil(((ds.expiresAt || (Date.now() + 30 * 864e5)) - Date.now()) / 864e5);
+        chips += `<span class="badge ${daysLeft <= 5 ? 'err' : 'ok'}" style="font-size:0.8rem">🎁 Demo ${daysLeft > 0 ? daysLeft + 'd' : '0d'}</span>`;
+      }
       if (mode === 'branch') {
         chips += `<button class="branch-chip" data-a="branch" title="Cambiar de sucursal">🏪 <span class="bc-txt">${U.esc(S.branchName())}</span>${App.allowedBranches().length > 1 || A.isOwner() ? ' ▾' : ''}</button>`;
         if (A.isOwner()) chips += '<button class="mode-chip" data-a="panel" title="Panel del negocio">🏢 <span class="mc-txt">Panel</span></button>';
@@ -452,12 +596,12 @@
             </div>
           </aside>
           <div class="main">
+            ${trialBannerHtml}
             <header class="topbar">
               <h2><span class="t-ico"></span><span class="t-txt"></span></h2>
               <div class="spacer"></div>
               ${chips}
-              <span class="clock"></span>
-              ${mode === 'platform' ? '' : '<button class="icon-btn bell-btn" data-a="inbox" title="Avisos" aria-label="Avisos">🔔<span class="bell-count hidden"></span></button>'}
+              <button class="icon-btn bell-btn" data-a="inbox" title="Avisos" aria-label="Avisos">🔔<span class="bell-count hidden"></span></button>
               <button class="icon-btn theme-btn" data-a="theme" title="Modo oscuro / claro" aria-label="Cambiar tema">${App.isDark() ? '☀️' : '🌙'}</button>
               <button class="icon-btn help-btn" data-a="help" title="Ayuda de esta pantalla" aria-label="Ayuda">❓</button>
               <button class="user-pill" data-a="user" aria-label="Mi usuario">${PZ.profile.avatar(PZ.profile.me, name, 32)}<span class="u-name">${U.esc(name)}</span></button>
@@ -650,6 +794,10 @@
     },
 
     afterEnter() {
+      if (App.demoSession) {
+        App.refreshAvatar();
+        return;
+      }
       PZ.profile.load().then(() => {
         App.refreshAvatar();
         PZ.profile.ensureComplete();
@@ -657,6 +805,15 @@
     },
 
     async logout() {
+      if (App.demoSession) {
+        localStorage.removeItem('pz-demo-active');
+        App.demoSession = null;
+        A.current = null;
+        App.mode = null;
+        location.hash = '';
+        App.renderLogin();
+        return;
+      }
       if (S.status.pending && !(await PZ.confirm(`Hay ${S.status.pending} cambio(s) que todavía no se enviaron a la nube. Se envían la próxima vez que ingreses en este equipo. ¿Salir igual?`))) return;
       if (cleanup) { try { cleanup(); } catch (e) { /* noop */ } cleanup = null; }
       await S.flush();
@@ -776,6 +933,19 @@
       history.replaceState(null, '', location.pathname);
       hideBoot();
       return App.renderJoin(invite);
+    }
+    const demoParam = new URLSearchParams(location.search).get('demo');
+    const demoActive = localStorage.getItem('pz-demo-active') === '1';
+    if (demoParam || demoActive) {
+      const demoStr = localStorage.getItem('pz-demo-session');
+      /** @type {any} */
+      let ds = null;
+      try { ds = demoStr ? JSON.parse(demoStr) : null; } catch (e) {}
+      if (ds) {
+        if (demoParam) history.replaceState(null, '', location.pathname + (location.hash || ''));
+        hideBoot();
+        return App.startDemo(ds);
+      }
     }
     try {
       const session = await PZ.cloud.session();

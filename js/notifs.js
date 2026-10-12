@@ -20,13 +20,13 @@
   const catOf = (kind) => {
     if (/^summary_/.test(kind)) return 'resumen';
     if (/^cash_|^discount_/.test(kind)) return 'caja';
-    if (/^sync_|^stock_/.test(kind)) return 'alerta';
+    if (/^sync_|^stock_|^trial_|^demo_/.test(kind)) return 'alerta';
     return 'ops';
   };
   const CATS = [['all', 'Todos'], ['ops', 'Operación'], ['caja', 'Caja'], ['alerta', 'Alertas'], ['resumen', 'Resúmenes']];
 
   /** ¿Merece una alerta en pantalla apenas llega? (lo demás solo suma al contador) */
-  const isLoud = (it) => ['order_void', 'cash_late', 'discount_big'].includes(it.kind) || (it.kind === 'cash_close' && Number(it.data && it.data.diff) !== 0);
+  const isLoud = (it) => ['order_void', 'cash_late', 'discount_big', 'trial_deadline', 'demo_lead'].includes(it.kind) || (it.kind === 'cash_close' && Number(it.data && it.data.diff) !== 0);
 
   /** @param {any} r fila de la tabla notifications */
   const fromRow = (r) => ({
@@ -65,6 +65,12 @@
       I.stop();
       I.orgId = orgId;
       I.local = readLocal();
+      if (orgId && (orgId.startsWith('org-demo') || orgId === 'platform')) {
+        I.items = [];
+        I.loaded = true;
+        I.emit();
+        return Promise.resolve();
+      }
       I._loading = (async () => {
         try {
           const [rows, state] = await Promise.all([
@@ -178,6 +184,16 @@
     async go(it) {
       const A = PZ.auth;
       const app = PZ.app;
+      if (it.data && it.data.action === 'trial_renew') {
+        const text = `Hola, mi demo de MuzzaAPP vence pronto y quiero coordinar el pago de mi plan para mantener mi sistema activo.`;
+        window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener');
+        return;
+      }
+      if (it.data && it.data.action === 'lead_wa' && it.data.phone) {
+        const text = `Hola, te escribo de MuzzaAPP por tu solicitud de prueba de 30 días. ¿Cómo estás?`;
+        window.open('https://wa.me/' + U.phoneForWa(it.data.phone) + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
+        return;
+      }
       if (it.data && it.data.action === 'sync') return app.syncInfo();
       const v = it.data && it.data.view;
       if (!v || !PZ.views[v]) return;
@@ -251,7 +267,7 @@
   });
 
   /* ---------------- avisos de este equipo: guardados por persona ---------------- */
-  const localKey = () => `pz-inbox-local:${(PZ.auth && PZ.auth.current && PZ.auth.current.id) || 'anon'}`;
+  const localKey = () => `pz-inbox-local:${(PZ.auth && PZ.auth.current && PZ.auth.current.id) || (PZ.auth && PZ.auth.platform ? 'platform' : 'anon')}`;
   function readLocal() {
     try {
       const all = JSON.parse(localStorage.getItem(localKey()) || '[]');

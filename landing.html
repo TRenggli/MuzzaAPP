@@ -323,6 +323,107 @@
       opacity: 0.6;
       text-decoration: line-through;
     }
+    .trial-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: color-mix(in srgb, var(--ok) 14%, transparent);
+      color: var(--ok);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      margin: 8px 0 10px;
+      border: 1px solid color-mix(in srgb, var(--ok) 30%, transparent);
+    }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.4);
+      transform: translateY(20px) scale(0.98);
+      transition: transform 0.2s ease;
+      padding: 26px 24px;
+    }
+    .modal-overlay.open .modal-box {
+      transform: translateY(0) scale(1);
+    }
+    .plan-selector-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 10px 0 16px;
+    }
+    .plan-opt {
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 6px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--bg);
+      transition: all 0.15s ease;
+      user-select: none;
+      position: relative;
+    }
+    .plan-opt:hover {
+      border-color: var(--primary);
+    }
+    .plan-opt.selected {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+      box-shadow: 0 4px 12px rgba(215, 38, 61, 0.15);
+    }
+    .plan-opt-name {
+      font-weight: 800;
+      font-size: 0.95rem;
+      margin-bottom: 2px;
+    }
+    .plan-opt-price {
+      font-weight: 900;
+      font-size: 1.05rem;
+      color: var(--primary);
+    }
+    .plan-opt-period {
+      font-size: 0.72rem;
+      color: var(--ink-soft);
+      display: block;
+    }
+    .plan-summary-box {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.88rem;
+    }
+    .trial-guarantee-box {
+      background: color-mix(in srgb, var(--ok) 10%, var(--card));
+      border: 1px solid var(--ok);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 0.86rem;
+    }
 
     /* FAQ */
     .faq-section {
@@ -374,7 +475,7 @@
     </a>
     <div class="nav-actions">
       <button class="icon-btn" id="theme-toggle" title="Modo oscuro / claro" aria-label="Cambiar tema" style="width:38px;height:38px;border-radius:10px;font-size:1.15rem;display:inline-flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--line);cursor:pointer;color:inherit">🌙</button>
-      <a href="#modules" class="btn ghost hide-xs">📋 Módulos</a>
+      <button type="button" class="btn ghost hide-xs btn-open-demo" data-plan="local">🎁 Probar 30 días gratis</button>
       <a href="index.html" class="btn primary">🔑 Ingreso al Sistema</a>
     </div>
   </header>
@@ -387,9 +488,9 @@
       <p>Controlá salón y mesas, mostrador y delivery, comandas en cocina, cobros automáticos con QR de Mercado Pago y stock por receta en tiempo real.</p>
       
       <div class="hero-ctas">
-        <a href="index.html" class="btn btn-hero primary">
-          <span>🚀 Probar demo en vivo</span>
-        </a>
+        <button type="button" class="btn btn-hero primary btn-open-demo" data-plan="local">
+          <span>🚀 Probar 30 días gratis (Demo)</span>
+        </button>
         <a href="#modules" class="btn btn-hero secondary">
           <span>📋 Ver los módulos</span>
         </a>
@@ -486,20 +587,21 @@
   </section>
 
   <!-- Pricing Plans -->
-  <section class="pricing-section">
+  <section class="pricing-section" id="pricing">
     <div class="container">
       <div style="text-align:center;max-width:680px;margin:0 auto;">
         <h2>Planes pensados para cada etapa</h2>
-        <p class="muted">Desde una pizzería de barrio hasta cadenas con múltiples locales.</p>
+        <p class="muted">Probá cualquiera de los 3 planes <b>gratis por 30 días</b>. Sin tarjeta de crédito ni compromisos.</p>
       </div>
 
       <div class="pricing-grid">
         <!-- Emprender -->
         <div class="pricing-card">
           <h3>Emprender</h3>
+          <div class="trial-badge">🎁 30 días gratis de prueba</div>
           <p class="muted small">Ideal para locales que despachan por mostrador y delivery.</p>
           <div class="price-value">
-            <span>$35.000</span>
+            <span>$120.000</span>
             <span class="price-period">/ mes</span>
           </div>
           <ul class="pricing-feats">
@@ -512,16 +614,17 @@
             <li class="off">❌ Cobro integrado Mercado Pago</li>
             <li class="off">❌ Multi-sucursal</li>
           </ul>
-          <a href="index.html" class="btn ghost" style="width:100%">Empezar prueba</a>
+          <button type="button" class="btn ghost btn-open-demo" data-plan="emprender" style="width:100%">Probar 30 días gratis</button>
         </div>
 
         <!-- Local (Destacado) -->
         <div class="pricing-card featured">
           <span class="featured-badge">Más Elegido</span>
           <h3>Local</h3>
+          <div class="trial-badge">🎁 30 días gratis de prueba</div>
           <p class="muted small">Gestión integral completa para pizzerías con mesas y mostrador.</p>
           <div class="price-value">
-            <span>$59.000</span>
+            <span>$250.000</span>
             <span class="price-period">/ mes</span>
           </div>
           <ul class="pricing-feats">
@@ -534,15 +637,16 @@
             <li>✅ Control de stock por recetas</li>
             <li class="off">❌ Sucursales ilimitadas</li>
           </ul>
-          <a href="index.html" class="btn primary" style="width:100%">Elegir Plan Local</a>
+          <button type="button" class="btn primary btn-open-demo" data-plan="local" style="width:100%">Probar 30 días gratis</button>
         </div>
 
         <!-- Cadena -->
         <div class="pricing-card">
           <h3>Cadena</h3>
+          <div class="trial-badge">🎁 30 días gratis de prueba</div>
           <p class="muted small">Para marcas y franquicias con múltiples puntos de venta.</p>
           <div class="price-value">
-            <span>$95.000</span>
+            <span>$500.000</span>
             <span class="price-period">/ mes</span>
           </div>
           <ul class="pricing-feats">
@@ -554,7 +658,7 @@
             <li>✅ Auditoría transaccional de anulaciones</li>
             <li>✅ Soporte prioritario vía WhatsApp</li>
           </ul>
-          <a href="index.html" class="btn ghost" style="width:100%">Contactar para Cadena</a>
+          <button type="button" class="btn ghost btn-open-demo" data-plan="cadena" style="width:100%">Probar 30 días gratis</button>
         </div>
       </div>
     </div>
@@ -870,6 +974,259 @@
 
       // Init with salon
       switchTab('salon');
+    })();
+  </script>
+
+  <!-- Modal Formulario de Demo / Prueba 30 Días -->
+  <div class="modal-overlay" id="demo-modal" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+    <div class="modal-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.8rem">🍕</span>
+          <div>
+            <h3 id="demo-modal-title" style="margin:0;font-size:1.35rem;color:var(--primary)">Probá MuzzaAPP 30 días gratis</h3>
+            <span class="small muted">Sin tarjeta de crédito · Acceso inmediato con tu local</span>
+          </div>
+        </div>
+        <button type="button" id="demo-close-btn" aria-label="Cerrar modal" style="background:transparent;border:none;font-size:1.4rem;cursor:pointer;color:var(--ink-soft);padding:4px">✕</button>
+      </div>
+
+      <!-- Paso 1: Formulario de inscripción -->
+      <form id="demo-form">
+        <label class="small bold muted block mb-xs">1. Elegí el plan que querés probar:</label>
+        <div class="plan-selector-grid">
+          <div class="plan-opt" data-plan-opt="emprender">
+            <div class="plan-opt-name">Emprender</div>
+            <div class="plan-opt-price">$120.000</div>
+            <span class="plan-opt-period">/ mes</span>
+            <span class="badge" style="font-size:0.65rem;margin-top:4px">Mostrador y Delivery</span>
+          </div>
+          <div class="plan-opt selected" data-plan-opt="local">
+            <div class="plan-opt-name">Local</div>
+            <div class="plan-opt-price">$250.000</div>
+            <span class="plan-opt-period">/ mes</span>
+            <span class="badge ok" style="font-size:0.65rem;margin-top:4px">Salón y Mesas</span>
+          </div>
+          <div class="plan-opt" data-plan-opt="cadena">
+            <div class="plan-opt-name">Cadena</div>
+            <div class="plan-opt-price">$500.000</div>
+            <span class="plan-opt-period">/ mes</span>
+            <span class="badge" style="font-size:0.65rem;margin-top:4px">Multi-sucursal</span>
+          </div>
+        </div>
+
+        <div id="plan-desc-box" class="plan-summary-box mb"></div>
+
+        <label class="small bold muted block mb-xs">2. Datos de tu local para configurar la demo:</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <label class="field" style="margin:0">
+            <span>Nombre de tu Pizzería / Local *</span>
+            <input name="orgName" required placeholder="Ej: Pizzería La Bella" autocomplete="organization">
+          </label>
+          <label class="field" style="margin:0">
+            <span>Tu Nombre y Apellido *</span>
+            <input name="ownerName" required placeholder="Ej: Diego" autocomplete="name">
+          </label>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <label class="field" style="margin:0">
+            <span>WhatsApp / Teléfono *</span>
+            <input name="phone" type="tel" required placeholder="Ej: 11 5555-1234" autocomplete="tel">
+          </label>
+          <label class="field" style="margin:0">
+            <span>Email de contacto</span>
+            <input name="email" type="email" placeholder="Ej: diego@labella.com" autocomplete="email">
+          </label>
+        </div>
+
+        <div class="trial-guarantee-box mb">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.4rem">🎁</span>
+            <div>
+              <b>30 días completos de prueba sin cargo</b>
+              <div class="small muted">Tu acceso será válido hasta el <b id="trial-expiry-preview"></b>. Podés probar ventas, salón, comandas y menú con datos reales.</div>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn primary lg block" style="width:100%;font-size:1.05rem;padding:14px;border-radius:12px;font-weight:800">
+          🚀 Crear mi demo y empezar a usar 🍕
+        </button>
+      </form>
+
+      <!-- Paso 2: Confirmación y Notificación -->
+      <div id="demo-success" style="display:none;padding:10px 0;">
+        <div style="text-align:center;font-size:3.5rem;margin-bottom:8px">🎉</div>
+        <h3 style="text-align:center;margin:0 0 6px;color:var(--primary);font-size:1.35rem">¡Tu demo ya está lista para usar!</h3>
+        <p class="muted small center" id="demo-success-msg" style="margin:0 auto 16px;max-width:440px"></p>
+
+        <div style="background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:18px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span class="small muted">Negocio:</span><b id="succ-org"></b>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span class="small muted">Plan elegido:</span><b id="succ-plan"></b>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span class="small muted">Precio tras los 30 días:</span><b id="succ-price"></b>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span class="small muted">Prueba válida hasta:</span><b id="succ-date" style="color:var(--ok)"></b>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <a href="#" id="demo-wa-notify-btn" target="_blank" rel="noopener" class="btn ghost block" style="font-weight:800;padding:12px;text-align:center">
+            📱 Notificar al administrador por WhatsApp
+          </a>
+          <a href="index.html?demo=1" id="demo-start-now-btn" class="btn primary block" style="font-size:1.05rem;font-weight:900;padding:14px;border-radius:12px;text-align:center">
+            🍕 Empezar a usar MuzzaAPP ahora →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Demo Modal Logic
+    (function () {
+      const modal = document.getElementById('demo-modal');
+      const closeBtn = document.getElementById('demo-close-btn');
+      const form = document.getElementById('demo-form');
+      const successBox = document.getElementById('demo-success');
+      const planOpts = document.querySelectorAll('[data-plan-opt]');
+      const planDesc = document.getElementById('plan-desc-box');
+      const expiryPreview = document.getElementById('trial-expiry-preview');
+      let currentPlan = 'local';
+
+      const plans = {
+        emprender: {
+          name: 'Emprender',
+          price: 120000,
+          priceStr: '$120.000',
+          desc: '🛵 <b>Plan Emprender</b>: Mostrador y venta rápida, delivery estructurado, carta online con WhatsApp, control de caja y modo offline sin cortes.',
+          features: { delivery: true, mesas: false, stock: true, gastos: true, carta: true, mercadopago: false, maxBranches: 1 }
+        },
+        local: {
+          name: 'Local',
+          price: 250000,
+          priceStr: '$250.000',
+          desc: '🍽️ <b>Plan Local (Más Elegido)</b>: Salón con plano y mesas interactivas, comandas por tandas para cocina, cobro con QR Mercado Pago dinámico, roles y stock.',
+          features: { delivery: true, mesas: true, stock: true, gastos: true, carta: true, mercadopago: true, maxBranches: 1 }
+        },
+        cadena: {
+          name: 'Cadena',
+          price: 500000,
+          priceStr: '$500.000',
+          desc: '🏢 <b>Plan Cadena</b>: Multi-sucursal ilimitada, panel corporativo en tiempo real, carta centralizada, reportes consolidados y auditoría transaccional.',
+          features: { delivery: true, mesas: true, stock: true, gastos: true, carta: true, mercadopago: true, maxBranches: 10 }
+        }
+      };
+
+      function formatDate(d) {
+        return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+      }
+
+      function selectPlan(planKey) {
+        if (!plans[planKey]) planKey = 'local';
+        currentPlan = planKey;
+        planOpts.forEach((opt) => opt.classList.toggle('selected', opt.dataset.planOpt === planKey));
+        const p = plans[planKey];
+        if (planDesc) {
+          planDesc.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <b>${p.name} · ${p.priceStr} / mes</b>
+            <span class="badge ok">30 días de prueba gratis</span>
+          </div><div>${p.desc}</div>`;
+        }
+      }
+
+      function openModal(planKey) {
+        selectPlan(planKey || 'local');
+        const expiry = new Date(Date.now() + 30 * 864e5);
+        if (expiryPreview) expiryPreview.textContent = formatDate(expiry);
+        if (form) form.style.display = 'block';
+        if (successBox) successBox.style.display = 'none';
+        modal.classList.add('open');
+      }
+
+      function closeModal() {
+        modal.classList.remove('open');
+      }
+
+      document.querySelectorAll('.btn-open-demo').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const p = btn.getAttribute('data-plan') || 'local';
+          openModal(p);
+        });
+      });
+
+      planOpts.forEach((opt) => {
+        opt.addEventListener('click', () => selectPlan(opt.dataset.planOpt));
+      });
+
+      if (closeBtn) closeBtn.addEventListener('click', closeModal);
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) closeModal();
+        });
+      }
+
+      if (form) {
+        form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const fd = new FormData(form);
+          const orgName = (fd.get('orgName') || '').toString().trim();
+          const ownerName = (fd.get('ownerName') || '').toString().trim();
+          const phone = (fd.get('phone') || '').toString().trim();
+          const email = (fd.get('email') || '').toString().trim();
+          if (!orgName || !ownerName || !phone) return;
+
+          const p = plans[currentPlan];
+          const now = Date.now();
+          const expiresAt = now + 30 * 864e5;
+          const lead = {
+            id: 'lead-' + now.toString(36),
+            orgName,
+            ownerName,
+            phone,
+            email,
+            plan: currentPlan,
+            price: p.price,
+            registeredAt: now,
+            expiresAt,
+            trialDays: 30
+          };
+
+          // Guardar lead para notificaciones del administrador
+          const leads = JSON.parse(localStorage.getItem('pz-demo-leads') || '[]');
+          leads.push(lead);
+          localStorage.setItem('pz-demo-leads', JSON.stringify(leads));
+
+          // Guardar sesión demo activa para empezar a usar inmediatamente
+          const demoSession = {
+            ...lead,
+            features: p.features,
+            isDemo: true
+          };
+          localStorage.setItem('pz-demo-session', JSON.stringify(demoSession));
+
+          // Preparar mensaje de notificación por WhatsApp para el administrador
+          const waMsg = `¡Hola! Acabo de registrarme a la prueba gratis de 30 días en MuzzaAPP para mi local "${orgName}" con el Plan ${p.name} (${p.priceStr}/mes).\n\nResponsable: ${ownerName}\nWhatsApp: ${phone}${email ? '\nEmail: ' + email : ''}\nPeríodo: 30 días de prueba gratuita.`;
+          const waBtn = document.getElementById('demo-wa-notify-btn');
+          if (waBtn) waBtn.href = 'https://wa.me/?text=' + encodeURIComponent(waMsg);
+
+          document.getElementById('succ-org').textContent = orgName;
+          document.getElementById('succ-plan').textContent = p.name;
+          document.getElementById('succ-price').textContent = p.priceStr + ' / mes';
+          document.getElementById('succ-date').textContent = formatDate(new Date(expiresAt));
+          document.getElementById('demo-success-msg').textContent = `Hola ${ownerName}, configuramos tu pizzería con el Plan ${p.name} y 30 días de prueba sin cargo.`;
+
+          form.style.display = 'none';
+          successBox.style.display = 'block';
+        });
+      }
     })();
   </script>
 </body>
