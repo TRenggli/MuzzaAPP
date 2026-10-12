@@ -146,3 +146,77 @@ test('cuando el cliente retira el pedido y paga, el ticket pasa a PAGADO', () =>
   assert.doesNotMatch(html, /COBRAR EN EFECTIVO/);
 });
 
+test('el buffer térmico ESC/POS para pedidos a cobrar de retiro incluye A COBRAR y TENER DE VUELTO', async () => {
+  const { S, T } = setup();
+  const o = S.createOrder(retiro(S, { collect: { method: 'efectivo', amount: 10000, tendered: 20000 } }));
+  const bytes = await T.escpos.customer(o);
+  const text = new TextDecoder('latin1').decode(bytes);
+  assert.match(text, /COMPROBANTE DE PEDIDO/);
+  assert.match(text, /COBRAR EN EFECTIVO/);
+  assert.match(text, /TENER DE VUELTO/);
+  assert.match(text, /A COBRAR/);
+  // Comando de corte de papel al final
+  assert.equal(bytes[bytes.length - 4], 0x1d);
+  assert.equal(bytes[bytes.length - 3], 0x56);
+  assert.equal(bytes[bytes.length - 2], 0x42);
+});
+
+test('un pedido web para retirar en efectivo al ser aceptado queda a cobrar con vuelto', async () => {
+  const app = setup();
+  const { S, T, ctx } = app;
+  vm.runInContext(fs.readFileSync(new URL('../js/online.js', import.meta.url), 'utf8'), ctx, { filename: 'js/online.js' });
+  ctx.PZ.modal = () => ({ el: { querySelector: () => ({ onclick: null }) }, close() {} });
+  const item1 = item(S);
+  ctx.PZ.cloud.acceptWebOrder = async (webId, orderId) => ({
+    id: orderId, number: 201, createdAt: new Date().toISOString(), type: 'retiro',
+    items: [item1], subtotal: 10000, total: 10000, customerName: 'Valen', phone: '1155551234',
+    payments: [], paid: false,
+  });
+  const webOrder = {
+    id: 'w-1', number: 1,
+    data: { type: 'retiro', name: 'Valen', phone: '1155551234', payment: 'efectivo', cashWith: 15000, items: [] }
+  };
+  const o = await ctx.PZ.web.accept(webOrder);
+  assert.equal(o.paid, false);
+  assert.equal(o.type, 'retiro');
+  assert.deepEqual({ ...o.collect }, { method: 'efectivo', amount: 10000, tendered: 15000 });
+  const html = T.customerHTML(o);
+  assert.match(html, /A COBRAR/);
+  assert.match(html, /TENER DE VUELTO/);
+});
+
+test('un pedido para retirar puede quedar a cobrar con tarjeta / posnet', async () => {
+  const { S, T } = setup();
+  S.openSession(0);
+  const o = S.createOrder(retiro(S, { collect: { method: 'tarjeta', cardType: 'débito', amount: 10000 } }));
+  assert.equal(o.paid, false);
+  assert.equal(T.collectOf(o).method, 'tarjeta');
+  const html = T.customerHTML(o);
+  assert.match(html, /A COBRAR/);
+  assert.match(html, /COBRAR CON DÉBITO/);
+  assert.doesNotMatch(html, /PAGADO/);
+
+  // Buffer ESC/POS
+  const bytes = await T.escpos.customer(o);
+  const text = new TextDecoder('latin1').decode(bytes);
+  assert.match(text, /A COBRAR/);
+  assert.match(text, /COBRAR CON DEBITO/);
+
+  // Cobro posterior cuando el cliente retira y pasa la tarjeta
+  S.payOrder(o.id, [{ method: 'tarjeta', cardType: 'débito', amount: 10000 }]);
+  assert.equal(o.paid, true);
+  assert.equal(T.collectOf(o), null);
+  assert.match(T.customerHTML(o), /PAGADO/);
+});
+
+test('un pedido para retirar puede quedar a cobrar por transferencia mostrando los datos bancarios', async () => {
+  const { S, T } = setup();
+  const o = S.createOrder(retiro(S, { collect: { method: 'transferencia', amount: 10000 } }));
+  assert.equal(o.paid, false);
+  const html = T.customerHTML(o);
+  assert.match(html, /A COBRAR/);
+  assert.match(html, /COBRAR POR TRANSFERENCIA/);
+  assert.match(html, /Podés pagar por transferencia/);
+  assert.match(html, /pizzeria\.test/);
+});
+

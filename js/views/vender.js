@@ -499,7 +499,7 @@
     if (res.collect) afterSent(o, res); else afterPaid(o, res);
   }
 
-  /** Pedido que queda a cobrar (delivery o retiro): comprobante "A COBRAR" con el vuelto */
+  /** Pedido que queda a cobrar (delivery o retiro): comprobante "A COBRAR" con el vuelto o medio convenido */
   function afterSent(o, res) {
     if (navigator.vibrate) navigator.vibrate(30);
     const cash = PZ.ticket.collectOf(o);
@@ -509,9 +509,14 @@
       const box = document.createElement('div');
       box.className = 'change-box';
       box.style.marginBottom = '12px';
-      box.innerHTML = isDel
-        ? (cash.change ? `El repartidor lleva de vuelto<b>${U.money(cash.change)}</b>` : `El repartidor cobra en efectivo<b>${U.money(cash.amount)}</b>`)
-        : (cash.change ? `El cliente paga con ${U.money(cash.tendered)} · tener de vuelto<b>${U.money(cash.change)}</b>` : `Cobrar en efectivo al retirar<b>${U.money(cash.amount)}</b>`);
+      if (cash.method === 'efectivo') {
+        box.innerHTML = isDel
+          ? (cash.change ? `El repartidor lleva de vuelto<b>${U.money(cash.change)}</b>` : `El repartidor cobra en efectivo<b>${U.money(cash.amount)}</b>`)
+          : (cash.change ? `El cliente paga con ${U.money(cash.tendered)} · tener de vuelto<b>${U.money(cash.change)}</b>` : `Cobrar en efectivo al retirar<b>${U.money(cash.amount)}</b>`);
+      } else {
+        const mLabel = cash.method === 'tarjeta' ? (cash.cardType ? `Tarjeta (${cash.cardType})` : 'Tarjeta') : (PZ.labels.method[cash.method] || cash.method);
+        box.innerHTML = `Cobrar con ${mLabel} al ${isDel ? 'entregar' : 'retirar'}<b>${U.money(cash.amount)}</b>`;
+      }
       m.el.querySelector('.modal-body').prepend(box);
     }
     if (res.print) PZ.ticket.printOrder(o, { kitchen: res.kitchen });
@@ -538,19 +543,19 @@
   /* ======================= Modal de cobro (reutilizable) ======================= */
   PZ.checkout = function (order, { isNew = false } = {}) {
     return new Promise((resolve) => {
-      // delivery y retiro en efectivo: pueden quedar "a cobrar"
+      // delivery y retiro: pueden quedar "a cobrar"
       const isDelivery = order.type === 'delivery';
       const isRetiro = order.type === 'retiro';
       const canCollect = (isDelivery || isRetiro) && !order.tableBill;
-      /** quién cobra el efectivo: el repartidor ('driver'), al retirar ('pickup') o acá ('here') */
+      /** quién cobra: el repartidor ('driver'), al retirar ('pickup') o acá ('here') */
       let who = canCollect && isNew ? (isDelivery ? 'driver' : 'pickup') : 'here';
+      let method = (order.collect && order.collect.method) || 'efectivo';
+      let cardType = (order.collect && order.collect.cardType) || 'débito';
       /** con cuánto paga (si ya se había anotado al mandarlo o al tomar el pedido) */
       let typed = order.collect && order.collect.tendered ? String(order.collect.tendered) : '';
       const st = S.data.settings;
       const P = st.payments;
       const methods = ['efectivo', 'transferencia', 'qr'].concat(P.enableCard ? ['tarjeta'] : []);
-      let method = 'efectivo';
-      let cardType = 'débito';
       let split = false;
       let partials = [];
       let resolved = false;
@@ -559,7 +564,7 @@
       let mpPaid = null;
       const base = order.total;
       const useMp = () => method === 'qr' && !mpManual && PZ.mp && PZ.mp.ready();
-      const collectMode = () => canCollect && (who === 'driver' || who === 'pickup') && method === 'efectivo' && !split;
+      const collectMode = () => canCollect && (who === 'driver' || who === 'pickup') && !split;
 
       const adjustFor = (m) => {
         if (split) return { cashDiscount: 0, surcharge: 0 };
@@ -661,33 +666,77 @@
           if (part) part.oninput = upd;
           setTimeout(() => inp.focus(), 50);
         } else if (method === 'transferencia') {
+          const clt = collectMode();
           const row = (label, v) => v ? `<div class="bk-row"><span class="muted">${label}</span><b>${U.esc(v)}</b><button class="btn sm ghost" data-copy="${U.esc(v)}">Copiar</button></div>` : '';
-          detail.innerHTML = (P.alias || P.cbu)
-            ? `<div class="bank-box">${row('Alias', P.alias)}${row('CBU/CVU', P.cbu)}${row('Titular', P.holder)}${row('Banco', P.bank)}</div>`
-            : `<div class="alert-row">⚠️ Cargá el alias/CBU en Configuración → Cobros.</div>`;
-          detail.innerHTML += `<label class="field mt"><span>Nº de operación / comprobante (opcional)</span><input class="ref" placeholder="Últimos dígitos o nombre de quien transfiere"></label>
-            <label class="check"><input type="checkbox" class="verified"> Verifiqué que la transferencia llegó</label>`;
-        } else if (method === 'qr' && useMp()) {
+          detail.innerHTML = `
+            ${canCollect && !split ? `<div class="seg mb who">${isDelivery
+              ? `<button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Cobrar al entregar</button>`
+              : `<button data-w="pickup" class="${who === 'pickup' ? 'on' : ''}">🥡 Cobrar al retirar</button>`
+            }<button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
+            ${clt ? `<p class="small muted" style="margin:-4px 0 8px">${isDelivery
+              ? 'Queda <b>a cobrar por transferencia</b>: el comprobante sale con "A COBRAR" y los datos bancarios. Cuando el cliente transfiera, lo cobrás desde Pedidos.'
+              : 'Queda <b>a cobrar por transferencia</b>: el comprobante sale con "A COBRAR" y los datos bancarios. Cuando el cliente venga a retirar o envíe el comprobante, lo cobrás desde Pedidos.'
+            }</p>` : ''}` : ''}
+            ${(P.alias || P.cbu)
+              ? `<div class="bank-box">${row('Alias', P.alias)}${row('CBU/CVU', P.cbu)}${row('Titular', P.holder)}${row('Banco', P.bank)}</div>`
+              : `<div class="alert-row">⚠️ Cargá el alias/CBU en Configuración → Cobros.</div>`}
+            ${!clt ? `<label class="field mt"><span>Nº de operación / comprobante (opcional)</span><input class="ref" placeholder="Últimos dígitos o nombre de quien transfiere"></label>
+            <label class="check"><input type="checkbox" class="verified"> Verifiqué que la transferencia llegó</label>` : ''}`;
+          detail.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
+            who = /** @type {string} */ (b.getAttribute('data-w'));
+            if (who === 'driver' || who === 'pickup') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+            draw();
+          });
+        } else if (method === 'qr' && useMp() && !collectMode()) {
           // QR de Mercado Pago con el monto: se acredita solo
           detail.innerHTML = `<div class="alert-row" style="background:color-mix(in srgb,#00b1ea 14%,var(--card))">📱 Se genera un QR de Mercado Pago con el monto exacto. Cuando el cliente paga, el cobro se registra solo.</div>
             <button class="btn ghost sm" data-a="mpman">Usar el QR fijo o registrar a mano</button>`;
           detail.querySelector('[data-a=mpman]').onclick = () => { mpManual = true; draw(); };
         } else if (method === 'qr') {
+          const clt = collectMode();
           const img = P.qrImage ? `<img src="${P.qrImage}" alt="QR de pago">` : P.qrLink ? U.qrSvg(P.qrLink, 6, 1) : '';
-          detail.innerHTML = img
-            ? `<div class="qr-pay"><div class="qr-frame">${img}</div><div><b>Escaneá para pagar ${U.money(d)}</b><div class="small muted">Mostrale la pantalla al cliente</div></div></div>`
-            : `<div class="alert-row">⚠️ Subí la imagen de tu QR de Mercado Pago (o un link de pago) en Configuración → Cobros${PZ.mp && PZ.mp.enabled() ? ', o conectá Mercado Pago para generar el QR con el monto' : ''}.</div>`;
-          detail.innerHTML += `<label class="field mt"><span>Nº de operación (opcional)</span><input class="ref"></label>
-            <label class="check"><input type="checkbox" class="verified"> Verifiqué el pago en la app</label>
-            ${PZ.mp && PZ.mp.ready() ? '<button class="btn ghost sm" data-a="mpauto">📱 Volver al QR de Mercado Pago con monto</button>' : ''}`;
+          detail.innerHTML = `
+            ${canCollect && !split ? `<div class="seg mb who">${isDelivery
+              ? `<button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Cobrar al entregar</button>`
+              : `<button data-w="pickup" class="${who === 'pickup' ? 'on' : ''}">🥡 Cobrar al retirar</button>`
+            }<button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
+            ${clt ? `<p class="small muted" style="margin:-4px 0 8px">${isDelivery
+              ? 'Queda <b>a cobrar con QR</b>: el comprobante sale con "A COBRAR". Cuando el cliente pague al recibir, lo cobrás desde Pedidos.'
+              : 'Queda <b>a cobrar con QR</b>: el comprobante sale con "A COBRAR" para cuando el cliente venga a retirar. Cuando escanee el QR en el local, lo cobrás desde Pedidos.'
+            }</p>` : ''}` : ''}
+            ${!clt ? (img
+              ? `<div class="qr-pay"><div class="qr-frame">${img}</div><div><b>Escaneá para pagar ${U.money(d)}</b><div class="small muted">Mostrale la pantalla al cliente</div></div></div>`
+              : `<div class="alert-row">⚠️ Subí la imagen de tu QR de Mercado Pago (o un link de pago) en Configuración → Cobros${PZ.mp && PZ.mp.enabled() ? ', o conectá Mercado Pago para generar el QR con el monto' : ''}.</div>`) : ''}
+            ${!clt ? `<label class="field mt"><span>Nº de operación (opcional)</span><input class="ref"></label>
+            <label class="check"><input type="checkbox" class="verified"> Verifiqué el pago en la app</label>` : ''}
+            ${!clt && PZ.mp && PZ.mp.ready() ? '<button class="btn ghost sm" data-a="mpauto">📱 Volver al QR de Mercado Pago con monto</button>' : ''}`;
+          detail.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
+            who = /** @type {string} */ (b.getAttribute('data-w'));
+            if (who === 'driver' || who === 'pickup') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+            draw();
+          });
           const back = detail.querySelector('[data-a=mpauto]');
           if (back) back.onclick = () => { mpManual = false; draw(); };
         } else if (method === 'tarjeta') {
-          // Posnet de cualquier marca: se cobra en el posnet y acá se registra
-          detail.innerHTML = `<p class="small muted" style="margin-top:0">Pasá la tarjeta en tu posnet por <b>${U.money(d)}</b> y después confirmá acá: el comprobante sale igual.</p>
+          const clt = collectMode();
+          detail.innerHTML = `
+            ${canCollect && !split ? `<div class="seg mb who">${isDelivery
+              ? `<button data-w="driver" class="${who === 'driver' ? 'on' : ''}">🛵 Cobrar con posnet al entregar</button>`
+              : `<button data-w="pickup" class="${who === 'pickup' ? 'on' : ''}">🥡 Cobrar con posnet al retirar</button>`
+            }<button data-w="here" class="${who === 'here' ? 'on' : ''}">🏪 Ya lo cobré</button></div>
+            ${clt ? `<p class="small muted" style="margin:-4px 0 8px">${isDelivery
+              ? 'Queda <b>a cobrar con posnet</b>: el comprobante sale con "A COBRAR" para el repartidor. Cuando vuelva con el cupón, lo cobrás desde Pedidos.'
+              : 'Queda <b>a cobrar con posnet</b>: el comprobante sale con "A COBRAR" para cuando el cliente venga a retirar. Cuando le pases la tarjeta, lo cobrás desde Pedidos.'
+            }</p>` : ''}` : ''}
             <div class="seg mb card-type"><button data-ct="débito" class="${cardType === 'débito' ? 'on' : ''}">Débito</button><button data-ct="crédito" class="${cardType === 'crédito' ? 'on' : ''}">Crédito</button></div>
-            <label class="field"><span>Cupón / últimos 4 dígitos (opcional)</span><input class="ref" inputmode="numeric"></label>`;
+            ${!clt ? `<p class="small muted" style="margin-top:0">Pasá la tarjeta en tu posnet por <b>${U.money(d)}</b> y después confirmá acá: el comprobante sale igual.</p>
+            <label class="field"><span>Cupón / últimos 4 dígitos (opcional)</span><input class="ref" inputmode="numeric"></label>` : ''}`;
           detail.querySelectorAll('[data-ct]').forEach((b) => b.onclick = () => { cardType = b.dataset.ct; detail.querySelectorAll('[data-ct]').forEach((x) => x.classList.toggle('on', x === b)); });
+          detail.querySelectorAll('[data-w]').forEach((b) => b.onclick = () => {
+            who = /** @type {string} */ (b.getAttribute('data-w'));
+            if (who === 'driver' || who === 'pickup') /** @type {HTMLInputElement} */ (E.querySelector('.opt-print')).checked = true;
+            draw();
+          });
         }
         detail.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
           try { await navigator.clipboard.writeText(b.dataset.copy); PZ.toast('Copiado'); } catch (e) { PZ.toast('No se pudo copiar', 'warn'); }
@@ -718,17 +767,21 @@
       E.querySelector('[data-a=ok]').onclick = () => {
         const mpNow = mpPaid;
         mpPaid = null;
-        if (!mpNow && useMp()) return chargeMp();
+        if (!mpNow && useMp() && !collectMode()) return chargeMp();
         if (collectMode()) {
           // no se cobra ahora: el pedido queda a cobrar y el comprobante sale con A COBRAR
           const amount = due();
-          const tv = U.parseMoney(detail.querySelector('.tendered').value);
-          if (tv && tv < amount) return PZ.toast(`Con ${U.money(tv)} no alcanza: faltan ${U.money(amount - tv)}`, 'warn');
+          let tv = 0;
+          if (method === 'efectivo') {
+            const inp = detail.querySelector('.tendered');
+            tv = inp ? U.parseMoney(inp.value) : 0;
+            if (tv && tv < amount) return PZ.toast(`Con ${U.money(tv)} no alcanza: faltan ${U.money(amount - tv)}`, 'warn');
+          }
           resolved = true;
           const out = {
-            collect: { method: 'efectivo', amount, tendered: tv || 0 },
+            collect: { method, amount, tendered: tv || 0, cardType: method === 'tarjeta' ? cardType : undefined },
             payments: [],
-            adjust: { cashDiscount: 0, surcharge: 0 },
+            adjust: adjustFor(method),
             print: E.querySelector('.opt-print').checked,
             kitchen: isNew && E.querySelector('.opt-kit') ? E.querySelector('.opt-kit').checked : false,
           };

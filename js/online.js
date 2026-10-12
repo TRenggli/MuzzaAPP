@@ -115,6 +115,8 @@
       Object.assign(w, { status: 'aceptado', order_id: remoteOrder.id });
       const payTxt = `${PAY[d.payment] || d.payment}${d.payment === 'efectivo' && d.cashWith ? ` (trae ${U.money(d.cashWith)})` : ''}`;
       const o = { ...remoteOrder, id: remoteOrder.id };
+      if (!o.status) o.status = 'pendiente';
+      if (!o.createdAt) o.createdAt = Date.now();
       if (d.payment === 'efectivo') {
         o.collect = { method: 'efectivo', amount: o.total, tendered: Number(d.cashWith) || 0 };
       }

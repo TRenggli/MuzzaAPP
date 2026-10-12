@@ -57,21 +57,29 @@
   /** Sello: la cuenta de mesa antes de cobrar no es un comprobante de pago */
   const stampOf = (o) => (o.voided ? 'ANULADO' : o.paid ? 'PAGADO' : o.tableBill ? 'PRE-CUENTA' : 'A COBRAR');
   /**
-   * Delivery en efectivo que cobra el repartidor al entregar: cuánto cobra
-   * (con el descuento por efectivo, si hay) y cuánto vuelto tiene que llevar.
+   * Pedido que queda a cobrar (delivery o retiro): cuánto cobra, medio convenido y vuelto (si es efectivo).
    * @param {any} o
    */
   const collectOf = (o) => {
     const c = !o.paid && !o.voided && o.collect;
-    if (!c || c.method !== 'efectivo') return null;
+    if (!c) return null;
+    const method = c.method || 'efectivo';
     const amount = Math.round(Number(c.amount) || o.total);
     const tendered = Math.round(Number(c.tendered) || 0);
-    return { amount, discount: Math.max(0, o.total - amount), tendered, change: Math.max(0, tendered - amount) };
+    return {
+      method,
+      cardType: c.cardType || '',
+      amount,
+      discount: Math.max(0, o.total - amount),
+      tendered,
+      change: method === 'efectivo' ? Math.max(0, tendered - amount) : 0,
+    };
   };
   /** Comanda: las tandas de mesa se cobran con la cuenta, no por separado */
   const kitchenFoot = (o) => {
     const cash = collectOf(o);
-    return o.paid ? 'PAGADO' : o.tableSessionId ? 'VA A LA CUENTA DE LA MESA' : 'A COBRAR ' + U.money(cash ? cash.amount : o.total) + (cash ? ' EN EFECTIVO' : '');
+    const mLabel = cash ? (cash.method === 'efectivo' ? 'EN EFECTIVO' : cash.method === 'tarjeta' ? (cash.cardType ? `CON ${cash.cardType.toUpperCase()}` : 'CON TARJETA') : `CON ${cash.method.toUpperCase()}`) : '';
+    return o.paid ? 'PAGADO' : o.tableSessionId ? 'VA A LA CUENTA DE LA MESA' : 'A COBRAR ' + U.money(cash ? cash.amount : o.total) + (mLabel ? ' ' + mLabel : '');
   };
   const kitchenHead = (o) => (o.tableSessionId && o.table ? 'MESA ' + o.table : '#' + o.number);
   const ticketId = (o) => `${pad(PZ.store.data.settings.ticket.pos, 4)}-${pad(o.ticketNumber || 0)}`;
@@ -153,15 +161,16 @@
 
     // lo cobra el repartidor o se cobra al retirar: cuánto cobra y el vuelto
     const cash = collectOf(o);
+    const methodTitle = cash && (cash.method === 'tarjeta' ? (cash.cardType ? `COBRAR CON ${cash.cardType.toUpperCase()}` : 'COBRAR CON TARJETA') : cash.method === 'qr' ? 'COBRAR CON QR' : cash.method === 'transferencia' ? 'COBRAR POR TRANSFERENCIA' : 'COBRAR EN EFECTIVO');
     const cashInfo = cash && on('cobroEfectivo') ? `<div class="box">
         ${cash.discount ? `<div class="row"><span>Desc. pago en efectivo</span><span>-${U.money(cash.discount)}</span></div>` : ''}
-        <div class="row" style="font-size:1.15em"><span>COBRAR EN EFECTIVO</span><span>${U.money(cash.amount)}</span></div>
-        ${cash.change ? `<div class="row"><span>Paga con</span><span>${U.money(cash.tendered)}</span></div>
+        <div class="row" style="font-size:1.15em"><span>${methodTitle}</span><span>${U.money(cash.amount)}</span></div>
+        ${cash.method === 'efectivo' ? (cash.change ? `<div class="row"><span>Paga con</span><span>${U.money(cash.tendered)}</span></div>
         <div class="row" style="font-size:1.15em"><span>${o.type === 'delivery' ? 'LLEVAR DE VUELTO' : 'TENER DE VUELTO'}</span><span>${U.money(cash.change)}</span></div>`
-        : cash.tendered ? '<div>Paga justo, sin vuelto</div>' : ''}
+        : cash.tendered ? '<div>Paga justo, sin vuelto</div>' : '') : ''}
       </div>` : '';
 
-    const unpaidInfo = !o.paid && !cash && on('transferencia') && (st.payments.alias || st.payments.cbu)
+    const unpaidInfo = !o.paid && (!cash || cash.method === 'transferencia') && on('transferencia') && (st.payments.alias || st.payments.cbu)
       ? `<div class="pay-info small"><b>Podés pagar por transferencia:</b><br>${st.payments.alias ? 'Alias: <b>' + U.esc(st.payments.alias) + '</b><br>' : ''}${st.payments.cbu ? 'CBU/CVU: ' + U.esc(st.payments.cbu) + '<br>' : ''}${st.payments.holder ? 'Titular: ' + U.esc(st.payments.holder) : ''}</div>`
       : '';
 
@@ -460,13 +469,16 @@
     if (cash && on('cobroEfectivo')) {
       e.sep();
       if (cash.discount) e.pair('Desc. pago efectivo', '-' + U.money(cash.discount));
-      e.bold(true).pair('COBRAR EN EFECTIVO', U.money(cash.amount)).bold(false);
-      if (cash.change) e.pair('Paga con', U.money(cash.tendered)).bold(true).size(1, 2).pair(o.type === 'delivery' ? 'LLEVAR DE VUELTO' : 'TENER DE VUELTO', U.money(cash.change)).size(1, 1).bold(false);
-      else if (cash.tendered) e.ln('Paga justo, sin vuelto');
+      const methodTitle = cash.method === 'tarjeta' ? (cash.cardType ? `COBRAR CON ${cash.cardType.toUpperCase()}` : 'COBRAR CON TARJETA') : cash.method === 'qr' ? 'COBRAR CON QR' : cash.method === 'transferencia' ? 'COBRAR TRANSFERENCIA' : 'COBRAR EN EFECTIVO';
+      e.bold(true).pair(methodTitle, U.money(cash.amount)).bold(false);
+      if (cash.method === 'efectivo') {
+        if (cash.change) e.pair('Paga con', U.money(cash.tendered)).bold(true).size(1, 2).pair(o.type === 'delivery' ? 'LLEVAR DE VUELTO' : 'TENER DE VUELTO', U.money(cash.change)).size(1, 1).bold(false);
+        else if (cash.tendered) e.ln('Paga justo, sin vuelto');
+      }
     }
     e.align('c').ln().bold(true).size(2, 2).ln(stampOf(o)).size(1, 1).bold(false);
     if (o.tableBill && !o.paid) e.ln('No valido como comprobante de pago');
-    if (!o.paid && !cash && st.payments.alias && on('transferencia')) e.ln('Alias: ' + st.payments.alias);
+    if (!o.paid && (!cash || cash.method === 'transferencia') && st.payments.alias && on('transferencia')) e.ln('Alias: ' + st.payments.alias);
     if (o.notes && on('nota')) e.align('l').wrap('Nota: ' + o.notes).align('c');
     const qrText = qrTextOf(t, b);
     const wantQr = !!qrText && on('qr');
@@ -609,8 +621,13 @@
     } else if (cash) {
       if (on('cobroEfectivo')) {
         if (cash.discount) lines.push(`Desc. pago en efectivo: -${U.money(cash.discount)}`);
-        lines.push(`💵 Se paga en efectivo al recibir: *${U.money(cash.amount)}*`);
-        if (cash.change) lines.push(`Paga con ${U.money(cash.tendered)} (vuelto ${U.money(cash.change)})`);
+        if (cash.method === 'efectivo') {
+          lines.push(`💵 Se paga en efectivo al recibir: *${U.money(cash.amount)}*`);
+          if (cash.change) lines.push(`Paga con ${U.money(cash.tendered)} (vuelto ${U.money(cash.change)})`);
+        } else {
+          const mLabel = cash.method === 'tarjeta' ? (cash.cardType ? `tarjeta de ${cash.cardType}` : 'tarjeta') : cash.method;
+          lines.push(`A cobrar al recibir: *${U.money(cash.amount)}* con ${mLabel}`);
+        }
       }
     } else if (st.payments.alias && on('transferencia')) {
       lines.push(`Podés transferir al alias *${st.payments.alias}*${st.payments.holder ? ' (' + st.payments.holder + ')' : ''}`);
