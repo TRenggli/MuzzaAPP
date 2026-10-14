@@ -470,7 +470,7 @@
       // Aviso de bienvenida y por vencimiento para el usuario
       const msLeft = (ds.expiresAt || (Date.now() + 30 * 864e5)) - Date.now();
       const daysLeft = Math.ceil(msLeft / 864e5);
-      const planPrice = ds.price || (plan === 'emprender' ? 120000 : plan === 'cadena' ? 500000 : 250000);
+      const planPrice = ds.price || (plan === 'emprender' ? 80000 : plan === 'cadena' ? 300000 : 200000);
 
       if (!localStorage.getItem('pz-demo-welcome-' + (ds.id || 'owner'))) {
         localStorage.setItem('pz-demo-welcome-' + (ds.id || 'owner'), '1');
@@ -557,7 +557,7 @@
         const msLeft = (ds.expiresAt || (Date.now() + 30 * 864e5)) - Date.now();
         const daysLeft = Math.ceil(msLeft / 864e5);
         const planName = (ds.plan || 'local').toUpperCase();
-        const priceStr = U.money(ds.price || (ds.plan === 'emprender' ? 120000 : ds.plan === 'cadena' ? 500000 : 250000));
+        const priceStr = U.money(ds.price || (ds.plan === 'emprender' ? 80000 : ds.plan === 'cadena' ? 300000 : 200000));
         const urgent = daysLeft <= 7;
         const waMsg = `Hola, estoy usando la demo de MuzzaAPP para "${ds.orgName}" y me quedan ${daysLeft} días de prueba del plan ${planName} (${priceStr}/mes). Quiero coordinar el pago para continuar.`;
         trialBannerHtml = `

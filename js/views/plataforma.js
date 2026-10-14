@@ -50,7 +50,7 @@
         PZ.inbox.notifyLocal(
           'demo_lead',
           `🎁 Nueva prueba de 30 días: ${lead.orgName}`,
-          `${lead.ownerName || 'Dueño/a'} solicitó prueba del plan ${(lead.plan || 'local').toUpperCase()} (${U.money(lead.price || 250000)}/mes).\nWhatsApp: ${lead.phone || '—'}${lead.email ? ' · ' + lead.email : ''}`,
+          `${lead.ownerName || 'Dueño/a'} solicitó prueba del plan ${(lead.plan || 'local').toUpperCase()} (${U.money(lead.price || 200000)}/mes).\nWhatsApp: ${lead.phone || '—'}${lead.email ? ' · ' + lead.email : ''}`,
           { action: 'lead_wa', phone: lead.phone }
         );
         lead.notifiedAdmin = true;
@@ -87,7 +87,7 @@
               return `<tr>
                 <td><b>${U.esc(dl.orgName)}</b></td>
                 <td>${U.esc(dl.ownerName)}<div class="small muted">${dl.phone ? `📞 ${U.esc(dl.phone)}` : ''}${dl.email ? ` · ✉️ ${U.esc(dl.email)}` : ''}</div></td>
-                <td><span class="badge" style="background:var(--primary-subtle);color:var(--primary);font-weight:700">${U.esc((dl.plan || 'local').toUpperCase())}</span> · ${U.money(dl.price || (dl.plan === 'emprender' ? 120000 : dl.plan === 'cadena' ? 500000 : 250000))}</td>
+                <td><span class="badge" style="background:var(--primary-subtle);color:var(--primary);font-weight:700">${U.esc((dl.plan || 'local').toUpperCase())}</span> · ${U.money(dl.price || (dl.plan === 'emprender' ? 80000 : dl.plan === 'cadena' ? 300000 : 200000))}</td>
                 <td><span class="badge ${daysLeft <= 7 ? 'err' : 'ok'}">${daysLeft > 0 ? daysLeft + ' días' : 'Vencida'}</span></td>
                 <td class="small muted">${U.dateTime(dl.registeredAt || Date.now())}</td>
                 <td class="actions">
