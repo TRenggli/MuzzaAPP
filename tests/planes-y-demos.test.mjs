@@ -36,15 +36,27 @@ function makeTestEnv() {
   return ctx;
 }
 
-test('precios de los planes en landing.html y opciones del modal', () => {
+test('precios de los planes en landing.html, demos y avisos', () => {
   const html = fs.readFileSync(path.join(ROOT, 'landing.html'), 'utf8');
+  const app = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+  const platform = fs.readFileSync(path.join(ROOT, 'js/views/plataforma.js'), 'utf8');
 
-  // Plan Emprender: $120.000
-  assert.ok(html.includes('$120.000'), 'landing debe incluir $120.000');
-  // Plan Local: $250.000
-  assert.ok(html.includes('$250.000'), 'landing debe incluir $250.000');
-  // Plan Cadena: $500.000
-  assert.ok(html.includes('$500.000'), 'landing debe incluir $500.000');
+  // Nombres comerciales y precios mensuales de los tres planes.
+  assert.ok(html.includes('<h3>Emprender</h3>') && html.includes('$80.000'), 'Emprender debe figurar a $80.000');
+  assert.ok(html.includes('<h3>Local</h3>') && html.includes('$200.000'), 'Local debe figurar a $200.000');
+  assert.ok(html.includes('<h3>Cadena</h3>') && html.includes('$300.000'), 'Cadena debe figurar a $300.000');
+
+  // El formulario de demo y los mensajes de vencimiento deben usar los mismos valores.
+  assert.match(html, /emprender:\s*\{[\s\S]*?price:\s*80000,[\s\S]*?priceStr:\s*'\$80\.000'/);
+  assert.match(html, /local:\s*\{[\s\S]*?price:\s*200000,[\s\S]*?priceStr:\s*'\$200\.000'/);
+  assert.match(html, /cadena:\s*\{[\s\S]*?price:\s*300000,[\s\S]*?priceStr:\s*'\$300\.000'/);
+  assert.match(html, /data-plan-opt="emprender">[\s\S]*?plan-opt-price">\$80\.000/);
+  assert.match(html, /data-plan-opt="local">[\s\S]*?plan-opt-price">\$200\.000/);
+  assert.match(html, /data-plan-opt="cadena">[\s\S]*?plan-opt-price">\$300\.000/);
+  assert.match(app, /plan === 'emprender' \? 80000 : plan === 'cadena' \? 300000 : 200000/);
+  assert.match(app, /ds\.plan === 'emprender' \? 80000 : ds\.plan === 'cadena' \? 300000 : 200000/);
+  assert.match(platform, /dl\.plan === 'emprender' \? 80000 : dl\.plan === 'cadena' \? 300000 : 200000/);
+  assert.match(platform, /lead\.price \|\| 200000/);
 
   // Los tres planes ofrecen 30 días gratis de prueba
   const countTrialBadges = (html.match(/30 d[íi]as gratis de prueba/gi) || []).length;
