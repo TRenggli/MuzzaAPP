@@ -27,7 +27,17 @@
       <div class="pos">
         <section>
           <div class="pos-search"><input type="search" placeholder="🔎 Buscar producto…" value="${U.esc(query)}"></div>
-          <div class="pos-cats"></div>
+          <div class="pos-cats-bar">
+            <button type="button" class="cat-nav-btn cat-nav-prev" aria-label="Categorías anteriores" title="Categorías anteriores">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="pos-cats-scroll">
+              <div class="pos-cats-grid"></div>
+            </div>
+            <button type="button" class="cat-nav-btn cat-nav-next" aria-label="Categorías siguientes" title="Categorías siguientes">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+          </div>
           <div class="prod-grid"></div>
         </section>
         <aside class="card cart"></aside>
@@ -35,23 +45,111 @@
       <button class="cart-fab hidden"></button>`;
 
     const search = el.querySelector('.pos-search input');
-    search.addEventListener('input', () => { query = search.value; renderProducts(el); });
+    search.addEventListener('input', () => { query = search.value; renderCats(el); renderProducts(el); });
+    setupCatsNav(el);
     renderCats(el);
     renderProducts(el);
     renderCart(el);
     el.querySelector('.cart-fab').onclick = () => el.querySelector('.cart').classList.add('open');
   }
 
+  function setupCatsNav(el) {
+    const bar = el.querySelector('.pos-cats-bar');
+    if (!bar) return;
+    const scroll = bar.querySelector('.pos-cats-scroll');
+    const prevBtn = bar.querySelector('.cat-nav-prev');
+    const nextBtn = bar.querySelector('.cat-nav-next');
+    if (!scroll || !prevBtn || !nextBtn) return;
+
+    const updateNav = () => {
+      const maxScroll = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+      const sl = scroll.scrollLeft;
+      prevBtn.disabled = sl <= 2;
+      nextBtn.disabled = maxScroll <= 4 || sl >= maxScroll - 4;
+    };
+
+    const updateColWidth = () => {
+      const w = scroll.clientWidth;
+      if (!w) return;
+      const cols = w >= 520 ? 4 : (w >= 360 ? 3 : 2);
+      const gaps = (cols - 1) * 8;
+      const colW = Math.max(105, Math.floor((w - gaps) / cols));
+      scroll.style.setProperty('--cat-col-w', `${colW}px`);
+      updateNav();
+    };
+
+    scroll.addEventListener('scroll', updateNav, { passive: true });
+    window.addEventListener('resize', updateColWidth, { passive: true });
+
+    prevBtn.onclick = () => {
+      const colWStr = scroll.style.getPropertyValue('--cat-col-w') || '140px';
+      const colW = parseInt(colWStr, 10) || 140;
+      const step = Math.max(colW + 8, (colW + 8) * 2);
+      scroll.scrollBy({ left: -step, behavior: 'smooth' });
+    };
+
+    nextBtn.onclick = () => {
+      const colWStr = scroll.style.getPropertyValue('--cat-col-w') || '140px';
+      const colW = parseInt(colWStr, 10) || 140;
+      const step = Math.max(colW + 8, (colW + 8) * 2);
+      scroll.scrollBy({ left: step, behavior: 'smooth' });
+    };
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => {
+        updateColWidth();
+      });
+      ro.observe(scroll);
+    }
+
+    setTimeout(updateColWidth, 0);
+  }
+
   function renderCats(el) {
-    el.querySelector('.pos-cats').innerHTML = S.data.categories.map((c) =>
-      `<button class="cat-btn ${c.id === activeCat && !query ? 'on' : ''}" data-c="${c.id}"><span class="c-ico">${c.icon}</span>${U.esc(c.name)}</button>`).join('');
-    el.querySelectorAll('.cat-btn').forEach((b) => b.onclick = () => {
+    const cats = S.data.categories;
+    const grid = el.querySelector('.pos-cats-grid');
+    if (!grid) return;
+
+    const scroll = el.querySelector('.pos-cats-scroll');
+    const prevScrollLeft = scroll ? scroll.scrollLeft : 0;
+
+    const PAGE_SIZE = 8;
+    const ROW_SIZE = 4;
+    grid.style.gridTemplateRows = cats.length > ROW_SIZE ? 'repeat(2, 44px)' : '44px';
+
+    grid.innerHTML = cats.map((c, i) => {
+      const page = Math.floor(i / PAGE_SIZE);
+      const posInPage = i % PAGE_SIZE;
+      const row = posInPage < ROW_SIZE ? 1 : 2;
+      const col = page * ROW_SIZE + (posInPage % ROW_SIZE) + 1;
+      const isOn = c.id === activeCat && !query;
+      return `<button type="button" class="cat-btn ${isOn ? 'on' : ''}" data-c="${c.id}" style="grid-row:${row};grid-column:${col};" title="${U.esc(c.name)}"><span class="c-ico">${c.icon || '🍽️'}</span><span class="c-name">${U.esc(c.name)}</span></button>`;
+    }).join('');
+
+    grid.querySelectorAll('.cat-btn').forEach((b) => b.onclick = () => {
       activeCat = b.dataset.c;
       query = '';
-      el.querySelector('.pos-search input').value = '';
+      const input = el.querySelector('.pos-search input');
+      if (input) input.value = '';
       renderCats(el);
       renderProducts(el);
     });
+
+    if (scroll && prevScrollLeft) {
+      scroll.scrollLeft = prevScrollLeft;
+    }
+
+    const bar = el.querySelector('.pos-cats-bar');
+    if (bar && scroll) {
+      const prevBtn = bar.querySelector('.cat-nav-prev');
+      const nextBtn = bar.querySelector('.cat-nav-next');
+      if (prevBtn && nextBtn) {
+        const maxScroll = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+        const sl = scroll.scrollLeft;
+        prevBtn.disabled = sl <= 2;
+        nextBtn.disabled = maxScroll <= 4 || sl >= maxScroll - 4;
+      }
+    }
   }
 
   function renderProducts(el) {
