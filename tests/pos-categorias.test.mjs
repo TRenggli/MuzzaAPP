@@ -66,3 +66,20 @@ test('estilos de styles.css definen las clases necesarias para la barra responsi
   assert.ok(css.includes('.pos-cats-grid'), 'CSS debe definir .pos-cats-grid');
   assert.ok(css.includes('grid-template-rows: repeat(2, 44px)'), 'CSS debe definir 2 filas en el grid');
 });
+
+test('distribución con volumen mayor a 20: 25 categorías se distribuyen sin solapamientos en 13 columnas', () => {
+  const positions = new Set();
+  for (let i = 0; i < 25; i++) {
+    const pos = getCategoryGridPosition(i);
+    assert.ok(pos.row === 1 || pos.row === 2, `Fila debe ser 1 o 2`);
+    assert.ok(pos.col >= 1 && pos.col <= 13, `Columna debe estar entre 1 y 13`);
+    const key = `${pos.row},${pos.col}`;
+    assert.ok(!positions.has(key), `La celda (${key}) no debe estar duplicada`);
+    positions.add(key);
+  }
+
+  // La 25ª categoría (índice 24) debe ubicarse en Fila 1, Columna 13
+  const cat25 = getCategoryGridPosition(24);
+  assert.equal(cat25.row, 1);
+  assert.equal(cat25.col, 13);
+});
